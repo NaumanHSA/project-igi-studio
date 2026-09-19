@@ -1,0 +1,76 @@
+# Builds a release of the studio on Windows, from the repository alone.
+#
+# Pushing a tag (git tag v1.0.0 && git push origin v1.0.0) builds that commit:
+# the bundled server, the installer, the portable zip and the files an
+# installed studio reads to update itself. It checks the versions agree, and
+# drafts a GitHub release with the notes from CHANGELOG.md. Nothing is public
+# until the draft is published by hand (Releases, the draft, Publish release).
+#
+# Run by hand (Actions, Release, Run workflow) it builds everything the same
+# way and keeps it as the run's artifact, publishing nothing: a dry run.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Check the versions agree
+        run: node app/tools/release.js check "${{ github.ref_name }}"
+
+      - name: Install the desktop app's tools
+        working-directory: app
+        run: npm ci
+
+      - name: Build the server, the installer and the zip
+        working-directory: app
+        run: npm run dist
+
+      - name: Checksums and release notes
+        run: node app/tools/release.js assemble
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-igi-studio-${{ github.ref_name }}
+          path: |
+            app/dist/release/
+            app/dist/NOTES.md
+          if-no-files-found: error
+
+      - name: Draft the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          pre=""
+          case "$v" in *-*) pre="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" app/dist/release/* \
+            --draft $pre --verify-tag \
+            --title "Project IGI Studio $v" \
+            --notes-file app/dist/NOTES.md

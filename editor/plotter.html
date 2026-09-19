@@ -11119,15 +11119,38 @@ function showConfig(){
       '<div id="cfg-stat"></div>'+
       '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn primary" id="cfg-save">Save</button>'+
       '<button class="btn" id="cfg-setup">Set up the game</button></div>'+
-      '<div id="cfg-ai"></div>');
+      '<div id="cfg-ai"></div><div id="cfg-upd"></div>');
     paintStat(SRV);
     $("cfg-setup").addEventListener("click",function(){setupSheet({})});
     if(window.AIPanel)AIPanel.renderSettings($("cfg-ai"));
+    paintUpdates($("cfg-upd"));
     $("cfg-save").addEventListener("click",function(){
       fetch("api/config",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({gamePath:$("cfg-path").value})})
         .then(function(r){return r.json()}).then(function(s){SRV=Object.assign(SRV||{},s);paintStat(SRV)});
     });
+  });
+}
+// The desktop app looks for a new version when it starts (app/updates.js).
+// In a browser there is nothing to update, so the section is not shown.
+function paintUpdates(host){
+  var u=window.studioApp&&window.studioApp.updates;
+  if(!host||!u)return;
+  u.get().then(function(s){
+    var h='<div class="lbl" style="margin:16px 0 8px">Updates</div>';
+    if(!s.available){
+      host.innerHTML=h+'<p class="hint">A studio run from its source code does not update itself. Version '+esc(s.version)+'.</p>';
+      return;
+    }
+    host.innerHTML=h+
+      '<label class="sg-t" style="display:flex;gap:7px;align-items:center"><input type="checkbox" id="upd-on"'+(s.check?' checked':'')+'> Look for a new version when the studio starts</label>'+
+      '<p class="hint" style="margin:4px 0 10px">It asks GitHub whether a newer release exists, and sends nothing about you, your game or your missions. '+
+      (s.portable?'This copy is the portable zip, which cannot update itself: the studio says when a new version is out, and you download it.'
+                 :'A new version downloads quietly and installs when you close the studio, or at once if you say so.')+'</p>'+
+      '<div style="display:flex;align-items:center;gap:8px"><button class="btn" id="upd-now" title="Check now\nAsks GitHub for a newer version">Check now</button>'+
+      '<span class="hint">You have version '+esc(s.version)+'.</span></div>';
+    $("upd-on").addEventListener("change",function(){u.set(this.checked)});
+    $("upd-now").addEventListener("click",function(){u.check()});
   });
 }
 // ---------------------------------------------------------------- first run

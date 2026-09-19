@@ -1,7 +1,7 @@
 {
   "name": "project-igi-studio",
   "productName": "Project IGI Studio",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "description": "A mission studio for Project I.G.I.: I'm Going In",
   "author": "Nauman HSA",
   "license": "MIT",
@@ -10,8 +10,8 @@
   "scripts": {
     "start": "electron .",
     "server": "node tools/build-server.js",
-    "dist": "node tools/build-server.js && electron-builder --win nsis zip",
-    "dist:dir": "node tools/build-server.js && electron-builder --win --dir"
+    "dist": "node tools/build-server.js && electron-builder --win nsis zip --publish never",
+    "dist:dir": "node tools/build-server.js && electron-builder --win --dir --publish never"
   },
   "devDependencies": {
     "electron": "^44.4.3",
@@ -28,11 +28,15 @@
     "files": [
       "main.js",
       "preload.js",
+      "updates.js",
       "build/icon.png",
       "package.json"
     ],
     "extraResources": [
-      { "from": "dist-server/studio-server", "to": "server" }
+      {
+        "from": "dist-server/studio-server",
+        "to": "server"
+      }
     ],
     "win": {
       "icon": "build/icon.ico",
@@ -48,6 +52,17 @@
       "shortcutName": "Project IGI Studio",
       "artifactName": "ProjectIGIStudio-Setup-${version}.${ext}",
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "NaumanHSA",
+        "repo": "project-igi-studio",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }

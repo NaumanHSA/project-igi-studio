@@ -12,6 +12,8 @@
 //      machine, and no web page in a browser, can drive the studio;
 //   4. stop the server when the window closes.
 //
+// It also looks for a new version of itself, unless told not to (updates.js).
+//
 // The page gets no Node: context isolation on, sandboxed, and the only things
 // it can ask of this process are in preload.js.
 'use strict';
@@ -21,6 +23,7 @@ const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const updates = require('./updates');
 
 const TITLE = 'Project IGI Studio';
 const token = crypto.randomBytes(32).toString('hex');
@@ -209,6 +212,7 @@ function buildMenu() {
         { label: 'Open the log folder', click: () => shell.openPath(path.dirname(logFile())) },
         { label: 'Open your studio folder', click: () => shell.openPath(studioHome()) },
         { type: 'separator' },
+        { label: 'Check for updates', click: () => updates.check(true) },
         {
           label: 'About Project IGI Studio',
           click: () => dialog.showMessageBox(win, {
@@ -231,6 +235,11 @@ function studioHome() {
 
 // ------------------------------------------------------------------ what the page may ask
 ipcMain.handle('studio:version', () => app.getVersion());
+
+// Settings, Updates: whether to look for a new version at start, and a way to look now
+ipcMain.handle('studio:updates-get', () => updates.state());
+ipcMain.handle('studio:updates-set', (e, on) => updates.setEnabled(on === true));
+ipcMain.handle('studio:updates-check', () => { updates.check(true); return true; });
 
 ipcMain.handle('studio:pick-folder', async (e, title) => {
   const r = await dialog.showOpenDialog(win, {
@@ -275,6 +284,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     lockSession();
     createWindow();
+    updates.start({ window: () => win, log });
   });
 
   app.on('before-quit', () => { quitting = true; stopServer(); });

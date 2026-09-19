@@ -11,4 +11,10 @@ contextBridge.exposeInMainWorld('studioApp', {
   pickFolder: (title) => ipcRenderer.invoke('studio:pick-folder', title),
   // show a folder in Explorer (folders only)
   openFolder: (p) => ipcRenderer.invoke('studio:open-folder', p),
+  // Settings, Updates: look for a new version at start (on or off), and look now
+  updates: {
+    get: () => ipcRenderer.invoke('studio:updates-get'),
+    set: (on) => ipcRenderer.invoke('studio:updates-set', on === true),
+    check: () => ipcRenderer.invoke('studio:updates-check'),
+  },
 });
