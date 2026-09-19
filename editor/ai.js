@@ -564,13 +564,15 @@ function renderSettings(host) {
   loadSettings(true).then(function (s) {
     if (!s) { host.innerHTML = '<p class="hint">The AI settings did not load.</p>'; return; }
     var efforts = [["none", "Off"], ["low", "Low"], ["medium", "Medium"], ["high", "High"]];
+    // a key typed here is kept in the encrypted store ("settings" is how older servers said it)
+    var saved = s.keyFrom === "encrypted store" || s.keyFrom === "settings";
     host.innerHTML =
       '<div class="lbl" style="margin:16px 0 8px">AI designer</div>' +
       '<div class="field"><span class="lbl">API key</span><div class="ai-keyrow"><input id="ais-key" type="password" autocomplete="off" placeholder="' +
-      (s.keyFrom === "settings" ? "Saved (" + esc(s.keyHint) + "). Type a new one to replace it" : s.hasKey ? "From " + esc(s.keyFrom) + " (" + esc(s.keyHint) + "). Type one to use instead" : "sk-...") + '">' +
-      (s.keyFrom === "settings" ? '<button class="btn" id="ais-clear" title="Forget the key\nThe studio uses the .env one again, if there is one">Forget</button>' : '') + '</div></div>' +
-      '<p class="hint" style="margin:4px 0 10px">' + (s.hasKey ? "Using the key from " + esc(s.keyFrom === "settings" ? "these settings" : s.keyFrom) + " (" + esc(s.keyHint) + "). " : "No key yet. ") +
-      'A key typed here stays with the studio server, in config.json, which git ignores. The page never sees it again.</p>' +
+      (saved ? "Saved (" + esc(s.keyHint) + "). Type a new one to replace it" : s.hasKey ? "From " + esc(s.keyFrom) + " (" + esc(s.keyHint) + "). Type one to use instead" : "sk-...") + '">' +
+      (saved ? '<button class="btn" id="ais-clear" title="Forget the key\nThe studio uses the .env one again, if there is one">Forget</button>' : '') + '</div></div>' +
+      '<p class="hint" style="margin:4px 0 10px">' + (s.hasKey ? "Using the key from " + esc(saved ? "these settings" : s.keyFrom) + " (" + esc(s.keyHint) + "). " : "No key yet. ") +
+      'A key typed here is encrypted for your Windows account and kept by the studio, never in its settings file. The page never sees it again.</p>' +
       '<div class="set-row2"><div class="field"><span class="lbl">Model</span><input id="ais-model" list="ais-models" value="' + esc(s.model) + '"><datalist id="ais-models"></datalist></div>' +
       '<div class="field"><span class="lbl">Thinking</span><div class="seg" id="ais-effort">' + efforts.map(function (e) {
         return '<button class="btn' + ((s.effort || "none") === e[0] ? " on" : "") + '" data-v="' + e[0] + '">' + e[1] + '</button>';

@@ -160,20 +160,32 @@ How it went:
 - Not yet: auto update (electron-updater) waits for public releases, and
   signing waits for SignPath (Phase 7).
 
-### Phase 6: the site
+### Phase 6: the site  (done 2026-09-19, bar publishing it)
 
-- One VitePress site in `site/`: a landing page (map computer theme, green
-  phosphor, three.js hero built from our own generated terrain, not game data)
-  and the manual behind a button.
+- One VitePress site: a landing page (map computer theme, green phosphor,
+  three.js hero built from our own generated terrain, not game data) and the
+  manual behind a button.
 - The manual: install, first run, your first mission, the map, objectives and
   events, guards and patrols, ground and walkways, the AI designer, applying
   and playing, troubleshooting, and a page for the SmartScreen warning.
 - Screenshots are scripted through the DevTools harness that already drives the
   editor, so they regenerate every release and never go stale.
-- The 95 KB `README.md` is the source material and shrinks to a summary.
 
 **Done when** the site builds in CI and every manual page has a current
 screenshot.
+
+Done, in a repository of its own: **`project-igi-studio-site`**, private
+(decided 2026-09-19), so that the studio's public repository carries no
+pictures of the game. It holds the landing page, the manual (fourteen pages,
+50 pictures), the tool that takes the pictures from a checkout of the studio,
+and a Deploy workflow that publishes it to GitHub Pages
+(`naumanhsa.github.io/project-igi-studio-site/`), started by hand. Its README
+says how.
+
+Left: publishing it, and shrinking this repository's README. The manual now
+covers what a player needs; the README stays the developer's reference
+(formats, engine rules, how each part is built) until it is split into
+`docs/`.
 
 ### Phase 7: public and signed
 

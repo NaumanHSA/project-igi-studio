@@ -7,6 +7,10 @@ missions/_empty/
 corpus/
 cache/
 
+# Pages the test and screenshot tools build next to the editor (the site's
+# tools/shots.mjs writes editor/_shots.html while it runs)
+editor/_*.html
+
 # Generated on every Apply or dry run
 missions/plan/
 missions/plan-*/
@@ -30,10 +34,6 @@ node_modules/
 dist/
 out/
 *.tsbuildinfo
-
-# The site's build output
-site/.vitepress/cache/
-site/.vitepress/dist/
 
 # The desktop app: the bundled server and the installers are built, not kept
 app/dist-server/

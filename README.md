@@ -57,6 +57,7 @@ project-igi-studio/
 │       ├── ai.py           the AI designer's proxy: the API key, the models, streaming
 │       ├── missions.py     custom missions: base + plan, history, trash (missions/custom/)
 │       └── live_pos.py     find and read the player's live position in a running game
+├── app/                    the desktop app: the Electron window, the installer, the bundled server
 ├── docs/                   plans for larger changes, and docs/PLAN-ship.md, the road to 1.0
 ├── missions/
 │   ├── custom/<id>/        your missions: mission.json, cover.png, history/
@@ -1164,9 +1165,11 @@ the level's own objectives dropped for a new mission.
 
 **Settings** (the Settings button, *AI designer*):
 
-- **API key:** from the project's `.env` (`OPENAI_API_KEY`), or typed here and
-  kept by the studio server in `config.json`; both are ignored by git and the
-  page never gets the key back, only its last four characters.
+- **API key:** typed here, the studio keeps it encrypted for your Windows
+  account (DPAPI, `secrets.json` in the studio's folder), never in
+  `config.json`. A checkout also reads the project's `.env`
+  (`OPENAI_API_KEY`), which git ignores. The page never gets the key back,
+  only its last four characters.
 - **Model:** the chat models on your account, newest first (default
   `MODEL_QUALITY` from `.env`); **Thinking** off to high; **Pace** (how long
   each step stays, to watch it build) and **Steps per run** (60).
@@ -1794,6 +1797,11 @@ ground grid (as it never had).
 
 The editor asks for `data/...` beside the page, and the server answers from
 that folder, so the editor does not know or care where the data came from.
+
+## The manual
+
+The manual for players, and the project's website, live in a repository of
+their own.
 
 ## Not in the repo
 

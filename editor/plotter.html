@@ -11401,7 +11401,7 @@ function paintStat(s){
   var el=$("cfg-stat");if(!el||!s)return;
   el.innerHTML=
     '<div class="stat"><b class="'+(s.gameExe?"":"no")+'"></b>IGI.exe '+(s.gameExe?"found":"not found")+'</div>'+
-    '<div class="stat"><b class="'+(s.compiler?"":"no")+'"></b>gconv/dconv '+(s.compiler?"available":"not found")+'</div>';
+    '<div class="stat"><b class="'+(s.compiler?"":"no")+'"></b>Script compiler '+(s.compiler?"built in":"not found")+'</div>';
 }
 // Test from here: the mission built with the player starting at a spot (the
 // plan keeps its own start) and the game started. apply_mission test.
