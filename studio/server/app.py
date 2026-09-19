@@ -91,6 +91,7 @@ def game_state(cfg):
         "pristinePath": cfg.get("pristinePath"),
         "slot": cfg["slot"],
         "gameExe": bool(g) and (g / "IGI.exe").exists(),
+        "version": __import__("studio").__version__,
         "slotExists": bool(slot) and slot.is_dir(),
         "compiler": CQ.available(),
         "missions": True,
@@ -265,7 +266,11 @@ def setup_game(body):
     def work(say=print):
         from studio.setup import data as DATA
         track = SetupProgress(say, reference=True, data=True)
-        info = snapshot.make(r["path"], log=track.log)
+        # another copy of the game (another build, or the same one after a switch
+        # from a different build): every file is copied again, not only the ones
+        # whose size changed, or a same-sized file of the old game would stay
+        same = (snapshot.info() or {}).get("levels") == snapshot.base_fingerprint(r["path"])
+        info = snapshot.make(r["path"], log=track.log, force=not same)
         DATA.build(r["path"], log=track.log)
         paths.save({"gamePath": r["path"], "pristinePath": "", "protectedPaths": []})
         track.finish()
@@ -368,6 +373,49 @@ def recover(cfg, body):
             "missions": MS.list_missions()}
 
 
+def held_by_game(cfg):
+    """{mission id: (slot, marker)} for every mission the connected game holds,
+    or None when there is no game to ask (not connected, or its folder is gone).
+
+    The game is the truth of which slot holds which mission. A mission keeps the
+    number of the slot it was last applied to, but that is only true of the game
+    it was applied to: switch to another copy of the game and that number is
+    somebody else's slot, or no slot at all. Every slot the studio fills carries
+    a marker naming its mission, so the game can always be asked."""
+    game = str(cfg.get("gamePath") or "")
+    if not game or not (pathlib.Path(game) / "missions" / "location0").is_dir():
+        return None
+    held = {}
+    for sl in SL.list_slots(game):
+        mk = sl.get("marker") or {}
+        if sl["custom"] and mk.get("missionId"):
+            held.setdefault(mk["missionId"], (sl["level"], mk))
+    return held
+
+
+def in_game(m, held):
+    """The mission as the connected game has it: its slot there and what was
+    applied there, or not in this game at all. Without a game to ask, as recorded."""
+    if held is None:
+        return m
+    m = dict(m)
+    got = held.get(m["id"])
+    if not got:
+        m["slot"], m["installed"], m["applied"] = None, None, None
+        return m
+    n, mk = got
+    theirs = mk.get("mission") or {}
+    m["slot"] = n
+    m["installed"] = mk.get("installed") or theirs.get("installed")
+    if "applied" in theirs:
+        m["applied"] = theirs["applied"]
+    return m
+
+
+def load_in_game(mid, cfg=None):
+    return in_game(MS.load(mid), held_by_game(cfg or load_config()))
+
+
 def library(cfg):
     """Everything the mission library shows."""
     data = paths.data()
@@ -378,7 +426,8 @@ def library(cfg):
         # the built-in missions are read out of the game when it is connected;
         # before that there are none to show, and the page says why
         builtins, needs_setup = {"missions": [], "groups": []}, True
-    mine = MS.list_missions()
+    held = held_by_game(cfg)
+    mine = MS.list_missions(view=lambda m: in_game(m, held))
     known = {m["id"] for m in mine}
     game = cfg["gamePath"]
     slots = []
@@ -437,7 +486,7 @@ def mission_check(cfg, mid):
     would copy in from other levels and how big they are, plus the objects that
     hover over bare ground or were placed twice."""
     from studio.build import models as MI
-    m = MS.load(mid)
+    m = load_in_game(mid, cfg)
     plan = m.get("plan") or {}
     game = pathlib.Path(cfg["gamePath"])
     loc0 = game / "missions" / "location0"
@@ -462,7 +511,7 @@ _heights_lock = threading.Lock()
 
 
 def mission_heights(cfg, mid):
-    m = MS.load(mid)
+    m = load_in_game(mid, cfg)
     key = MS.plan_hash(m)
     with _heights_lock:
         if _HEIGHTS.get(mid, (None,))[0] == key:
@@ -785,12 +834,12 @@ class Handler(SimpleHTTPRequestHandler):
             m = MS.save(mid, plan=b.get("plan"), name=b.get("name"), description=b.get("description"),
                         cover_png=_data_url_png(b.get("cover")), applied=b.get("applied"))
             # a renamed mission that is in the game is renamed in the game's list too
-            if (b.get("name") is not None or b.get("description") is not None) and m.get("slot"):
+            if b.get("name") is not None or b.get("description") is not None:
                 cfg = load_config()
-                mk = SL.read_marker(cfg["gamePath"], m["slot"]) or {}
-                if mk.get("missionId") == mid:
-                    SL.write_definition(cfg["gamePath"], m["slot"], m["base"]["level"], m["name"], m.get("description"))
-            return self._json({"ok": True, "mission": MS.summary(m)})
+                n = ((held_by_game(cfg) or {}).get(mid) or (None,))[0]
+                if n:
+                    SL.write_definition(cfg["gamePath"], n, m["base"]["level"], m["name"], m.get("description"))
+            return self._json({"ok": True, "mission": MS.summary(in_game(m, held_by_game(load_config())))})
         return self._guard(go)
 
     def do_DELETE(self):
@@ -810,10 +859,10 @@ class Handler(SimpleHTTPRequestHandler):
         def go():
             n = int(self.headers.get("Content-Length") or 0)
             b = json.loads(self.rfile.read(n) or b"{}") if n else {}
-            m = MS.load(mid)
+            cfg = load_config()
+            m = load_in_game(mid, cfg)
             log = []
             if m.get("slot") and b.get("removeFromGame", True):
-                cfg = load_config()
                 mk = SL.read_marker(cfg["gamePath"], m["slot"]) or {}
                 if mk.get("missionId") == mid and SL.slot_dir(cfg["gamePath"], m["slot"]).exists():
                     SL.remove_slot(cfg["gamePath"], m["slot"], log=log.append)
@@ -918,7 +967,7 @@ class Handler(SimpleHTTPRequestHandler):
         if mid and action == "heights":
             return self._guard(lambda: self._json({"ok": True, **mission_heights(load_config(), mid)}))
         if mid and not action:
-            return self._guard(lambda: self._json({"ok": True, "mission": MS.load(mid)}))
+            return self._guard(lambda: self._json({"ok": True, "mission": load_in_game(mid)}))
         jm = re.match(r"^/api/jobs/([a-z0-9]+)$", self.path)
         if jm:
             job = JOBS.get(jm.group(1))
@@ -933,6 +982,21 @@ class Handler(SimpleHTTPRequestHandler):
             return self._guard(lambda: self._json({"ok": True, "groups": groups_list()}))
         if self.path.startswith("/api/recoverable"):
             return self._guard(lambda: self._json({"ok": True, "missions": recoverable(load_config())}))
+        if self.path.startswith("/api/setup/check"):
+            # is this folder a copy of the game? (Settings, Game: before connecting it)
+            def check():
+                from studio.setup import verify
+                want = (parse_qs(urlparse(self.path).query).get("path") or [""])[0].strip()
+                if not want:
+                    return self._json({"ok": False, "error": "no folder given"})
+                r = verify.check(want)
+                cur = str(load_config().get("gamePath") or "")
+                same = bool(cur) and os.path.normcase(os.path.abspath(cur)) == os.path.normcase(os.path.abspath(want))
+                return self._json({"ok": True, "usable": r["ok"], "path": r["path"], "missing": r["missing"],
+                                   "levels": r.get("levels"), "custom": r.get("custom") or [], "build": r.get("profileName"),
+                                   "nearest": r.get("nearest"), "differs": r.get("differs"),
+                                   "exe": (pathlib.Path(want) / "IGI.exe").exists(), "current": same})
+            return self._guard(check)
         if self.path.startswith("/api/setup"):
             find = "find=1" in self.path
             return self._guard(lambda: self._json(setup_state(load_config(), find)))
@@ -979,8 +1043,11 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path.startswith("/api/config"):
                 cfg = load_config()
                 body = self._body()
-                if "gamePath" in body:
-                    cfg["gamePath"] = str(body["gamePath"]).strip()
+                if "gamePath" in body and str(body["gamePath"]).strip() != str(cfg.get("gamePath") or "").strip():
+                    # a game is only ever connected through the setup, which makes
+                    # the studio's reference copy of it first (POST /api/setup/game)
+                    return self._json({"ok": False, "error": "a game is connected through the setup, which "
+                                       "copies its levels first: Settings, Game, Change"}, 409)
                 if "slot" in body:
                     cfg["slot"] = int(body["slot"])
                 save_config(cfg)
@@ -1027,9 +1094,10 @@ class Handler(SimpleHTTPRequestHandler):
             if mid and action == "uninstall":
                 def un():
                     cfg = load_config()
-                    mm = MS.load(mid)
+                    mm = load_in_game(mid, cfg)
                     log = []
-                    if mm.get("slot") and SL.slot_dir(cfg["gamePath"], mm["slot"]).exists():
+                    mk = (SL.read_marker(cfg["gamePath"], mm["slot"]) or {}) if mm.get("slot") else {}
+                    if mk.get("missionId") == mid and SL.slot_dir(cfg["gamePath"], mm["slot"]).exists():
                         SL.remove_slot(cfg["gamePath"], mm["slot"], log=log.append)
                     return self._json({"ok": True, "mission": MS.summary(MS.mark_uninstalled(mid)), "log": log})
                 return self._guard(un)
@@ -1194,6 +1262,13 @@ def launch_game(cfg, say=print):
     if game_running():
         say("the game is already running: leave the mission and pick it again to load the new build")
         return {"ok": True, "running": True}
+    # the game writes its settings back when it closes, which can undo how far
+    # its mission list goes: set it again before it starts
+    try:
+        from studio.build import unlock
+        unlock.reach_all(str(game), log=say)
+    except Exception as e:
+        say("the game's mission list was left as it was: %s" % e)
     subprocess.Popen([str(exe)], cwd=str(game), creationflags=0x00000008 | 0x00000200)   # detached, own group
     say("starting the game")
     return {"ok": True, "started": True}
@@ -1233,7 +1308,9 @@ def apply_mission(mid, test=None, say=print):
         except (OSError, RuntimeError) as e:
             return {"ok": False, "error": "the level data could not be built, so nothing was "
                                           "written: %s" % e}
-    m = MS.load(mid)
+    # the slot this game holds the mission in (the number it had in another copy
+    # of the game means nothing here), or a new one
+    m = load_in_game(mid, cfg)
     base = int(m["base"]["level"])
     n = m.get("slot")
     if n:

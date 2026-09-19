@@ -31,6 +31,15 @@
  *   View3D.setPlacing({label, model, kind, rot, head, lift} | null)
  *                       an item from the inventory is in hand: a ghost of it
  *                       follows the pointer, a click puts it down
+ *   opts.view   how to start: "orbit" (round the item), "top", "eye", "walk",
+ *               "player" (behind the player start, looking the way it faces)
+ *
+ * Driving it, as a shooter's free camera: the mouse is the view's, held in the
+ * window (pointer lock), so moving it looks around; W A S D fly, Q and E down
+ * and up, Shift fast, easing in and gliding to a stop. Holding Alt lets the
+ * mouse go: click to select, Alt+drag to move anything, Shift+Alt+drag to lift
+ * it or lower it, Alt+right-drag to circle it. Letting go of Alt takes the view
+ * back. Esc frees the mouse; Esc again closes.
  *
  * Angles are the game's: alpha about x, then beta about y, then gamma about z
  * (a rifle lying on a desk is (heading, 1.5708, 0) - its heading is alpha). The
@@ -81,7 +90,21 @@ function css() {
   padding:3px 7px;font-size:11.5px;color:var(--ink);white-space:nowrap;transform:translate(12px,12px)}
 .v3d-tip[hidden]{display:none}
 .v3d-tip i{font-style:normal;color:var(--accent)}
-.v3d-none{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:14px}`;
+.v3d-none{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:14px}
+.v3d-range{min-width:150px}
+.v3d-range input{width:96px}
+.v3d-radv{min-width:38px;font:11px "IBM Plex Mono",monospace;color:var(--ink)}
+.v3d-cross{position:absolute;left:50%;top:calc(50% + 21px);width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none;display:none}
+.v3d.looking .v3d-cross{display:block}
+.v3d-cross::before,.v3d-cross::after{content:"";position:absolute;background:rgba(141,255,154,.85);box-shadow:0 0 6px rgba(141,255,154,.7)}
+.v3d-cross::before{left:10px;top:0;width:2px;height:22px;clip-path:polygon(0 0,100% 0,100% 35%,0 35%,0 65%,100% 65%,100% 100%,0 100%)}
+.v3d-cross::after{top:10px;left:0;height:2px;width:22px;clip-path:polygon(0 0,35% 0,35% 100%,0 100%,0 0,65% 0,100% 0,100% 100%,65% 100%)}
+.v3d-hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;text-align:center;
+  padding:12px 20px;background:rgba(4,18,8,.84);border:1px solid var(--line);border-radius:4px;box-shadow:0 0 30px rgba(0,0,0,.5)}
+.v3d-hint[hidden]{display:none}
+.v3d-hint b{display:block;font:600 17px "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--player)}
+.v3d-hint span{font-size:12px;color:var(--muted)}
+.v3d.editing canvas{cursor:default}`;
   document.head.appendChild(st);
 }
 
@@ -93,9 +116,8 @@ function build(host) {
   el.innerHTML = `
 <div class="v3d-top">
   <span class="v3d-name"><b class="v3d-title"></b><span class="v3d-sub"></span></span>
-  <div class="v3d-seg" data-g="radius" title="How far round it to show">
-    <button class="btn" data-v="10">10 m</button><button class="btn" data-v="20">20 m</button>
-    <button class="btn" data-v="40">40 m</button><button class="btn" data-v="60">60 m</button></div>
+  <label class="v3d-range" title="Range\nHow far round it to show, 10 to 60 m">Range
+    <input type="range" class="v3d-rad" min="10" max="60" step="10" value="60"><span class="v3d-radv">60 m</span></label>
   <div class="v3d-seg" data-g="view">
     <button class="btn" data-v="orbit" title="Look at it from around (F)">Around</button>
     <button class="btn" data-v="top" title="From straight above (T)">Top</button>
@@ -112,6 +134,8 @@ function build(host) {
   <button class="btn primary v3d-done" title="Esc">Done</button>
 </div>
 <canvas tabindex="0"></canvas>
+<div class="v3d-cross"></div>
+<div class="v3d-hint" hidden><b>Click to look around</b><span>The mouse turns the view, W A S D fly · hold Alt to edit</span></div>
 <div class="v3d-read"></div>
 <div class="v3d-help"></div>
 <div class="v3d-tip" hidden></div>`;
@@ -154,10 +178,12 @@ function build(host) {
   el.querySelector(".v3d-tex").checked = s.textured;
   scene.add(s.root);
   el.querySelector(".v3d-done").addEventListener("click", close);
-  el.querySelectorAll('[data-g="radius"] .btn').forEach(b => b.addEventListener("click", () => {
-    const r = +b.dataset.v;
+  const rad = el.querySelector(".v3d-rad"), radv = el.querySelector(".v3d-radv");
+  rad.addEventListener("input", () => { radv.textContent = rad.value + " m"; });
+  rad.addEventListener("change", () => {
+    const r = +rad.value;
     if (O && O.onRadius && r !== O.radius) O.onRadius(r);
-  }));
+  });
   el.querySelectorAll('[data-g="view"] .btn').forEach(b => b.addEventListener("click", () => setView(b.dataset.v)));
   el.querySelector(".v3d-cut").addEventListener("input", e => setCut(+e.target.value));
   el.querySelector(".v3d-xray").addEventListener("change", e => setXray(e.target.checked));
@@ -187,7 +213,9 @@ function build(host) {
   canvas.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("keydown", onKey, true);
   window.addEventListener("keyup", onKeyUp, true);
-  window.addEventListener("blur", () => held.clear());
+  window.addEventListener("blur", () => { held.clear(); if (S) { S.alt = false; editing(); } });
+  document.addEventListener("pointerlockchange", onLockChange);
+  document.addEventListener("pointerlockerror", () => { if (S) hint(); });
   return s;
 }
 
@@ -587,11 +615,11 @@ function onWheel(e) {
   e.preventDefault();
   if (S.walking) return;                      // a walker's feet stay on the floor
   const step = (e.shiftKey ? 4 : 1.2) * Math.sign(e.deltaY) * -1;
-  S.camera.position.addScaledVector(dirOf(S.yaw, S.pitch), step);
-  applyLook();
+  vel.addScaledVector(dirOf(S.yaw, S.pitch), step * 4.5);
 }
 
 function setView(mode) {
+  vel.set(0, 0, 0);
   S.el.querySelector(".v3d-test").hidden = !(mode === "walk" && O && O.onTest);
   // walking starts on the floor under the camera, looking ahead
   if (mode === "walk") {
@@ -621,6 +649,16 @@ function setView(mode) {
     // standing in front of it, far enough to take it in, eyes 1.7 m over the ground there
     const d = Math.max(3, dist * 0.9);
     S.camera.position.set(c.x + fx * d, c.y + fy * d, (it.floor != null ? it.floor - O.origin[2] : c.z - 1) + 1.7);
+  } else if (mode === "player") {
+    // behind the player start and over it, looking the way it faces: the
+    // mission as the player first sees it, with the player in the picture
+    const fl = it.floor != null ? it.floor - O.origin[2] : 0;
+    S.camera.position.set(-fx * 4.5, -fy * 4.5, fl + 2.6);
+    S.camera.updateProjectionMatrix();
+    lookAt(new THREE.Vector3(fx * 12, fy * 12, fl + 1.2));
+    S.el.querySelectorAll('[data-g="view"] .btn').forEach(b => b.classList.remove("on"));
+    help();
+    return;
   } else if (mode === "cam" && it.cam) {
     // from the camera's own lens, looking where it looks
     const pitch = it.cam.pitch || 0, h = head + (it.cam.pan || 0);
@@ -682,6 +720,7 @@ function makeNav() {
 }
 function setAddingNode(on) {
   S.addingNode = !!on && !!(O && O.onAddNode);
+  if (S.addingNode) unlock();             // a floor to click needs a pointer
   S.el.querySelector(".v3d-addnode").classList.toggle("on", S.addingNode);
   S.canvas.style.cursor = S.addingNode ? "crosshair" : "";
   help();
@@ -751,7 +790,8 @@ function walk(mx, my, dt) {
   const f = new THREE.Vector3(-Math.sin(S.yaw), Math.cos(S.yaw), 0), r = new THREE.Vector3(Math.cos(S.yaw), Math.sin(S.yaw), 0);
   const d = new THREE.Vector3().addScaledVector(f, my).addScaledVector(r, mx);
   if (d.lengthSq() > 0) {
-    d.normalize().multiplyScalar((fast ? 7 : 3.5) * dt);
+    const m = Math.min(1, d.length());          // the input eases in and out
+    d.normalize().multiplyScalar((fast ? 7 : 3.5) * dt * m);
     const p = S.camera.position;
     // the whole step, or else along x or y alone (sliding along a wall)
     for (const s of [d, new THREE.Vector3(d.x, 0, 0), new THREE.Vector3(0, d.y, 0)]) {
@@ -917,25 +957,61 @@ function applyPose(p) {
   readout(p);
 }
 
-// a building (or anything as big) moves only with Alt: inside it, a drag that
-// starts on its walls or floor looks around instead
-function big(it) {
-  if (it.type === "building") return true;
-  const g = it.model ? geometryOf(it.model) : null;
-  if (!g) return false;
-  const b = g.boundingBox;
-  return Math.hypot(b.max.x - b.min.x, b.max.y - b.min.y) > 6;
+// ------------------------------------------------------------------ the mouse: looking, or editing
+// Looking, the pointer is locked to the view and the mouse turns it. Holding Alt
+// lets it go, to edit; so does an item in hand or adding walkway points, which
+// need a pointer to aim with.
+const SENS = 0.0024;            // radians of turn per pixel of mouse
+function lockable() { return !!S && !S.dead && !S.placing && !S.addingNode; }
+function lock() {
+  if (!lockable() || S.el.hidden || document.pointerLockElement === S.canvas) return;
+  try {
+    const p = S.canvas.requestPointerLock();
+    if (p && p.catch) p.catch(() => hint());
+  } catch (e) { hint(); }
+}
+function unlock() { if (document.pointerLockElement === S.canvas) document.exitPointerLock(); }
+function onLockChange() {
+  if (!S) return;
+  const was = S.locked;
+  S.locked = document.pointerLockElement === S.canvas;
+  // Esc frees the mouse without closing the view (see onKey)
+  if (was && !S.locked && !S.altUnlock) S.lockLostAt = performance.now();
+  S.altUnlock = false;
+  S.el.classList.toggle("looking", S.locked);
+  if (S.locked) tip(null);
+  hint();
+}
+function hint() {
+  if (!S) return;
+  S.el.querySelector(".v3d-hint").hidden = S.locked || S.alt || !!S.placing || !!S.addingNode || S.el.hidden || !!S.dead;
+}
+function editing() { if (S) { S.el.classList.toggle("editing", !!S.alt); hint(); } }
+// in the middle of the view, while looking: what the crosshair is on
+function centreTip() {
+  const r = S.canvas.getBoundingClientRect(), e = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+  const h = cast(e, false)[0];
+  tip(h ? h.item : null, e);
 }
 function onDown(e) {
   S.canvas.focus();
+  // looking: the mouse turns the view, and a click does nothing
+  if (S.locked) { e.preventDefault(); return; }
+  // not editing: a click takes the mouse back to looking
+  if (e.button === 0 && !e.altKey && lockable()) { lock(); return; }
   try { S.canvas.setPointerCapture(e.pointerId); } catch (err) { /* a synthetic pointer */ }
   const hs = cast(e, false);
   const h = hs[0];
   S.down = { x: e.clientX, y: e.clientY, hit: h || null, moved: false };
-  const t = O.target;
-  if (e.button === 0 && h && h.item.key === t.key && t.editable && t.kind !== "fixed" && (!big(t) || e.altKey)) {
-    S.drag = { lift: e.shiftKey, y0: e.clientY, z0: t.z, pose: null };
-    return;
+  // Alt: whatever is under the pointer is taken, the item being edited or any
+  // other one (it becomes the one being edited, the view kept), and moved
+  if (e.button === 0 && e.altKey && h) {
+    if (h.item.key !== O.target.key && pickable(h.item) && O.onPick) O.onPick(h.item.key);
+    const t = O.target;
+    if (h.item.key === t.key && t.editable && t.kind !== "fixed") {
+      S.drag = { lift: e.shiftKey, y0: e.clientY, z0: t.z, pose: null };
+      return;
+    }
   }
   // a walkway point where the floor is clicked (on release, if it was a click)
   if (S.addingNode && e.button === 0) { S.look = { orbit: false, x: e.clientX, y: e.clientY, yaw: S.yaw, pitch: S.pitch,
@@ -945,6 +1021,13 @@ function onDown(e) {
     pivot: itemCentre(), pos: S.camera.position.clone() };
 }
 function onMove(e) {
+  if (S.locked) {
+    S.yaw -= (e.movementX || 0) * SENS;
+    S.pitch -= (e.movementY || 0) * SENS;
+    applyLook();
+    centreTip();
+    return;
+  }
   if (S.down && Math.hypot(e.clientX - S.down.x, e.clientY - S.down.y) > 4) S.down.moved = true;
   if (S.look) {
     const L = S.look, dx = e.clientX - L.x, dy = e.clientY - L.y, k = 0.0042;
@@ -990,6 +1073,8 @@ function onUp(e) {
   S.down = null;
   S.look = null;
   try { S.canvas.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+  // Alt was let go during the drag: the view is taken back now it is done
+  if (S.relockAfterUp && !S.alt) { S.relockAfterUp = false; setTimeout(lock, 0); }
   if (S.drag) {
     const pose = S.drag.pose;
     S.drag = null;
@@ -1048,26 +1133,47 @@ const FLY = { ArrowUp: [0, 1, 0], w: [0, 1, 0], ArrowDown: [0, -1, 0], s: [0, -1
   q: [0, 0, -1], PageDown: [0, 0, -1], e: [0, 0, 1], PageUp: [0, 0, 1] };
 const held = new Set();
 let fast = false, lastT = 0;
+const vel = new THREE.Vector3();          // the free camera's speed, metres a second
+const wm = { x: 0, y: 0 };                // walking's eased input
+const EASE_IN = 9, GLIDE = 4.2;           // how fast it gets going, and how long it glides
 function flyKey(k) { return FLY[k] ? k : FLY[k.toLowerCase()] ? k.toLowerCase() : null; }
 function fly(now) {
   const dt = Math.min(0.1, lastT ? (now - lastT) / 1000 : 0);
   lastT = now;
-  if (S.walking && dt && !held.size) { settle(false, dt); return; }
-  if (!held.size || !dt) return;
+  if (!dt) return;
   let mx = 0, my = 0, mz = 0;
   held.forEach(k => { const v = FLY[k]; mx += v[0]; my += v[1]; mz += v[2]; });
-  if (S.walking) { walk(mx, my, dt); return; }
+  if (S.walking) {
+    const k = 1 - Math.exp(-(mx || my ? EASE_IN : GLIDE * 1.6) * dt);
+    wm.x += (mx - wm.x) * k; wm.y += (my - wm.y) * k;
+    if (!mx && !my && Math.abs(wm.x) < 0.02 && Math.abs(wm.y) < 0.02) { wm.x = wm.y = 0; settle(false, dt); return; }
+    walk(wm.x, wm.y, dt);
+    return;
+  }
   // forward is where it looks, up and down included, as a spectator flies
   const f = dirOf(S.yaw, S.pitch), r = new THREE.Vector3(Math.cos(S.yaw), Math.sin(S.yaw), 0);
-  const speed = (fast ? 32 : 11) * dt;
-  const d = new THREE.Vector3().addScaledVector(f, my * speed).addScaledVector(r, mx * speed);
-  d.z += mz * speed;
-  S.camera.position.add(d);
+  const want = new THREE.Vector3().addScaledVector(f, my).addScaledVector(r, mx);
+  want.z += mz;
+  if (want.lengthSq() > 1) want.normalize();
+  want.multiplyScalar(fast ? 32 : 11);
+  vel.lerp(want, 1 - Math.exp(-(want.lengthSq() ? EASE_IN : GLIDE) * dt));
+  if (!want.lengthSq() && vel.lengthSq() < 0.0004) { vel.set(0, 0, 0); return; }
+  S.camera.position.addScaledVector(vel, dt);
 }
 function onKeyUp(e) {
   const k = flyKey(e.key);
   if (k) held.delete(k);
   fast = e.shiftKey;
+  if (e.key === "Alt" && S && !S.el.hidden) {
+    // the browser's own use of a lone Alt (its menu) would take the keys away
+    e.preventDefault();
+    S.alt = false;
+    if (S.relock) {
+      S.relock = false;
+      if (S.drag || S.look) S.relockAfterUp = true; else lock();
+    }
+    editing();
+  }
 }
 function onKey(e) {
   if (!S || S.el.hidden) return;
@@ -1075,7 +1181,22 @@ function onKey(e) {
   const k = e.key, ctrl = e.ctrlKey || e.metaKey, st = e.shiftKey ? 0.5 : e.altKey ? 0.01 : 0.05;
   let used = true;
   fast = e.shiftKey;
-  if (k === "Escape") { if (S.placing && O.onCancelPlace) O.onCancelPlace(); else close(); }
+  // Alt: the mouse is let go, to edit; letting go of Alt takes the view back
+  if (k === "Alt") {
+    e.preventDefault();
+    if (!S.alt) {
+      S.alt = true;
+      S.relock = S.locked;
+      if (S.locked) { S.altUnlock = true; unlock(); }
+      editing();
+    }
+    return;
+  }
+  if (k === "Escape") {
+    // the Esc that freed the mouse is not the one that closes the view
+    if (document.pointerLockElement === S.canvas || performance.now() - (S.lockLostAt || 0) < 300) { e.preventDefault(); return; }
+    if (S.placing && O.onCancelPlace) O.onCancelPlace(); else close();
+  }
   else if (ctrl && k === "ArrowLeft") nudge(-st, 0, 0);
   else if (ctrl && k === "ArrowRight") nudge(st, 0, 0);
   else if (ctrl && k === "ArrowUp") nudge(0, st, 0);
@@ -1097,6 +1218,7 @@ function setPlacing(p) {
   if (!S || S.dead) return;
   if (S.ghost) { S.root.remove(S.ghost); S.ghost.traverse(c => { if (c.material) c.material.dispose(); }); S.ghost = null; }
   S.placing = p || null;
+  if (p) unlock();                        // an item in hand is aimed with the pointer
   if (p) {
     const it = Object.assign({ key: "ghost", name: p.label, type: "ghost", x: 0, y: 0, z: 0 }, p);
     const g = new THREE.Group(), body = new THREE.Group();
@@ -1128,24 +1250,23 @@ function ghostAt(e) {
 }
 function help() {
   const t = O.target, pl = S.placing;
+  hint();
   if (S.addingNode) {
     S.el.querySelector(".v3d-help").innerHTML = "<b>Click a floor</b> or the ground to add a walkway point there · drag to look around · " +
       "<b>Add walkway point</b> again to stop";
     return;
   }
+  const look = "The mouse looks around, <b>W A S D</b> " + (S.walking ? "walk" : "fly") + (S.walking ? "" : ", <b>Q E</b> down and up") +
+    ", <b>Shift</b> fast · <b>Esc</b> frees the mouse, again to close";
   if (S.walking && !pl) {
-    S.el.querySelector(".v3d-help").innerHTML = "<b>Walking</b> · <b>W A S D</b> to walk where you look, <b>Shift</b> runs · drag to look around · " +
-      "<b>G</b> or another view to fly again · <b>Esc</b> done<br>The level fills in round you as you go: walk anywhere";
+    S.el.querySelector(".v3d-help").innerHTML = "<b>Walking</b> · " + look + "<br>Hold <b>Alt</b> to edit · <b>G</b> or another view to fly again";
     return;
   }
   S.el.querySelector(".v3d-help").innerHTML = pl ?
     "<b>Click</b> to put " + esc(pl.label) + " down " + (pl.kind === "wall" ? "on a wall" : "on a floor, a desk or the ground") +
     " · <b>Esc</b> to stop placing<br>Drag to look around, <b>WASD</b> to fly, <b>Q E</b> down and up, <b>Shift</b> fast" :
-    t.editable && t.kind !== "fixed" ?
-    "<b>Drag it</b> to move it " + (t.kind === "wall" ? "along walls" : "over floors, desks and the ground") +
-    (big(t) ? " (a building: <b>Alt+drag</b>)" : "") + " · <b>Shift+drag</b> up or down · <b>R</b> turn · <b>Ctrl+arrows</b> nudge it 5 cm<br>" +
-    "Drag to look around, <b>WASD</b> to fly where you look, <b>Q E</b> down and up, <b>Shift</b> fast · wheel forward and back · right-drag round it · <b>Esc</b> done" :
-    "Drag to look around, <b>WASD</b> to fly where you look, <b>Q E</b> down and up, <b>Shift</b> fast · wheel forward and back · click an item to look at it · <b>Esc</b> done";
+    look + "<br>Hold <b>Alt</b> to edit: click to select, <b>Alt+drag</b> moves anything, <b>Shift+Alt+drag</b> up and down, " +
+    "<b>Alt+right-drag</b> round it" + (t.editable && t.kind !== "fixed" ? " · <b>R</b> turn · <b>Ctrl+arrows</b> nudge 5 cm" : "");
 }
 
 // ------------------------------------------------------------------ what it stands on
@@ -1191,8 +1312,8 @@ function tip(it, e) {
   const t = S.el.querySelector(".v3d-tip");
   if (!it || it.type === "terrain") { t.hidden = true; return; }
   const r = S.el.getBoundingClientRect();
-  t.innerHTML = esc(it.name) + (it.key === O.target.key ? (O.target.editable && O.target.kind !== "fixed" ? " <i>drag to move</i>" : "") :
-    it.editable ? " <i>click to edit</i>" : pickable(it) ? " <i>click to look at it</i>" : "");
+  t.innerHTML = esc(it.name) + (it.key === O.target.key ? (O.target.editable && O.target.kind !== "fixed" ? " <i>Alt+drag to move</i>" : "") :
+    it.editable ? " <i>Alt+drag to move</i>" : pickable(it) ? " <i>Alt+click to look at it</i>" : "");
   t.style.left = (e.clientX - r.left) + "px";
   t.style.top = (e.clientY - r.top) + "px";
   t.hidden = false;
@@ -1234,7 +1355,9 @@ function open(opts) {
   S.el.querySelector(".v3d-sub").textContent = opts.target.sub ? opts.target.sub : opts.target.editable ?
     (opts.target.kind === "wall" ? "hangs on walls" : opts.target.kind === "fixed" ? "stays where it is" : "stands on floors") :
     "the level's own - not movable";
-  S.el.querySelectorAll('[data-g="radius"] .btn').forEach(b => b.classList.toggle("on", +b.dataset.v === opts.radius));
+  const rad = S.el.querySelector(".v3d-rad");
+  rad.value = opts.radius;
+  S.el.querySelector(".v3d-radv").textContent = rad.value + " m";
   const camBtn = S.el.querySelector('[data-g="view"] [data-v="cam"]');
   camBtn.hidden = !opts.target.cam;
   const holding = S.placing;
@@ -1268,11 +1391,17 @@ function open(opts) {
   readout();
   if (!S.raf) S.raf = requestAnimationFrame(loop);
   S.canvas.focus();
+  // opened fresh (a click, so the browser allows it): the mouse is the view's
+  if (!keep) { vel.set(0, 0, 0); if (!S.alt) lock(); }
+  hint();
 }
 function close() {
   if (!S) return;
+  unlock();
   S.el.hidden = true;
   S.drag = null;
+  S.alt = false;
+  editing();
   const cb = O && O.onClose;
   if (cb) cb();
 }

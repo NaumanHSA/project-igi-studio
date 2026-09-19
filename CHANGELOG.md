@@ -3,6 +3,46 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## 1.0.1
+
+Fixes found by testing on a copy of the game as it shipped, a free camera for
+the 3D view, and new Settings.
+
+### Fixed
+
+- **Your missions show in the game's list on a fresh install.** The game only
+  offers the missions a player has reached, which on a new install is mission 1
+  alone, so a mission in slot 15 was installed and never offered. Apply now
+  lets the game's list reach your mission, through the one line of the game's
+  settings (`config.qvm`) that says how far it goes, backed up first. Nothing
+  you reached playing is taken away.
+- **Switching to another copy of the game.** Changing the game folder now
+  connects the new copy properly, with a reference copy of its levels and its
+  level data, and each mission shows as in the game only in the copy it was
+  applied to. Before, a mission kept the slot number it had in the old game:
+  Apply failed with *slot belongs to another mission*, and *Remove from the
+  game* could have taken out another mission's slot.
+- **No jump when Alt is pressed.** The desktop app's hidden menu bar came up
+  with every Alt, shifting the whole studio during an Alt+drag. It is gone; what
+  it held is in the new **Help** menu.
+
+### New
+
+- **3D from the top bar.** **Map | 3D** in the middle of the top bar; 3D starts
+  just behind the player start, looking the way the player faces.
+- **A free camera in 3D.** The mouse looks around, W A S D fly, easing in and
+  gliding to a stop. Hold **Alt** to edit: click to select, **Alt+drag** moves
+  anything, **Shift+Alt+drag** lifts or lowers it. The range is a slider, and
+  starts at 60 m.
+- **New Settings.** A page each for the game (with **Browse**, and the folder
+  checked as you pick it), the AI designer, the light model, updates, and about.
+- **Local models.** Each model is **OpenAI** or **OpenAI-compatible** (LM
+  Studio, vLLM, Ollama, OpenRouter), with its server's address and **context
+  window**: requests are fitted into it, so a long chat no longer overflows a
+  local model.
+- **A new look** for the top bar, the buttons and the menus, with the logo.
+- Text is no longer selected by accident; the AI designer's chat still can be.
+
 ## 1.0.0
 
 The first public release: a mission studio for *Project I.G.I.: I'm Going In*,

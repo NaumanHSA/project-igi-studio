@@ -55,7 +55,9 @@ def summary(m):
             "installed": inst, "upToDate": bool(inst and inst.get("hash") == plan_hash(m))}
 
 
-def list_missions():
+def list_missions(view=None):
+    """Every mission, summed up. view(mission) may show each as something else
+    first: as the connected game has it, say."""
     out = []
     if STORE.is_dir():
         for d in STORE.iterdir():
@@ -63,7 +65,8 @@ def list_missions():
             if d.name.startswith(".") or not f.exists():
                 continue
             try:
-                out.append(summary(json.load(f.open(encoding="utf-8"))))
+                m = json.load(f.open(encoding="utf-8"))
+                out.append(summary(view(m) if view else m))
             except (OSError, ValueError, KeyError):
                 continue
     return sorted(out, key=lambda r: -(r.get("updated") or 0))

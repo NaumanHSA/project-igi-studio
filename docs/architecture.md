@@ -117,7 +117,18 @@ python -m studio setup --repair           put the drifted ones back
 - **One game is written to.** The studio writes into the game you connected
   and nowhere else: a custom mission slot anywhere else on the disk is refused
   by `studio/protect.py`, along with every built-in mission and the reference
-  copy itself.
+  copy itself. Outside its slots it writes only a mission's strings into the
+  two language files, and the game's `config.qvm`: the game only offers the
+  missions a player has reached (`GOActiveMission(N)`, 1 on a fresh install),
+  so `studio/build/unlock.py` raises N to each slot applied, never lowering it,
+  and again just before the studio starts the game.
+- **Which slot holds which mission is the game's to say.** Every slot the
+  studio fills carries a marker naming its mission, and the server reads the
+  connected game's markers (`held_by_game`) rather than trusting the slot
+  number a mission last had: after switching to another copy of the game,
+  that number is somebody else's slot, or none. Switching games goes through
+  the setup's job (`POST /api/setup/game`), which copies the new game's levels
+  first; the server refuses a bare change of the game folder.
 - **Drift.** *Check the built-in missions* compares them with that copy.
   Putting one back is the only write to a built-in mission the studio allows,
   and it can only restore the original bytes. A deliberate change is

@@ -19,6 +19,12 @@
 #              previous_response_id; if that id is refused, the whole history goes.
 #   chat       POST {base}/chat/completions - any OpenAI-compatible server.
 #   mock       no network: a scripted designer for the UI tests.
+# Providers: each model is "openai" (an API key and a model; the address is
+# OpenAI's) or "compatible", any server that speaks OpenAI's API (LM Studio,
+# vLLM, Ollama, OpenRouter): a model, the server's address, an API key if it
+# asks for one, and its context window. A compatible server's context is often
+# small, so every request to one is fitted into its window (fit()): the oldest
+# turns are left out whole, and then the longest tool results shortened.
 # Two models (docs/PLAN-ai.md): the main one (config "ai": OpenAI by default)
 # plans and builds; a light one (config "ai_light": LM Studio's qwen by default,
 # on this machine) titles chats, looks things up for the main one (the scout)
@@ -32,6 +38,7 @@ OPENAI = "https://api.openai.com/v1"
 DEFAULTS = {"baseUrl": OPENAI, "model": "", "effort": "low", "pace": 350, "maxSteps": 60, "protocol": "auto"}
 LIGHT = {"enabled": True, "baseUrl": "http://localhost:1234/v1", "model": "qwen/qwen3.5-9b", "effort": "none",
          "protocol": "chat", "vision": True, "maxTokens": 3000}
+CONTEXT = 16384             # a compatible server's context window, until one is set
 # not chat models, or not ones that take function tools
 NOT_CHAT = re.compile(r"embedding|whisper|tts|dall-e|davinci|babbage|moderation|image|audio|realtime|transcribe|"
                       r"search|computer-use|sora|live|codex|deep-research|instruct|-pro\b|chatgpt", re.I)
@@ -88,15 +95,33 @@ def settings(cfg):
         key, src = os.environ["OPENAI_API_KEY"], "environment"
     if not s.get("model"):
         s["model"] = env.get("MODEL_QUALITY") or "gpt-5-mini"
+    _provider(s)
     return s, key, (src if key else None)
 
 
 def light_settings(cfg):
-    """The light model's settings and key (a local server needs none)."""
+    """The light model's settings and key (a local server needs none; on OpenAI
+    without a key of its own, it uses the main model's)."""
     s = dict(LIGHT)
     s.update({k: v for k, v in (cfg.get("ai_light") or {}).items() if v not in (None, "")})
     legacy = s.pop("apiKey", "") or ""
-    return s, keystore.get("light") or legacy
+    _provider(s)
+    key = keystore.get("light") or legacy
+    if not key and s["provider"] == "openai":
+        key = settings(cfg)[1]
+    return s, key
+
+
+def _provider(s):
+    """openai or compatible, from the settings or, for settings made before there
+    was a choice, from the address. OpenAI's address is OpenAI's own."""
+    p = (s.get("provider") or "").lower()
+    if p not in ("openai", "compatible"):
+        p = "openai" if (s.get("baseUrl") or OPENAI).rstrip("/") == OPENAI else "compatible"
+    s["provider"] = p
+    if p == "openai":
+        s["baseUrl"] = OPENAI
+    return s
 
 
 def settings_for(cfg, role):
@@ -112,19 +137,24 @@ def public(cfg):
     s, key, src = settings(cfg)
     s["baseUrl"] = s.get("baseUrl") or OPENAI
     ls, lkey = light_settings(cfg)
-    return dict(s, hasKey=bool(key) or s["baseUrl"] == "mock", keyFrom=src, keyHint=("…" + key[-4:]) if key else "",
-                protocolInUse=protocol_of(s), light=dict(ls, hasKey=bool(lkey), protocolInUse=protocol_of(ls)))
+    s.setdefault("contextWindow", None)
+    ls.setdefault("contextWindow", None)
+    # a compatible server needs no key; OpenAI does
+    usable = bool(key) or s["provider"] == "compatible"
+    return dict(s, hasKey=usable, keySaved=bool(key), keyFrom=src, keyHint=("…" + key[-4:]) if key else "",
+                protocolInUse=protocol_of(s), defaultContext=CONTEXT,
+                light=dict(ls, hasKey=bool(lkey), keySaved=bool(keystore.get("light")), protocolInUse=protocol_of(ls)))
 
 
 def update(cfg, body):
     """Settings from the browser into cfg["ai"]. An apiKey of "" keeps the one
     there; {"clearKey": true} drops it."""
     ai = dict(cfg.get("ai") or {})
-    for k in ("baseUrl", "model", "effort", "protocol"):
+    for k in ("baseUrl", "model", "effort", "protocol", "provider"):
         if k in body:
             ai[k] = str(body[k] or "").strip()
-    for k, lo, hi in (("pace", 0, 3000), ("maxSteps", 5, 200)):
-        if k in body:
+    for k, lo, hi in (("pace", 0, 3000), ("maxSteps", 5, 200), ("contextWindow", 1024, 10000000)):
+        if k in body and body[k] not in (None, ""):
             ai[k] = max(lo, min(hi, int(body[k] or 0)))
     # keys go to the encrypted store, not into cfg (which is a plain file)
     if body.get("apiKey"):
@@ -136,14 +166,18 @@ def update(cfg, body):
     lb = body.get("light")
     if isinstance(lb, dict):
         li = dict(cfg.get("ai_light") or {})
-        for k in ("baseUrl", "model", "effort", "protocol"):
+        for k in ("baseUrl", "model", "effort", "protocol", "provider"):
             if k in lb:
                 li[k] = str(lb[k] or "").strip()
         for k in ("enabled", "vision"):
             if k in lb:
                 li[k] = bool(lb[k])
+        if lb.get("contextWindow") not in (None, ""):
+            li["contextWindow"] = max(1024, min(10000000, int(lb["contextWindow"])))
         if lb.get("apiKey"):
             keystore.put("light", str(lb["apiKey"]))
+        if lb.get("clearKey"):
+            keystore.drop("light")
         li.pop("apiKey", None)
         cfg["ai_light"] = li
     return cfg
@@ -244,6 +278,61 @@ def _chat_messages(instructions, items):
         elif k == "result":
             out.append({"role": "tool", "tool_call_id": it["id"], "content": it.get("output") or ""})
     return out
+
+
+# ------------------------------------------------------------------ the context window
+IMAGE_TOKENS = 800          # what a picture costs, near enough
+
+
+def _tokens(text):
+    """A cautious guess: English and JSON run at three to four characters a token."""
+    return len(text or "") // 3 + 4
+
+
+def _cost(it):
+    return (_tokens(it.get("text")) + _tokens(it.get("args")) + _tokens(it.get("output")) +
+            IMAGE_TOKENS * len(it.get("images") or []))
+
+
+def fit(s, instructions, items, tools):
+    """(instructions, items) that fit a compatible server's context window.
+
+    Room is kept for the answer (the model's maxTokens, else a quarter of the
+    window, at most 4096). The oldest turns are left out first, whole (a turn
+    starts at a user message, so a tool call is never parted from its result),
+    never the newest; if that is still too much, the longest tool results are
+    shortened, keeping their beginning and end. The model is told when either
+    happened. OpenAI's own models are not fitted: their windows are large."""
+    ctx = int(s.get("contextWindow") or 0)
+    if s.get("provider") != "compatible" or ctx <= 0 or not items:
+        return instructions, items
+    budget = ctx - (int(s.get("maxTokens") or 0) or min(4096, ctx // 4))
+    fixed = _tokens(instructions) + _tokens(json.dumps(tools)) + 60
+    costs = [_cost(it) for it in items]
+    if fixed + sum(costs) <= budget:
+        return instructions, items
+    starts = [i for i, it in enumerate(items) if it.get("k") == "user"] or [0]
+    keep = starts[-1]
+    for st in starts:
+        if fixed + sum(costs[st:]) <= budget:
+            keep = st
+            break
+    notes = []
+    if keep > 0:
+        notes.append("Earlier parts of this conversation were left out to fit the model's context window.")
+    items = [dict(it) for it in items[keep:]]
+    over = fixed + sum(_cost(it) for it in items) - budget
+    if over > 0:
+        for it in sorted((it for it in items if it.get("k") == "result"), key=lambda it: -len(it.get("output") or "")):
+            out = it.get("output") or ""
+            if over <= 0 or len(out) < 800:
+                break
+            keep_chars = max(600, len(out) - over * 3)
+            head, tail = out[:keep_chars * 2 // 3], out[-(keep_chars // 3):]
+            it["output"] = head + "\n... (shortened to fit the model's context window) ...\n" + tail
+            over -= (len(out) - len(it["output"])) // 3
+        notes.append("Some tool results were shortened to fit the model's context window.")
+    return (instructions + ("\n\n" + " ".join(notes) if notes else "")), items
 
 
 # ------------------------------------------------------------------ one turn
@@ -371,8 +460,9 @@ def _responses(s, key, model, body, emit, alive):
 
 
 def _chat(s, key, model, body, emit, alive):
+    instructions, history = fit(s, body.get("instructions") or "", body.get("history") or [], body.get("tools") or [])
     payload = {"model": model, "stream": True, "stream_options": {"include_usage": True},
-               "messages": _chat_messages(body.get("instructions") or "", body.get("history") or []),
+               "messages": _chat_messages(instructions, history),
                "tools": [{"type": "function", "function": t} for t in body.get("tools") or []]}
     if not payload["tools"]:
         payload.pop("tools")

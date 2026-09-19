@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('studioApp', {
   pickFolder: (title) => ipcRenderer.invoke('studio:pick-folder', title),
   // show a folder in Explorer (folders only)
   openFolder: (p) => ipcRenderer.invoke('studio:open-folder', p),
+  // what the menu bar used to hold: the log folder, the studio's own folder, About
+  openLogs: () => ipcRenderer.invoke('studio:open-logs'),
+  openHome: () => ipcRenderer.invoke('studio:open-home'),
+  about: () => ipcRenderer.invoke('studio:about'),
   // Settings, Updates: look for a new version at start (on or off), and look now
   updates: {
     get: () => ipcRenderer.invoke('studio:updates-get'),

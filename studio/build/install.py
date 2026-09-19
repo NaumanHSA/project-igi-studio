@@ -107,6 +107,12 @@ def install_level(stage_dir, game_path, level, log=print):
     json.dump(info, manifest.open("w"), indent=2)
 
     install_graphs(stage, dest, level, log)
+    # and the game's mission list goes as far as this slot, or it never offers it
+    try:
+        from studio.build import unlock
+        unlock.reach(game, level, log)
+    except Exception as e:
+        log("mission %d may not be in the game's list: its settings could not be changed (%s)" % (level, e))
     return dest / "objects.qvm", installed
 
 

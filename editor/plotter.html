@@ -1,5 +1,6 @@
 <meta charset="utf-8">
 <title>Project IGI Studio</title>
+<link rel="icon" type="image/png" href="icon.png">
 <link rel="stylesheet" href="vendor/fonts/fonts.css">
 <style>
 /* One look: the in-game map computer. Dark phosphor ground, buildings as lit
@@ -1015,24 +1016,146 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
   .rail{width:150px;padding:10px 8px}.rail.right{width:220px;padding:0}.panel{width:220px}
   .modes{grid-template-columns:1fr}
 }
+
+/* ================= the look of the site: the map computer's keys and panels ================= */
+/* text is for reading, not selecting: only what you type, and the AI designer's chat */
+body{-webkit-user-select:none;user-select:none}
+input,textarea,select,[contenteditable="true"],.ai-log,.ai-log *{-webkit-user-select:text;user-select:text}
+/* the top bar: the studio and the mission on the left, the view in the middle, the rest on the right */
+.topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:14px;padding:7px 14px;
+  padding-top:calc(7px + env(safe-area-inset-top,0px));background:linear-gradient(180deg,#10301a,#0a2010);position:relative;z-index:5;
+  border-bottom:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;opacity:.7;
+  background:linear-gradient(90deg,transparent,rgba(141,255,154,.6),transparent)}
+.tb-left,.tb-right{display:flex;align-items:center;gap:10px;min-width:0}
+.tb-right{justify-content:flex-end}
+.tb-mid{display:flex;justify-content:center}
+.brand{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:2px 8px 2px 2px;border-radius:3px;flex:none}
+.brand:focus-visible{outline:2px solid var(--accent)}
+.brand-logo{width:30px;height:30px;flex:none;filter:drop-shadow(0 0 8px rgba(141,255,154,.45))}
+.brand-t{display:flex;flex-direction:column;line-height:1.05;min-width:0}
+.brand-t b{font:600 18px "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#eaffec;white-space:nowrap}
+.brand-t b em{font-style:normal;color:var(--player)}
+.brand-t span{font:500 10px "IBM Plex Mono",monospace;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
+.brand:hover .brand-t b{color:var(--player)}
+.mission-name{background:rgba(3,11,4,.6);border-color:var(--line);border-radius:3px;height:32px;min-width:150px;flex:0 1 220px;
+  font:500 14px "IBM Plex Sans",sans-serif;transition:border-color .15s,box-shadow .15s}
+.mission-name:hover{border-color:#3b8a45}
+.mission-name:focus-visible{outline:none;border-color:var(--player);box-shadow:0 0 0 2px rgba(141,255,154,.18)}
+.tb-right .savechip{overflow:hidden;text-overflow:ellipsis;min-width:0}
+#modechip{flex:0 1 auto}
+/* the view: the map computer, or the level in 3D */
+.viewswitch{display:inline-flex;padding:3px;gap:3px;background:rgba(3,11,4,.72);border:1px solid var(--line);border-radius:4px;
+  box-shadow:inset 0 0 12px rgba(0,0,0,.45)}
+.viewswitch button{all:unset;cursor:pointer;min-width:58px;text-align:center;padding:5px 16px;border-radius:2px;
+  font:600 14px "Barlow Condensed",sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+  transition:color .15s,background .15s,box-shadow .15s}
+.viewswitch button:hover{color:var(--player)}
+.viewswitch button.on{color:#06140a;background:linear-gradient(180deg,#b3ffbc,#6fe07f);box-shadow:0 0 16px rgba(141,255,154,.42)}
+.viewswitch button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* keys everywhere: crisp, a glow when the pointer is on them; gold for the one that matters */
+.btn{border-radius:3px;transition:border-color .15s,color .15s,background .15s,box-shadow .15s,transform .05s}
+.btn:hover{border-color:var(--player);color:var(--player);box-shadow:0 0 12px rgba(141,255,154,.16)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(180deg,#ffe38e,#ffc933);border-color:#ffd24a;color:#1d1600;box-shadow:0 0 16px rgba(255,210,74,.22)}
+.btn.primary:hover{color:#1d1600;filter:none;box-shadow:0 0 24px rgba(255,210,74,.5)}
+.btn[disabled]{opacity:.45;cursor:default;box-shadow:none;transform:none}
+a.btn{display:inline-flex;align-items:center;text-decoration:none}
+/* the top bar's keys are the site's: condensed capitals, cut corners */
+.topbar .btn{font:600 14px "Barlow Condensed","IBM Plex Sans",sans-serif;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;
+  background:linear-gradient(180deg,rgba(141,255,154,.08),rgba(141,255,154,.01));
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.topbar .btn.primary{background:linear-gradient(180deg,#ffe38e,#ffc933);padding:7px 18px}
+.topbar .menubtn svg{width:11px;height:11px}
+/* menus: a lit panel, a gold mark on the item under the pointer */
+.menu{background:linear-gradient(180deg,#0f2b13,#0a200e);border:1px solid var(--line);border-top:2px solid var(--player);border-radius:3px;
+  box-shadow:0 18px 40px rgba(0,0,0,.55),0 0 26px rgba(141,255,154,.08);padding:5px}
+.menu .mi{border-radius:2px;padding:7px 12px 7px 15px;transition:background .12s,color .12s}
+.menu .mi:hover,.menu .mi:focus-visible{background:rgba(141,255,154,.09);color:var(--player)}
+.menu .mi:hover::before,.menu .mi:focus-visible::before{content:"";position:absolute;left:4px;top:7px;bottom:7px;width:2px;
+  background:var(--accent);box-shadow:0 0 6px rgba(255,210,74,.7)}
+.menu .mi[disabled]:hover::before{display:none}
+.menu .mi.danger:hover{color:var(--danger);background:rgba(255,107,90,.1)}
+.menu .mh{color:var(--accent);letter-spacing:.14em;padding:8px 12px 4px}
+.menu .sep{height:0;background:none;border-top:1px dashed var(--grid);margin:5px 6px}
+/* a category's list beside the inventory: rows with room, and over the 3D view too */
+.invfly{z-index:55}
+.fly-b .item{padding:6px 8px;gap:10px;margin:0 0 2px;border-radius:3px}
+.fly-b .item .thumb{width:34px;height:34px}
+.fly-b .item .t{gap:2px}
+.fly-b .item .t b{font-size:13px}
+/* ---- settings: a list down the side ---- */
+.sheet-card.settings{max-width:900px;padding:0;overflow:hidden;display:flex;flex-direction:column;height:min(660px,calc(100vh - 40px))}
+.sheet-card.settings .sheet-head{padding:12px 18px;margin:0;border-bottom:1px solid var(--line);background:rgba(3,11,4,.35)}
+.sheet-card.settings #sheet-body{flex:1;min-height:0}
+.set-wrap{display:grid;grid-template-columns:196px minmax(0,1fr);height:100%}
+.set-nav{display:flex;flex-direction:column;gap:3px;padding:12px 10px;border-right:1px solid var(--line);background:rgba(3,11,4,.35)}
+.set-nav button{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:3px;position:relative;
+  border:1px solid transparent;font:600 14px "Barlow Condensed",sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.set-nav button svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.set-nav button:hover{color:var(--player);background:rgba(141,255,154,.05)}
+.set-nav button.on{color:#eaffec;background:rgba(141,255,154,.09);border-color:var(--line)}
+.set-nav button.on::before{content:"";position:absolute;left:-1px;top:7px;bottom:7px;width:3px;background:var(--accent);box-shadow:0 0 8px rgba(255,210,74,.6)}
+.set-nav button:focus-visible{outline:2px solid var(--accent)}
+.set-panes{min-width:0;overflow-y:auto;padding:18px 22px 20px}
+.set-pane[hidden]{display:none}
+.set-h{margin:0 0 6px;font:600 22px "Barlow Condensed",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#eaffec}
+.set-lead{margin:0 0 16px;font-size:13px;line-height:1.55;color:var(--muted)}
+.set-pane .field{margin:0 0 12px}
+.set-pane .field .lbl{margin:0 0 3px}
+.set-pane input:not([type=checkbox]):not([type=range]),.set-pane select{background:var(--sunken);border:1px solid var(--line);color:var(--ink);
+  border-radius:3px;padding:7px 9px;font:13px "IBM Plex Sans",sans-serif;width:100%;min-width:0}
+.set-pane input:focus-visible,.set-pane select:focus-visible{outline:none;border-color:var(--player);box-shadow:0 0 0 2px rgba(141,255,154,.18)}
+.set-pane .hint{margin:-4px 0 12px;font-size:12px;line-height:1.5}
+.set-path{display:flex;gap:8px}.set-path input{flex:1}
+.set-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.set-check{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px;color:var(--ink);cursor:pointer}
+.set-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px dashed var(--grid)}
+.set-foot .ai-msg{margin-right:auto;font-size:12.5px}
+.set-note{margin-right:auto}
+.set-note .su-row{margin:0}
+.g-check{margin-top:4px}
+.about{display:flex;gap:16px;align-items:flex-start;margin-bottom:16px}
+.about img{flex:none;filter:drop-shadow(0 0 12px rgba(141,255,154,.4))}
+.about-v{margin:2px 0 0;font-size:12px;color:var(--faint)}
+.about-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.set-pane a{color:var(--player)}
+@media (max-width:760px){.set-wrap{grid-template-columns:1fr}.set-nav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .set-row2{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
 <div id="app">
   <header class="topbar">
-    <button class="brand" id="brandbtn" title="Mission library"><b>IGI Studio</b><span id="lvchip"></span></button>
-    <div class="menuwrap">
-      <button id="btnmenu" class="btn ghost menubtn" aria-haspopup="menu" aria-expanded="false">Mission
-        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>
-      <div class="menu" id="missionmenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div>
-      <input type="file" id="importfile" accept=".json,application/json" hidden>
+    <div class="tb-left">
+      <button class="brand" id="brandbtn" title="Mission library"><img class="brand-logo" src="icon.png" alt="" width="30" height="30">
+        <span class="brand-t"><b>IGI <em>Studio</em></b><span id="lvchip"></span></span></button>
+      <div class="menuwrap">
+        <button id="btnmenu" class="btn ghost menubtn" aria-haspopup="menu" aria-expanded="false">Mission
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>
+        <div class="menu" id="missionmenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div>
+        <input type="file" id="importfile" accept=".json,application/json" hidden>
+      </div>
+      <input id="mname" class="mission-name" value="" aria-label="Mission name">
     </div>
-    <input id="mname" class="mission-name" value="" aria-label="Mission name">
-    <span id="modechip" class="savechip"></span>
-    <div class="spacer"></div>
-    <span id="savechip" class="savechip"></span>
-    <button id="btncfg" class="btn ghost" hidden>Settings</button>
-    <button id="btnapply" class="btn primary" hidden>Apply to game</button>
+    <div class="tb-mid">
+      <div class="viewswitch" role="group" aria-label="View">
+        <button type="button" id="vw-map" class="on" aria-pressed="true" title="Map\nThe map computer: the whole mission from above">Map</button>
+        <button type="button" id="vw-3d" aria-pressed="false" title="3D\nThe level in 3D, starting behind the player">3D</button>
+      </div>
+    </div>
+    <div class="tb-right">
+      <span id="modechip" class="savechip"></span>
+      <span id="savechip" class="savechip"></span>
+      <div class="menuwrap">
+        <button id="btnhelp" class="btn ghost menubtn" aria-haspopup="menu" aria-expanded="false">Help
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>
+        <div class="menu" id="helpmenu" role="menu" hidden style="right:0;top:calc(100% + 4px)"></div>
+      </div>
+      <button id="btncfg" class="btn ghost" hidden>Settings</button>
+      <button id="btnapply" class="btn primary" hidden>Apply to game</button>
+    </div>
   </header>
 
   <div class="sheet" id="sheet" hidden>
@@ -7044,7 +7167,7 @@ function renderGround(){
 // view3d.js - an ES module on three.js - draws the real geometry around one
 // item and hands back where it was put. This side gives it the item, what stands
 // within the radius, the ground, and the meshes. See docs/PLAN-3d.md.
-var V3D={radius:20,key:null,spot:null,at:null,ver:-1,raf:0};
+var V3D={radius:60,key:null,spot:null,at:null,ver:-1,raf:0};
 // The close-up follows the plan: a turn or a move in the panel, undo, what a
 // moved crate carried along. Once per change, right after it.
 function sync3d(){
@@ -7278,7 +7401,8 @@ function open3dAt(x,y,R){
     onMove:function(){},
     onPick:function(k){var q=byKey3d(k);if(q){sel=q;multi=[];renderSide();open3d(q,true)}},
     onRadius:function(r){open3dAt(x,y,r)},
-    onClose:function(){V3D.spot=null;V3D.at=null;renderSide();draw()}});
+    onClose:function(){V3D.spot=null;V3D.at=null;renderSide();draw();sync3dSwitch()}});
+  sync3dSwitch();
 }
 // The walkways round a spot, for the 3D close-up: the level's navmesh nodes and
 // links (as the plan leaves them), the mission's own, and the guard's patrol.
@@ -7322,7 +7446,22 @@ function addNode3d(p){
   }
   lastChangeAt=0;touch();renderNavSection();renderList();draw();
 }
-function open3d(o,keep){
+// The top bar's Map | 3D: the 3D view opens on the player start, from behind it
+function sync3dSwitch(){
+  var on=!!(window.View3D&&View3D.isOpen()),a=$("vw-map"),b=$("vw-3d");
+  if(!a)return;
+  a.classList.toggle("on",!on);b.classList.toggle("on",on);
+  a.setAttribute("aria-pressed",String(!on));b.setAttribute("aria-pressed",String(on));
+}
+function toggle3d(on){
+  if(!on){if(window.View3D&&View3D.isOpen())View3D.close();sync3dSwitch();return}
+  if(window.View3D&&View3D.isOpen())return;
+  var p=playerObj();
+  if(!p){toast(LEVEL?"This level has no player start to look from":"Open a mission first");return}
+  open3d(p,false,"player");
+  sync3dSwitch();
+}
+function open3d(o,keep,view){
   if(!o||o.x==null)return;
   if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
   if(!window.MeshSprites||!MeshSprites.ready()){toast("The models are still loading. Try again in a moment");return}
@@ -7335,7 +7474,7 @@ function open3d(o,keep){
   View3D.open({host:document.querySelector(".stage"),target:t,objects:sceneAround(o,reach3d(R)),terrain:terrain3d(o,R),
     nav:nav3d(o,reach3d(R)),onAddNode:canEditQuiet()?addNode3d:null,explore:explore3d,
     onTest:Store&&!Store.local&&canEditQuiet()?function(p){testFromHere(p.x,p.y,p.z,p.gamma)}:null,
-    mesh:function(m){return MeshSprites.raw(m)},radius:R,inside:!!inb,keepView:!!keep,
+    mesh:function(m){return MeshSprites.raw(m)},radius:R,inside:!!inb,keepView:!!keep,view:view,
     level:SRV?(LEVEL?LEVEL.level:LV):0,
     onMove:function(k,p){
       var q=byKey3d(k);if(!q)return;
@@ -7364,8 +7503,9 @@ function open3d(o,keep){
       open3d(n,true);
     },
     onCancelPlace:function(){selectTool(null,null)},
-    onClose:function(){V3D.key=null;V3D.spot=null;V3D.at=null;renderSide();draw()}});
+    onClose:function(){V3D.key=null;V3D.spot=null;V3D.at=null;renderSide();draw();sync3dSwitch()}});
   View3D.setPlacing(placing3d(tool));
+  sync3dSwitch();
 }
 
 /* ---------------- sight lines ---------------- */
@@ -10004,6 +10144,7 @@ function closeMenus(){
   if(ctxEl){ctxEl.remove();ctxEl=null}
   var q=$("quickadd");if(q)q.remove();
   var mm=$("missionmenu");if(mm&&!mm.hidden){mm.hidden=true;$("btnmenu").setAttribute("aria-expanded","false")}
+  var hm=$("helpmenu");if(hm&&!hm.hidden){hm.hidden=true;$("btnhelp").setAttribute("aria-expanded","false")}
 }
 function placeAt(t,wx,wy){
   var keep=tool;tool=t;addPlacement(wx,wy);tool=keep;
@@ -10149,6 +10290,19 @@ function bindMenus(){
     if(open){renderMenu(mm,missionMenuItems(),closeMenus);mm.hidden=false;btn.setAttribute("aria-expanded","true");
       var f=mm.querySelector(".mi");if(f)f.focus()}
   });
+  var hb=$("btnhelp"),hm=$("helpmenu");
+  hb.addEventListener("click",function(e){
+    e.stopPropagation();
+    var open=hm.hidden;closeMenus();
+    if(open){renderMenu(hm,helpMenuItems(),closeMenus);hm.hidden=false;hb.setAttribute("aria-expanded","true");
+      var f=hm.querySelector(".mi");if(f)f.focus()}
+  });
+  document.addEventListener("mousedown",function(e){
+    if(!hm.hidden&&!hm.contains(e.target)&&!hb.contains(e.target)){hm.hidden=true;hb.setAttribute("aria-expanded","false")}
+  },true);
+  // the view: the map, or the level in 3D from behind the player
+  $("vw-map").addEventListener("click",function(){toggle3d(false)});
+  $("vw-3d").addEventListener("click",function(){toggle3d(true)});
   $("importfile").addEventListener("change",function(){
     var f=this.files&&this.files[0];if(f)importPlan(f);this.value="";
   });
@@ -11091,7 +11245,7 @@ function settingsDialog(){
 }
 function sheet(title,html){
   $("sheet-title").textContent=title;$("sheet-body").innerHTML=html;$("sheet").hidden=false;
-  var card=$("sheet").querySelector(".sheet-card");if(card)card.classList.remove("wide");
+  var card=$("sheet").querySelector(".sheet-card");if(card)card.classList.remove("wide","settings");
 }
 function logLines(lines){
   return lines.map(function(l){
@@ -11109,27 +11263,128 @@ function probeServer(){
     return true;
   }).catch(function(){return false});
 }
-function showConfig(){
-  fetch("api/config").then(function(r){return r.json()}).then(function(c){
-    sheet("Settings",
-      '<div class="field"><span class="lbl">Game folder (missions are installed here)</span>'+
-      '<input id="cfg-path" value="'+esc(c.gamePath)+'"></div>'+
-      '<p class="hint">Built-in missions (levels 1–14) and the original install'+(c.pristinePath?' (<span class="mono">'+esc(c.pristinePath)+'</span>)':'')+
-      ' are never written. Each of your missions gets its own slot, mission 15 and up.</p>'+
-      '<div id="cfg-stat"></div>'+
-      '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn primary" id="cfg-save">Save</button>'+
-      '<button class="btn" id="cfg-setup">Set up the game</button></div>'+
-      '<div id="cfg-ai"></div><div id="cfg-upd"></div>');
-    paintStat(SRV);
-    $("cfg-setup").addEventListener("click",function(){setupSheet({})});
-    if(window.AIPanel)AIPanel.renderSettings($("cfg-ai"));
-    paintUpdates($("cfg-upd"));
-    $("cfg-save").addEventListener("click",function(){
-      fetch("api/config",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({gamePath:$("cfg-path").value})})
-        .then(function(r){return r.json()}).then(function(s){SRV=Object.assign(SRV||{},s);paintStat(SRV)});
+// ---------------------------------------------------------------- settings
+// One sheet, a list down the side: the game, the two AI models, updates (the
+// desktop app) and about. Each pane is drawn the first time it is shown.
+var SET_TABS=[
+  ["game","Game",'<rect x="3.5" y="7" width="17" height="10.5" rx="2"/><path d="M8 10.5v4M6 12.5h4M15.5 11.5h.01M17.5 13.5h.01"/>'],
+  ["ai","AI designer",'<path d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/>'],
+  ["light","Light model",'<path d="M13 3 5.5 13.5H11l-1 7.5 7.5-10.5H12z"/>'],
+  ["updates","Updates",'<path d="M12 4v11m0 0-4-4m4 4 4-4M5 19.5h14"/>'],
+  ["about","About",'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.01"/>']
+];
+function showConfig(tab){
+  var desktop=!!(window.studioApp&&window.studioApp.updates);
+  var tabs=SET_TABS.filter(function(t){return t[0]!=="updates"||desktop});
+  try{tab=tab||localStorage.getItem("plotter:settab")}catch(e){/* private window */}
+  if(!tabs.some(function(t){return t[0]===tab}))tab="game";
+  sheet("Settings",'<div class="set-wrap"><nav class="set-nav" role="tablist" aria-label="Settings">'+tabs.map(function(t){
+      return '<button type="button" role="tab" data-tab="'+t[0]+'"><svg viewBox="0 0 24 24" aria-hidden="true">'+t[2]+'</svg><span>'+t[1]+'</span></button>'}).join("")+
+    '</nav><div class="set-panes">'+tabs.map(function(t){return '<section class="set-pane" role="tabpanel" id="set-'+t[0]+'" hidden></section>'}).join("")+'</div></div>');
+  $("sheet").querySelector(".sheet-card").classList.add("wide","settings");
+  var painted={};
+  function show(t){
+    $("sheet-body").querySelectorAll(".set-nav [data-tab]").forEach(function(b){
+      var on=b.getAttribute("data-tab")===t;b.classList.toggle("on",on);b.setAttribute("aria-selected",String(on))});
+    $("sheet-body").querySelectorAll(".set-pane").forEach(function(p){p.hidden=p.id!=="set-"+t});
+    try{localStorage.setItem("plotter:settab",t)}catch(e){/* private window */}
+    if(painted[t])return;
+    painted[t]=true;
+    var el=$("set-"+t);
+    if(t==="game")paintGamePane(el);
+    else if(t==="ai"||t==="light"){
+      if(window.AIPanel)AIPanel.renderSettings(el,t==="light"?"light":"main");
+      else el.innerHTML='<p class="hint">The AI designer is still loading. Open Settings again in a moment.</p>';
+    }
+    else if(t==="updates")paintUpdates(el);
+    else if(t==="about")paintAbout(el);
+  }
+  $("sheet-body").querySelectorAll(".set-nav [data-tab]").forEach(function(b){b.addEventListener("click",function(){show(b.getAttribute("data-tab"))})});
+  show(tab);
+}
+// Settings, Game: the folder the studio is connected to, or another to connect.
+// A folder is checked as it is typed or browsed to. Connecting one runs the
+// setup's job, the same as the first run: a reference copy of that game's
+// levels and its level data, before anything is written into it.
+function paintGamePane(el){
+  var desktop=window.studioApp&&window.studioApp.pickFolder,timer=0;
+  el.innerHTML='<h3 class="set-h">The game</h3><p class="hint">Loading…</p>';
+  fetch("api/setup").then(function(r){return r.json()}).then(function(d){
+    el.innerHTML='<h3 class="set-h">The game</h3>'+
+      '<p class="set-lead">Missions are built from this copy of Project I.G.I. and installed into it, each in a slot of its own, mission 15 and up. Its fourteen missions are never written.</p>'+
+      '<div class="field"><span class="lbl">Game folder</span><div class="set-path">'+
+      '<input id="g-path" spellcheck="false" value="'+esc(d.game||"")+'" placeholder="C:\\Program Files (x86)\\Project IGI">'+
+      (desktop?'<button class="btn" id="g-browse" title="Browse\nPick the folder IGI.exe is in">Browse…</button>':'')+'</div></div>'+
+      '<div id="g-check" class="su-panel g-check"><p class="hint" style="margin:0">Checking…</p></div><div id="g-foot"></div>';
+    $("g-path").addEventListener("input",function(){clearTimeout(timer);timer=setTimeout(check,350)});
+    $("g-path").addEventListener("keydown",function(e){if(e.key==="Enter"){clearTimeout(timer);check()}});
+    if($("g-browse"))$("g-browse").addEventListener("click",function(){
+      window.studioApp.pickFolder("Where is Project I.G.I. installed?").then(function(dir){if(dir){$("g-path").value=dir;check()}});
     });
-  });
+    check();
+  }).catch(function(){el.innerHTML='<h3 class="set-h">The game</h3><p class="bad">The studio could not be reached.</p>'});
+  function check(){
+    var p=$("g-path")?$("g-path").value.trim():"";
+    if(!p){$("g-check").innerHTML='<div class="su-list">'+suRow("info","No game folder yet","Browse to the folder IGI.exe is in.")+'</div>';$("g-foot").innerHTML="";return}
+    fetch("api/setup/check?path="+encodeURIComponent(p)).then(function(r){return r.json()}).then(function(r){
+      if(!$("g-path")||$("g-path").value.trim()!==p)return;           // typed on since
+      var rows=suRow(r.exe?"ok":"bad",r.exe?"IGI.exe found":"No IGI.exe in this folder");
+      if(r.usable){
+        rows+=suRow("ok",r.levels+" built-in missions"+(r.custom&&r.custom.length?", and mission slots "+r.custom.join(", "):""));
+        rows+=r.build?suRow("ok","Build: "+esc(r.build))
+          :suRow("info","A build the studio has not seen before","That is fine: missions are built from whatever this game is."+(r.nearest?" It is closest to "+esc(r.nearest)+".":""));
+      }else rows+=suRow("bad","This is not a copy of the game",r.missing&&r.missing.length?
+        "It has no "+r.missing.slice(0,3).map(esc).join(", ")+(r.missing.length>3?" and more":"")+".":esc(r.error||""));
+      $("g-check").innerHTML='<div class="su-list">'+rows+'</div>';
+      var f=$("g-foot");
+      if(r.current&&r.usable){
+        f.innerHTML='<div class="set-foot"><span class="set-note">'+suRow("ok","Connected: the studio builds into this game")+'</span>'+
+          '<button class="btn" id="g-setup" title="Checks and setup\nThe reference copy, the level data, and a check of the original missions">Checks and setup</button></div>';
+        $("g-setup").addEventListener("click",function(){setupSheet({title:"The game"})});
+      }else if(r.usable){
+        f.innerHTML='<p class="hint" style="margin:12px 0 0">Connecting copies this game\'s levels into the studio\'s own folder and reads them: a minute or two. '+
+          'Your missions stay yours: each one shows as in the game only in the copy of the game it was applied to.</p>'+
+          '<div class="set-foot"><button class="btn primary" id="g-connect">Connect this game</button></div>';
+        $("g-connect").addEventListener("click",function(){useGame(p)});
+      }else f.innerHTML="";
+    }).catch(function(e){$("g-check").innerHTML='<div class="su-list">'+suRow("bad","The folder could not be checked",esc(String(e)))+'</div>'});
+  }
+}
+// Settings, About: what this is, where to read more, and the folders to send
+// with a problem report.
+function paintAbout(el){
+  var app=window.studioApp,site="https://naumanhsa.github.io/project-igi-studio-site/",repo="https://github.com/NaumanHSA/project-igi-studio";
+  el.innerHTML='<div class="about"><img src="icon.png" alt="" width="64" height="64"><div><h3 class="set-h" style="margin:0">Project IGI Studio</h3>'+
+      '<p class="about-v mono" id="ab-ver">'+(SRV&&SRV.version?"Version "+esc(SRV.version):"")+'</p>'+
+      '<p class="set-lead" style="margin:8px 0 0">A mission studio for Project I.G.I.: I\'m Going In. It ships no game files: everything it needs is made on your machine, from your own copy of the game.</p></div></div>'+
+    '<div class="about-links">'+
+      '<a class="btn" href="'+site+'manual/" target="_blank" rel="noopener">The manual</a>'+
+      '<a class="btn" href="'+site+'" target="_blank" rel="noopener">The website</a>'+
+      '<a class="btn" href="'+repo+'" target="_blank" rel="noopener">Source code</a>'+
+      '<a class="btn" href="'+repo+'/issues" target="_blank" rel="noopener">Report a problem</a></div>'+
+    (app&&app.openLogs?'<div class="about-links"><button class="btn" id="ab-logs">Open the log folder</button>'+
+      '<button class="btn" id="ab-home">Open your studio folder</button></div>':'')+
+    '<p class="hint" style="margin:16px 0 0">MIT licensed. Made by <a href="https://github.com/NaumanHSA" target="_blank" rel="noopener">Nouman Ahsan</a>. '+
+    'Project I.G.I. is a trademark of its owners; this is an unofficial fan tool.</p>';
+  if(app&&app.version)app.version().then(function(v){if($("ab-ver"))$("ab-ver").textContent="Version "+v});
+  if($("ab-logs"))$("ab-logs").addEventListener("click",function(){app.openLogs()});
+  if($("ab-home"))$("ab-home").addEventListener("click",function(){app.openHome()});
+}
+// Help, in the top bar: the manual, reporting a problem, and what the desktop
+// app's menu bar used to hold
+var LINKS={manual:"https://naumanhsa.github.io/project-igi-studio-site/manual/",issues:"https://github.com/NaumanHSA/project-igi-studio/issues"};
+function helpMenuItems(){
+  var app=window.studioApp;
+  return [
+    {label:"The manual",act:function(){window.open(LINKS.manual,"_blank","noopener")}},
+    {label:"Report a problem",act:function(){window.open(LINKS.issues,"_blank","noopener")}},
+    app&&app.openLogs?"-":null,
+    app&&app.openLogs?{label:"Open the log folder",act:function(){app.openLogs()}}:null,
+    app&&app.openHome?{label:"Open your studio folder",act:function(){app.openHome()}}:null,
+    app&&app.updates?{label:"Check for updates",act:function(){app.updates.check()}}:null,
+    "-",
+    {label:"About Project IGI Studio",act:function(){showConfig("about")}}
+  ];
 }
 // The desktop app looks for a new version when it starts (app/updates.js).
 // In a browser there is nothing to update, so the section is not shown.
@@ -11137,7 +11392,7 @@ function paintUpdates(host){
   var u=window.studioApp&&window.studioApp.updates;
   if(!host||!u)return;
   u.get().then(function(s){
-    var h='<div class="lbl" style="margin:16px 0 8px">Updates</div>';
+    var h='<h3 class="set-h">Updates</h3>';
     if(!s.available){
       host.innerHTML=h+'<p class="hint">A studio run from its source code does not update itself. Version '+esc(s.version)+'.</p>';
       return;
@@ -11147,8 +11402,8 @@ function paintUpdates(host){
       '<p class="hint" style="margin:4px 0 10px">It asks GitHub whether a newer release exists, and sends nothing about you, your game or your missions. '+
       (s.portable?'This copy is the portable zip, which cannot update itself: the studio says when a new version is out, and you download it.'
                  :'A new version downloads quietly and installs when you close the studio, or at once if you say so.')+'</p>'+
-      '<div style="display:flex;align-items:center;gap:8px"><button class="btn" id="upd-now" title="Check now\nAsks GitHub for a newer version">Check now</button>'+
-      '<span class="hint">You have version '+esc(s.version)+'.</span></div>';
+      '<div class="set-foot"><span class="set-note hint" style="margin:0">You have version '+esc(s.version)+'.</span>'+
+      '<button class="btn" id="upd-now" title="Check now\nAsks GitHub for a newer version">Check now</button></div>';
     $("upd-on").addEventListener("change",function(){u.set(this.checked)});
     $("upd-now").addEventListener("click",function(){u.check()});
   });
@@ -11419,12 +11674,6 @@ function checkBuiltins(){
           });
       });
     });
-}
-function paintStat(s){
-  var el=$("cfg-stat");if(!el||!s)return;
-  el.innerHTML=
-    '<div class="stat"><b class="'+(s.gameExe?"":"no")+'"></b>IGI.exe '+(s.gameExe?"found":"not found")+'</div>'+
-    '<div class="stat"><b class="'+(s.compiler?"":"no")+'"></b>Script compiler '+(s.compiler?"built in":"not found")+'</div>';
 }
 // Test from here: the mission built with the player starting at a spot (the
 // plan keeps its own start) and the game started. apply_mission test.
@@ -12839,7 +13088,7 @@ window.StudioAI={
     toast("Click where "+d.name+" goes. R turns it, Esc puts it away");
     return true;
   },
-  openSettings:function(){showConfig()},
+  openSettings:function(tab){showConfig(tab)},
   makeCopy:function(){newMissionDialog({kind:"copy",level:LV})},
   toast:function(m){toast(m)}
 };

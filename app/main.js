@@ -173,6 +173,8 @@ function createWindow() {
     },
   });
   win.once('ready-to-show', () => win.show());
+  win.removeMenu();
+  keys(win.webContents);
 
   // the studio never opens windows of its own, and never navigates away: a
   // link out of it goes to the browser instead
@@ -190,43 +192,34 @@ function createWindow() {
   win.loadURL(origin() + '/plotter.html');
 }
 
-function buildMenu() {
-  const template = [
-    {
-      label: 'File',
-      submenu: [{ role: 'quit', label: 'Quit' }],
-    },
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload', label: 'Reload' },
-        { type: 'separator' },
-        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ].concat(app.isPackaged ? [] : [{ type: 'separator' }, { role: 'toggleDevTools' }]),
-    },
-    {
-      label: 'Help',
-      submenu: [
-        { label: 'Open the log folder', click: () => shell.openPath(path.dirname(logFile())) },
-        { label: 'Open your studio folder', click: () => shell.openPath(studioHome()) },
-        { type: 'separator' },
-        { label: 'Check for updates', click: () => updates.check(true) },
-        {
-          label: 'About Project IGI Studio',
-          click: () => dialog.showMessageBox(win, {
-            title: TITLE,
-            message: `${TITLE} ${app.getVersion()}`,
-            detail: 'A mission studio for Project I.G.I.: I\'m Going In.\n' +
-                    'It ships no game files: everything it needs is made on your ' +
-                    'machine from your own copy of the game.\n\nMIT licensed.',
-          }),
-        },
-      ],
-    },
-  ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+// No menu bar. Electron shows a hidden one whenever Alt is pressed, which
+// pushed the whole studio down and back up during every Alt+drag in the 3D
+// view; everything it held is in the studio's own menu now (preload.js). Its
+// keys stay: zoom, full screen, reload, and the developer tools in a checkout.
+function keys(wc) {
+  wc.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown') return;
+    const ctrl = input.control || input.meta, k = input.key;
+    let used = true;
+    if (ctrl && (k === '=' || k === '+')) wc.setZoomLevel(Math.min(4, wc.getZoomLevel() + 0.5));
+    else if (ctrl && k === '-') wc.setZoomLevel(Math.max(-4, wc.getZoomLevel() - 0.5));
+    else if (ctrl && k === '0') wc.setZoomLevel(0);
+    else if (k === 'F11') win.setFullScreen(!win.isFullScreen());
+    else if (k === 'F5' || (ctrl && !input.shift && k.toLowerCase() === 'r')) wc.reload();
+    else if (!app.isPackaged && ctrl && input.shift && k.toLowerCase() === 'i') wc.toggleDevTools();
+    else used = false;
+    if (used) e.preventDefault();
+  });
+}
+
+function about() {
+  return dialog.showMessageBox(win, {
+    title: TITLE,
+    message: `${TITLE} ${app.getVersion()}`,
+    detail: "A mission studio for Project I.G.I.: I'm Going In.\n" +
+            'It ships no game files: everything it needs is made on your ' +
+            'machine from your own copy of the game.\n\nMIT licensed. Made by Nouman Ahsan.',
+  });
 }
 
 function studioHome() {
@@ -240,6 +233,11 @@ ipcMain.handle('studio:version', () => app.getVersion());
 ipcMain.handle('studio:updates-get', () => updates.state());
 ipcMain.handle('studio:updates-set', (e, on) => updates.setEnabled(on === true));
 ipcMain.handle('studio:updates-check', () => { updates.check(true); return true; });
+
+// what the menu bar used to hold, asked for from the studio's own menu
+ipcMain.handle('studio:open-logs', () => shell.openPath(path.dirname(logFile())));
+ipcMain.handle('studio:open-home', () => shell.openPath(studioHome()));
+ipcMain.handle('studio:about', () => { about(); return true; });
 
 ipcMain.handle('studio:pick-folder', async (e, title) => {
   const r = await dialog.showOpenDialog(win, {
@@ -274,7 +272,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
-    buildMenu();
+    Menu.setApplicationMenu(null);
     try {
       await startServer();
     } catch (e) {

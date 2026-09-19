@@ -258,7 +258,7 @@ function build() {
   if (window.StudioUI) StudioUI.resizable(panel, "l", "--aw", 300, 760);
   $("tab-sel").addEventListener("click", function () { showTab("sel"); });
   $("tab-ai").addEventListener("click", function () { showTab("ai"); });
-  $("ai-cfg").addEventListener("click", function () { if (api()) api().openSettings(); });
+  $("ai-cfg").addEventListener("click", function () { if (api()) api().openSettings("ai"); });
   $("ai-new").addEventListener("click", newChat);
   panel.querySelectorAll("[data-mode]").forEach(function (b) {
     b.addEventListener("click", function () { if (!RUN) { CHAT.mode = b.getAttribute("data-mode"); paintMode(); saveSoon(); } });
@@ -550,99 +550,152 @@ function paintChip() {
 // the chat on the other model: the light one is quicker and costs nothing, the
 // main one plans better
 function switchModel() {
-  if (RUN || !lightOn()) { if (!lightOn() && api()) api().toast("The light model is off. Turn it on in Settings, AI designer"); return; }
+  if (RUN || !lightOn()) { if (!lightOn() && api()) api().toast("The light model is off. Turn it on in Settings, Light model"); return; }
   CHAT.model = CHAT.model === "light" ? "main" : "light";
   paintChip(); saveSoon();
   api().toast(CHAT.model === "light" ? "This chat now runs on " + S.light.model + " (light)" : "This chat now runs on " + S.model);
 }
-// the AI section of the Settings sheet
-function renderSettings(host) {
+// The AI panes of the Settings sheet: the main model (role "main") or the light
+// one. Each model has a provider: OpenAI (an API key and a model) or a server
+// that speaks OpenAI's API (LM Studio, vLLM, Ollama, OpenRouter: a model, its
+// address, its context window, and a key if it asks for one).
+var PROVIDERS = [["openai", "OpenAI"], ["compatible", "OpenAI-compatible: LM Studio, vLLM, Ollama, OpenRouter"]];
+function renderSettings(host, role) {
   if (!host) return;
-  if (!hasServer()) { host.innerHTML = ""; return; }
-  host.className = "ai-set";
-  host.innerHTML = '<div class="lbl" style="margin:16px 0 8px">AI designer</div><p class="hint">Loading…</p>';
+  role = role === "light" ? "light" : "main";
+  if (!hasServer()) { host.innerHTML = '<p class="hint">The AI designer needs the studio server.</p>'; return; }
+  host.innerHTML = '<p class="hint">Loading…</p>';
   loadSettings(true).then(function (s) {
     if (!s) { host.innerHTML = '<p class="hint">The AI settings did not load.</p>'; return; }
-    var efforts = [["none", "Off"], ["low", "Low"], ["medium", "Medium"], ["high", "High"]];
-    // a key typed here is kept in the encrypted store ("settings" is how older servers said it)
-    var saved = s.keyFrom === "encrypted store" || s.keyFrom === "settings";
-    host.innerHTML =
-      '<div class="lbl" style="margin:16px 0 8px">AI designer</div>' +
-      '<div class="field"><span class="lbl">API key</span><div class="ai-keyrow"><input id="ais-key" type="password" autocomplete="off" placeholder="' +
-      (saved ? "Saved (" + esc(s.keyHint) + "). Type a new one to replace it" : s.hasKey ? "From " + esc(s.keyFrom) + " (" + esc(s.keyHint) + "). Type one to use instead" : "sk-...") + '">' +
-      (saved ? '<button class="btn" id="ais-clear" title="Forget the key\nThe studio uses the .env one again, if there is one">Forget</button>' : '') + '</div></div>' +
-      '<p class="hint" style="margin:4px 0 10px">' + (s.hasKey ? "Using the key from " + esc(saved ? "these settings" : s.keyFrom) + " (" + esc(s.keyHint) + "). " : "No key yet. ") +
-      'A key typed here is encrypted for your Windows account and kept by the studio, never in its settings file. The page never sees it again.</p>' +
-      '<div class="set-row2"><div class="field"><span class="lbl">Model</span><input id="ais-model" list="ais-models" value="' + esc(s.model) + '"><datalist id="ais-models"></datalist></div>' +
-      '<div class="field"><span class="lbl">Thinking</span><div class="seg" id="ais-effort">' + efforts.map(function (e) {
-        return '<button class="btn' + ((s.effort || "none") === e[0] ? " on" : "") + '" data-v="' + e[0] + '">' + e[1] + '</button>';
-      }).join("") + '</div></div></div>' +
-      '<p class="hint" id="ais-models-note" style="margin:4px 0 10px">Fetching the models on your account…</p>' +
-      '<div class="set-row2"><div class="field" title="Pace\nHow long each step stays before the next, to watch it build"><span class="lbl">Pace (ms a step)</span><input id="ais-pace" type="number" min="0" max="3000" step="50" value="' + s.pace + '"></div>' +
-      '<div class="field" title="Steps per run\nThe most tool calls one request may make"><span class="lbl">Steps per run</span><input id="ais-steps" type="number" min="5" max="200" value="' + s.maxSteps + '"></div></div>' +
-      '<div class="field" style="margin-top:8px" title="Provider address\nOpenAI, or any server that speaks its API (OpenRouter, a local Ollama or LM Studio)"><span class="lbl">Provider address</span><input id="ais-base" value="' + esc(s.baseUrl) + '"></div>' +
-      '<p class="hint" style="margin:4px 0 10px">Protocol: ' + esc(s.protocolInUse) + (s.protocolInUse === "responses" ? " (OpenAI's own, which lets the newest models think and use tools together)" : "") + '.</p>' +
-      '<div style="display:flex;align-items:center;gap:8px"><button class="btn primary" id="ais-save">Save AI settings</button><button class="btn" id="ais-test" title="Test\nSends one short request with these settings">Test</button><span class="ai-msg" id="ais-msg"></span></div>' +
-      '<div class="lbl" style="margin:18px 0 6px">Light model</div>' +
-      '<p class="hint" style="margin:0 0 8px">A quick model, local or cheap, for the chores: naming chats, reading pictures, and looking things up for the main model as its scout. A chat can also run on it (click the model name in the panel).</p>' +
-      '<label class="sg-t" style="display:flex;gap:7px;align-items:center"><input type="checkbox" id="ail-on"' + (s.light && s.light.enabled ? ' checked' : '') + '> Use a light model</label>' +
-      '<div class="set-row2" style="margin-top:6px"><div class="field"><span class="lbl">Model</span><input id="ail-model" list="ail-models" value="' + esc((s.light || {}).model || "") + '"><datalist id="ail-models"></datalist></div>' +
-      '<div class="field" title="Provider address\nLM Studio serves on port 1234 by default"><span class="lbl">Provider address</span><input id="ail-base" value="' + esc((s.light || {}).baseUrl || "") + '"></div></div>' +
-      '<label class="sg-t" style="display:flex;gap:7px;align-items:center;margin-top:6px" title="Thinking\nOff answers in a couple of seconds; on, a small model can think for a minute"><input type="checkbox" id="ail-think"' + ((s.light || {}).effort && (s.light || {}).effort !== "none" ? ' checked' : '') + '> Let it think first (much slower)</label>' +
-      '<label class="sg-t" style="display:flex;gap:7px;align-items:center;margin-top:4px"><input type="checkbox" id="ail-vision"' + ((s.light || {}).vision !== false ? ' checked' : '') + '> It reads pictures</label>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><button class="btn" id="ail-save">Save</button><button class="btn" id="ail-test">Test</button><span class="ai-msg" id="ail-msg"></span></div>';
-    function lbody() {
-      return { light: { enabled: $("ail-on").checked, model: $("ail-model").value.trim(), baseUrl: $("ail-base").value.trim(),
-        effort: $("ail-think").checked ? "default" : "none", vision: $("ail-vision").checked } };
+    var light = role === "light", m = light ? (s.light || {}) : s, P = light ? "ail-" : "ais-";
+    // what is on the form, kept while the provider changes under it
+    var st = { provider: m.provider || "openai", model: m.model || "", base: m.provider === "compatible" ? (m.baseUrl || "") : "",
+      ctx: m.contextWindow || s.defaultContext || 16384, effort: m.effort || "none", on: light ? m.enabled !== false : true };
+    function id(x) { return P + x; }
+    function val(x) { var e = $(id(x)); return e ? e.value.trim() : ""; }
+    function keep() {
+      if ($(id("prov"))) st.provider = $(id("prov")).value;
+      if ($(id("model"))) st.model = val("model");
+      if ($(id("base"))) st.base = val("base");
+      if ($(id("ctx"))) st.ctx = +val("ctx") || st.ctx;
+      if ($(id("on"))) st.on = $(id("on")).checked;
     }
-    function lmsg(t, good) { var m = $("ail-msg"); m.textContent = t; m.className = "ai-msg " + (good === true ? "good" : good === false ? "bad" : ""); }
-    function lsave() {
-      return fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lbody()) })
-        .then(function (r) { return r.json(); }).then(function (n) { S = n; paintChip(); return n; });
+    function keyField(optional) {
+      var saved = m.keySaved, hint = saved ? "Saved (" + esc(m.keyHint || "…") + "). Type a new one to replace it" :
+        !light && m.hasKey && m.keyFrom ? "From " + esc(m.keyFrom) + " (" + esc(m.keyHint) + "). Type one to use instead" :
+        light && st.provider === "openai" ? "Empty: it uses the main model's key" : optional ? "Only if the server asks for one" : "sk-...";
+      return '<div class="field"><span class="lbl">API key' + (optional ? ", if it needs one" : "") + '</span><div class="ai-keyrow">' +
+        '<input id="' + id("key") + '" type="password" autocomplete="off" placeholder="' + hint + '">' +
+        (saved ? '<button class="btn" id="' + id("clear") + '" title="Forget the key\nThe studio no longer keeps it">Forget</button>' : '') + '</div></div>';
     }
-    $("ail-save").addEventListener("click", function () { lsave().then(function () { lmsg("Saved", true); }); });
-    $("ail-test").addEventListener("click", function () {
-      lmsg("Testing…");
-      lsave().then(function () { return fetch("api/ai/test?role=light", { method: "POST" }); }).then(function (r) { return r.json(); })
-        .then(function (t) { lmsg(t.message, !!t.ok); }).catch(function (e) { lmsg(String(e), false); });
-    });
-    fetch("api/ai/models?role=light").then(function (r) { return r.json(); }).then(function (m) {
-      if (m.ok && $("ail-models")) $("ail-models").innerHTML = m.models.map(function (x) { return '<option value="' + esc(x) + '">'; }).join("");
-    }).catch(function () { /* the list is a convenience */ });
-    var effort = s.effort || "none";
-    host.querySelectorAll("#ais-effort [data-v]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        effort = b.getAttribute("data-v");
-        host.querySelectorAll("#ais-effort [data-v]").forEach(function (x) { x.classList.toggle("on", x === b); });
-      });
-    });
-    function msg(t, good) { var m = $("ais-msg"); m.textContent = t; m.className = "ai-msg " + (good === true ? "good" : good === false ? "bad" : ""); }
+    function paint() {
+      var h = '<h3 class="set-h">' + (light ? "Light model" : "AI designer") + '</h3>' +
+        '<p class="set-lead">' + (light ?
+          "A quick model, local or cheap, for the chores: naming chats, reading pictures, and looking things up for the main model. A chat can also run on it (click the model name in the AI panel)." :
+          "The model that plans and builds missions with you in the AI panel.") + '</p>';
+      if (light) h += '<label class="set-check"><input type="checkbox" id="' + id("on") + '"' + (st.on ? " checked" : "") + '> Use a light model</label>';
+      h += '<div class="set-block"' + (light && !st.on ? ' hidden' : '') + '>' +
+        '<div class="field"><span class="lbl">Provider</span><select id="' + id("prov") + '">' + PROVIDERS.map(function (p) {
+          return '<option value="' + p[0] + '"' + (st.provider === p[0] ? " selected" : "") + '>' + p[1] + '</option>'; }).join("") + '</select></div>';
+      if (st.provider === "openai") {
+        h += keyField(false) +
+          '<p class="hint">A key typed here is encrypted for your Windows account and kept by the studio, never in its settings file. The page never sees it again.</p>' +
+          '<div class="field"><span class="lbl">Model</span><input id="' + id("model") + '" list="' + id("models") + '" value="' + esc(st.model) + '" placeholder="gpt-5-mini">' +
+          '<datalist id="' + id("models") + '"></datalist></div>' +
+          '<p class="hint" id="' + id("note") + '"></p>';
+      } else {
+        h += '<div class="set-row2"><div class="field"><span class="lbl">Model</span><input id="' + id("model") + '" list="' + id("models") + '" value="' + esc(st.model) + '" placeholder="qwen/qwen3.5-9b">' +
+          '<datalist id="' + id("models") + '"></datalist></div>' +
+          '<div class="field" title="Context window\nHow much the model reads at once, in tokens, as the server loaded it"><span class="lbl">Context window (tokens)</span>' +
+          '<input id="' + id("ctx") + '" type="number" min="1024" step="1024" value="' + (+st.ctx || 16384) + '"></div></div>' +
+          '<div class="field"><span class="lbl">Server address</span><input id="' + id("base") + '" value="' + esc(st.base) + '" placeholder="http://localhost:1234/v1" spellcheck="false"></div>' +
+          '<p class="hint">The context window is the model\'s, as the server loaded it: LM Studio calls it Context Length. Every request is fitted into it: in a long chat the oldest parts are left out first, never the newest.</p>' +
+          keyField(true);
+      }
+      if (!light) {
+        var efforts = [["none", "Off"], ["low", "Low"], ["medium", "Medium"], ["high", "High"]];
+        h += '<div class="set-row2" style="margin-top:6px"><div class="field"><span class="lbl">Thinking</span><div class="seg" id="' + id("effort") + '">' + efforts.map(function (e) {
+            return '<button class="btn' + (st.effort === e[0] ? " on" : "") + '" data-v="' + e[0] + '">' + e[1] + '</button>'; }).join("") + '</div></div>' +
+          '<div class="set-row2"><div class="field" title="Pace\nHow long each step stays before the next, to watch it build"><span class="lbl">Pace (ms a step)</span>' +
+          '<input id="' + id("pace") + '" type="number" min="0" max="3000" step="50" value="' + (s.pace != null ? s.pace : 350) + '"></div>' +
+          '<div class="field" title="Steps per run\nThe most tool calls one request may make"><span class="lbl">Steps per run</span>' +
+          '<input id="' + id("steps") + '" type="number" min="5" max="200" value="' + (s.maxSteps || 60) + '"></div></div></div>';
+      } else {
+        h += '<label class="set-check" title="Thinking\nOff answers in a couple of seconds; on, a small model can think for a minute"><input type="checkbox" id="' + id("think") + '"' +
+            (st.effort && st.effort !== "none" ? " checked" : "") + '> Let it think first (much slower)</label>' +
+          '<label class="set-check"><input type="checkbox" id="' + id("vision") + '"' + (m.vision !== false ? " checked" : "") + '> It reads pictures</label>';
+      }
+      h += '</div><div class="set-foot"><span class="ai-msg" id="' + id("msg") + '"></span>' +
+        '<button class="btn" id="' + id("test") + '" title="Test\nSaves, then sends one short request with these settings">Test</button>' +
+        '<button class="btn primary" id="' + id("save") + '">Save</button></div>';
+      host.innerHTML = h;
+      wire();
+    }
+    function msg(t, good) { var e = $(id("msg")); if (e) { e.textContent = t; e.className = "ai-msg " + (good === true ? "good" : good === false ? "bad" : ""); } }
     function body() {
-      var b = { model: $("ais-model").value.trim(), effort: effort, pace: +$("ais-pace").value || 0, maxSteps: +$("ais-steps").value || 60,
-        baseUrl: $("ais-base").value.trim() };
-      if ($("ais-key").value.trim()) b.apiKey = $("ais-key").value.trim();
+      keep();
+      var b = { provider: st.provider, model: st.model };
+      if (st.provider === "compatible") { b.baseUrl = st.base; b.contextWindow = +st.ctx || 16384; }
+      if (val("key")) b.apiKey = val("key");
+      if (light) {
+        b.enabled = st.on;
+        b.effort = $(id("think")) && $(id("think")).checked ? "default" : "none";
+        if ($(id("vision"))) b.vision = $(id("vision")).checked;
+        return { light: b };
+      }
+      b.effort = st.effort;
+      b.pace = +val("pace") || 0;
+      b.maxSteps = +val("steps") || 60;
       return b;
     }
-    function save() {
-      return fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body()) })
-        .then(function (r) { return r.json(); }).then(function (n) { S = n; paintChip(); $("ais-key").value = ""; return n; });
+    function problem(b) {
+      var x = light ? b.light : b;
+      if (light && !x.enabled) return null;
+      if (!x.model) return "Say which model";
+      if (x.provider === "compatible" && !/^https?:\/\/.+/.test(x.baseUrl || "")) return "The server address starts with http:// or https://";
+      if (x.provider === "compatible" && !(x.contextWindow >= 1024)) return "The context window is at least 1024 tokens";
+      return null;
     }
-    $("ais-save").addEventListener("click", function () { save().then(function () { msg("Saved", true); renderSettings(host); }); });
-    $("ais-test").addEventListener("click", function () {
-      msg("Testing…");
-      save().then(function () { return fetch("api/ai/test", { method: "POST" }); }).then(function (r) { return r.json(); })
-        .then(function (t) { msg(t.message, !!t.ok); }).catch(function (e) { msg(String(e), false); });
-    });
-    if ($("ais-clear")) $("ais-clear").addEventListener("click", function () {
-      fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clearKey: true }) })
-        .then(function (r) { return r.json(); }).then(function (n) { S = n; renderSettings(host); });
-    });
-    fetch("api/ai/models").then(function (r) { return r.json(); }).then(function (m) {
-      var note = $("ais-models-note");
-      if (!m.ok) { if (note) note.textContent = "The model list did not come: " + (m.error || "unknown error") + ". You can type a model name."; return; }
-      $("ais-models").innerHTML = m.models.map(function (x) { return '<option value="' + esc(x) + '">'; }).join("");
-      if (note) note.textContent = m.models.length + " chat models on your account. Type to pick one; the newest come first.";
-    }).catch(function () { var note = $("ais-models-note"); if (note) note.textContent = "The model list did not come. You can type a model name."; });
+    function save() {
+      var b = body(), bad = problem(b);
+      if (bad) { msg(bad, false); return Promise.reject(new Error(bad)); }
+      return fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) })
+        .then(function (r) { return r.json(); }).then(function (n) { S = n; paintChip(); return n; });
+    }
+    function models() {
+      var note = $(id("note"));
+      fetch("api/ai/models" + (light ? "?role=light" : "")).then(function (r) { return r.json(); }).then(function (x) {
+        if (!x.ok) { if (note) note.textContent = "The model list did not come: " + (x.error || "unknown error") + ". You can type a model name."; return; }
+        if ($(id("models"))) $(id("models")).innerHTML = x.models.map(function (v) { return '<option value="' + esc(v) + '">'; }).join("");
+        if (note) note.textContent = x.models.length + " chat models on your account. Type to pick one; the newest come first.";
+      }).catch(function () { if (note) note.textContent = "The model list did not come. You can type a model name."; });
+    }
+    function wire() {
+      $(id("prov")).addEventListener("change", function () { keep(); paint(); });
+      if ($(id("on"))) $(id("on")).addEventListener("change", function () { keep(); host.querySelector(".set-block").hidden = !st.on; });
+      host.querySelectorAll("#" + id("effort") + " [data-v]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          st.effort = b.getAttribute("data-v");
+          host.querySelectorAll("#" + id("effort") + " [data-v]").forEach(function (x) { x.classList.toggle("on", x === b); });
+        });
+      });
+      $(id("save")).addEventListener("click", function () {
+        save().then(function () { msg("Saved", true); m = light ? (S.light || {}) : S; if ($(id("key"))) $(id("key")).value = ""; models(); })
+          .catch(function () { /* said above */ });
+      });
+      $(id("test")).addEventListener("click", function () {
+        save().then(function () { msg("Testing…"); return fetch("api/ai/test" + (light ? "?role=light" : ""), { method: "POST" }); })
+          .then(function (r) { return r.json(); }).then(function (t) { msg(t.message, !!t.ok); })
+          .catch(function (e) { if (!/^(Say|The )/.test(e.message)) msg(String(e.message || e), false); });
+      });
+      if ($(id("clear"))) $(id("clear")).addEventListener("click", function () {
+        fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(light ? { light: { clearKey: true } } : { clearKey: true }) })
+          .then(function (r) { return r.json(); }).then(function (n) { S = n; renderSettings(host, role); });
+      });
+      models();
+    }
+    paint();
   });
 }
 
@@ -663,9 +716,9 @@ function emptyState() {
     return d;
   }
   if (S && !S.hasKey) {
-    d.innerHTML = '<h3>AI designer</h3><div class="ai-card"><b>Connect a model.</b> Add an OpenAI API key in Settings (or put OPENAI_API_KEY in the project\'s .env), and pick a model.' +
+    d.innerHTML = '<h3>AI designer</h3><div class="ai-card"><b>Connect a model.</b> In Settings, AI designer: an OpenAI API key, or a server of your own (LM Studio, vLLM, Ollama), and a model.' +
       '<br><button class="btn primary" id="ai-go-cfg">Open settings</button></div>';
-    d.querySelector("#ai-go-cfg").addEventListener("click", function () { api().openSettings(); });
+    d.querySelector("#ai-go-cfg").addEventListener("click", function () { api().openSettings("ai"); });
     return d;
   }
   var lv = c ? c.levelName : "this level";
@@ -727,7 +780,7 @@ function paintNode(b) {
   else if (b.k === "error") {
     d.className = "ai-err";
     d.innerHTML = esc(b.text) + (b.code === "nokey" || /key|auth|401|model/i.test(b.text) ? '<br><button class="btn">Open settings</button>' : "");
-    var bt = d.querySelector(".btn"); if (bt) bt.addEventListener("click", function () { api().openSettings(); });
+    var bt = d.querySelector(".btn"); if (bt) bt.addEventListener("click", function () { api().openSettings("ai"); });
   }
   else if (b.k === "note") { d.className = "ai-note"; d.textContent = b.text; }
   else if (b.k === "run") {

@@ -8,11 +8,14 @@
 # (objective texts, map labels) are added to the working game's
 # language/<lang>/objectives.res and messages.res under the mission's MS<slot>_
 # prefix; studio/build/lang.py touches no other key and backs the files up first.
+# And one more: the game's config.qvm, whose GOActiveMission says how far its
+# mission list goes (studio/build/unlock.py, the same care).
 #
 #   import protect
 #   protect.assert_writable(path)          raises ProtectedPath if it is not a custom slot
 #   protect.assert_deletable_slot(dir)     ... and it must be a whole slot we made
 #   protect.assert_language_file(path)     objectives.res / messages.res of a working game
+#   protect.assert_config_file(path)       the connected game's config.qvm, nothing else
 import json, os, pathlib, re
 from studio import paths
 
@@ -107,6 +110,24 @@ def assert_language_file(path):
     return p
 
 
+def assert_config_file(path):
+    """The other exception: the connected game's own settings, config.qvm in its
+    folder, whose GOActiveMission says how far the mission list goes
+    (studio/build/unlock.py - it changes that one line and nothing else)."""
+    p = pathlib.Path(path).resolve()
+    for root in pristine_roots():
+        if p == root or root in p.parents:
+            raise ProtectedPath("refusing to write %s: the studio only ever reads that" % p)
+    try:
+        game = paths.game().resolve() if paths.game_set() else None
+    except OSError:
+        game = None
+    if game is None or p != game / "config.qvm":
+        raise ProtectedPath("refusing to write %s: the only settings the studio changes are the "
+                            "connected game's config.qvm" % p)
+    return p
+
+
 def assert_restore(target, source):
     """The only way a built-in mission may be written: putting it back.
 
@@ -191,5 +212,18 @@ if __name__ == "__main__":
         bad += 1
     except ProtectedPath:
         pass
-    print("protect self-test: %d of %d checks passed" % (len(refused) + 8 - bad, len(refused) + 8))
+    try:
+        assert_config_file(game / "config.qvm")
+    except ProtectedPath as e:
+        print("WRONGLY REFUSED:", game / "config.qvm", e)
+        bad += 1
+    for p in (paths.snapshot() / "config.qvm", game / "weapons" / "config.qvm",
+              pathlib.Path("D:/some-other-install/config.qvm")):
+        try:
+            assert_config_file(p)
+            print("NOT REFUSED:", p)
+            bad += 1
+        except ProtectedPath:
+            pass
+    print("protect self-test: %d of %d checks passed" % (len(refused) + 12 - bad, len(refused) + 12))
     raise SystemExit(1 if bad else 0)

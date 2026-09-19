@@ -11,6 +11,8 @@
 #   remove_slot(game, n)                  moves the folder to backups/slots/removed/
 #   read_marker(game, n) / write_marker(game, n, data)
 #
+# The game only offers missions up to its config.qvm's GOActiveMission, which
+# studio/build/unlock.py raises when a slot is filled and settles when one goes.
 # Every write goes through protect.py.
 import json, pathlib, re, shutil, sys, tempfile, time
 
@@ -122,4 +124,10 @@ def remove_slot(game, n, log=print):
             log("removed mission %d's strings from the language files" % n)
     except (OSError, ValueError) as e:
         log("mission %d's strings stay in the language files: %s" % (n, e))
+    # the game's mission list no longer reaches past the last mission left
+    try:
+        from studio.build import unlock
+        unlock.settle(game, log)
+    except Exception as e:
+        log("the game's mission list was left as it was: %s" % e)
     return keep
