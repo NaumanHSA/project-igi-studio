@@ -1,7 +1,8 @@
 # The AI designer's server side (docs/PLAN-ai.md): the API key, the model, and
 # one streamed model turn at a time for the editor's agent loop.
 #
-# The key stays here. It comes from the studio's settings (config.json "ai",
+# The key stays here. It comes from the studio's encrypted key store
+# (studio/keystore.py, what you typed in Settings; formerly config.json "ai",
 # ignored by git), else .env (OPENAI_API_KEY) next to the project, else the
 # environment. The browser only learns whether there is one.
 #
@@ -24,6 +25,7 @@
 # and reads pictures. A turn asks for one with {"role": "light"}.
 # Pictures ride on a user item as {"images": [{"url": "data:image/..."}]}.
 import json, os, pathlib, re, time, urllib.error, urllib.request
+from studio import keystore, paths
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OPENAI = "https://api.openai.com/v1"
@@ -36,8 +38,13 @@ NOT_CHAT = re.compile(r"embedding|whisper|tts|dall-e|davinci|babbage|moderation|
 
 
 def dotenv():
-    """KEY=VALUE lines of the project's .env (quotes stripped); {} without one."""
+    """KEY=VALUE lines of the project's .env (quotes stripped); {} without one.
+
+    Only a checkout reads it: it is a developer's convenience beside the code,
+    and an installed copy keeps its key in the encrypted store instead."""
     out = {}
+    if not paths.checkout():
+        return out
     f = ROOT / ".env"
     if f.exists():
         for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -48,12 +55,33 @@ def dotenv():
     return out
 
 
+def migrate(cfg):
+    """Move keys an older version saved in plain text into the encrypted store.
+
+    Returns True when cfg changed and should be saved."""
+    changed = False
+    for section, name in (("ai", "openai"), ("ai_light", "light")):
+        sec = cfg.get(section) or {}
+        if sec.get("apiKey"):
+            keystore.put(name, sec.pop("apiKey"))
+            cfg[section] = sec
+            changed = True
+    return changed
+
+
 def settings(cfg):
-    """The AI settings with the key resolved: (settings, key, where the key came from)."""
+    """The AI settings with the key resolved: (settings, key, where the key came from).
+
+    The key comes from the studio's encrypted store (what you typed in
+    Settings), then a checkout's .env, then the environment. It is never kept
+    in the settings file."""
     s = dict(DEFAULTS)
     s.update({k: v for k, v in (cfg.get("ai") or {}).items() if v not in (None, "")})
     env = dotenv()
-    key, src = s.pop("apiKey", ""), "settings"
+    legacy = s.pop("apiKey", "")
+    key, src = keystore.get("openai"), "encrypted store"
+    if not key and legacy:
+        key, src = legacy, "settings"
     if not key and env.get("OPENAI_API_KEY"):
         key, src = env["OPENAI_API_KEY"], ".env"
     if not key and os.environ.get("OPENAI_API_KEY"):
@@ -67,7 +95,8 @@ def light_settings(cfg):
     """The light model's settings and key (a local server needs none)."""
     s = dict(LIGHT)
     s.update({k: v for k, v in (cfg.get("ai_light") or {}).items() if v not in (None, "")})
-    return s, s.pop("apiKey", "") or ""
+    legacy = s.pop("apiKey", "") or ""
+    return s, keystore.get("light") or legacy
 
 
 def settings_for(cfg, role):
@@ -97,10 +126,12 @@ def update(cfg, body):
     for k, lo, hi in (("pace", 0, 3000), ("maxSteps", 5, 200)):
         if k in body:
             ai[k] = max(lo, min(hi, int(body[k] or 0)))
+    # keys go to the encrypted store, not into cfg (which is a plain file)
     if body.get("apiKey"):
-        ai["apiKey"] = str(body["apiKey"]).strip()
+        keystore.put("openai", str(body["apiKey"]))
     if body.get("clearKey"):
-        ai.pop("apiKey", None)
+        keystore.drop("openai")
+    ai.pop("apiKey", None)
     cfg["ai"] = ai
     lb = body.get("light")
     if isinstance(lb, dict):
@@ -112,7 +143,8 @@ def update(cfg, body):
             if k in lb:
                 li[k] = bool(lb[k])
         if lb.get("apiKey"):
-            li["apiKey"] = str(lb["apiKey"]).strip()
+            keystore.put("light", str(lb["apiKey"]))
+        li.pop("apiKey", None)
         cfg["ai_light"] = li
     return cfg
 

@@ -31,12 +31,22 @@
 #   POST   /api/ai/chat          one model turn, streamed back as JSON lines
 #   GET    /api/missions/<id>/ai            the mission's chat threads
 #   GET/PUT/DELETE /api/missions/<id>/ai/<thread>   one thread
-import base64, collections, json, os, pathlib, re, subprocess, sys, threading, time, webbrowser
+import base64, collections, hmac, json, os, pathlib, re, subprocess, sys, threading, time, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EDITOR = ROOT / "editor"
 PORT = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8765
+
+# The desktop app starts this server for itself alone. It picks a free port
+# (--port 0) and hands over a token nobody else knows, on stdin so that it never
+# shows in a process list (--token-stdin). From then on every request has to
+# carry that token in an X-Studio-Token header, which the app's window adds and
+# nothing else on the machine can: not another program, and not a web page in a
+# browser, which cannot set that header on a request to here without a CORS
+# preflight this server never answers. Without a token (a checkout, run by hand)
+# the server behaves as it always has.
+TOKEN = None
 
 from studio.qvm import compile as CQ
 from studio.build import install as INST
@@ -557,6 +567,14 @@ class Handler(SimpleHTTPRequestHandler):
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(EDITOR), **kw)
+
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        if TOKEN and not hmac.compare_digest(self.headers.get("X-Studio-Token", ""), TOKEN):
+            self.send_error(403, "This studio answers only its own window")
+            return False
+        return True
 
     def translate_path(self, path):
         # The editor asks for data/... relative to the page. That data is made
@@ -1151,17 +1169,28 @@ def apply_mission(mid, test=None, say=print):
 
 
 def main():
+    global TOKEN
+    if "--token-stdin" in sys.argv:
+        TOKEN = sys.stdin.readline().strip() or None
+        if not TOKEN or len(TOKEN) < 32:
+            raise SystemExit("--token-stdin: no usable token on stdin")
     cfg = load_config()
+    # a key an older version saved in plain text moves to the encrypted store
+    if AI.migrate(cfg):
+        save_config(cfg)
     st = game_state(cfg)
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    port = srv.server_address[1]          # the one the system chose when asked for 0
     print("Project IGI Studio")
     print("  serving %s" % EDITOR)
-    print("  game    %s   %s" % (cfg["gamePath"], "found" if st["gameExe"] else "NOT FOUND"))
-    print("  slot    level %d   %s" % (cfg["slot"], "ok" if st["slotExists"] else "MISSING"))
-    print("  compiler%s" % ("  ok" if st["compiler"] else "  gconv/dconv NOT FOUND"))
-    print("\n  http://localhost:%d\n" % PORT)
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    if "--no-browser" not in sys.argv:
-        threading.Timer(0.6, lambda: webbrowser.open("http://localhost:%d/plotter.html" % PORT)).start()
+    print("  game    %s   %s" % (cfg["gamePath"] or "(not set up yet)",
+                                 "found" if st["ready"] else "NOT FOUND"))
+    print("  your folder  %s" % paths.home())
+    print("\n  http://localhost:%d%s\n" % (port, "   (its own window only)" if TOKEN else ""))
+    # the line the desktop app waits for, before it opens its window
+    print("STUDIO_READY port=%d" % port, flush=True)
+    if "--no-browser" not in sys.argv and not TOKEN:
+        threading.Timer(0.6, lambda: webbrowser.open("http://localhost:%d/plotter.html" % port)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
