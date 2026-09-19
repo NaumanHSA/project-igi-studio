@@ -66,7 +66,29 @@ multi-factor sign-in on GitHub and SignPath for everyone in the team, product
 name and version on every signed file (the app and `studio-server.exe` both
 carry them), and a manual approval for every release.
 
-Once accepted, the workflow changes like this:
+### Applying
+
+At [signpath.org](https://signpath.org), once a release is published. The
+answers the form asks for:
+
+| | |
+|---|---|
+| Project | Project IGI Studio: a mission studio for *Project I.G.I.: I'm Going In* (2000). Design missions on a map of the game's levels, and the studio compiles and installs them into the user's own copy of the game. Windows desktop app (Electron, with a bundled Python server) |
+| Repository | https://github.com/NaumanHSA/project-igi-studio |
+| Licence | MIT, for all of it; third party parts are MIT or SIL OFL (`THIRD-PARTY-NOTICES.md`) |
+| Downloads | https://naumanhsa.github.io/project-igi-studio-site/download, from the GitHub releases |
+| Code signing policy | https://naumanhsa.github.io/project-igi-studio-site/signing |
+| Build | GitHub Actions, `.github/workflows/release.yml`, from a tag |
+| What to sign | The NSIS installer, and `Project IGI Studio.exe` and `studio-server.exe` inside it and the portable zip |
+| Team | Nouman Ahsan (@NaumanHSA): author, reviewer and approver |
+
+Before sending it: multi-factor sign-in on GitHub, and the repository's
+Security tab with private vulnerability reporting turned on (`SECURITY.md`
+and `CODE_OF_CONDUCT.md` point at it).
+
+### Once accepted
+
+The workflow changes like this:
 
 1. After `npm run dist`, submit `app/dist/win-unpacked` and the installer to
    SignPath with their GitHub action (`signpath/github-action-submit-signing-request`),

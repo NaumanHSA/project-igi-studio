@@ -196,6 +196,9 @@ rules this project does not bend (the original install is never written, and no 
 and how to run the compiler's tests. Found a problem? [Open an issue](https://github.com/NaumanHSA/project-igi-studio/issues)
 with the log from **Help, Open the log folder**.
 
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md), and security problems are reported
+privately, as [SECURITY.md](SECURITY.md) says.
+
 If the studio gave you a mission worth playing, a star helps other players find it.
 
 ## Credits
