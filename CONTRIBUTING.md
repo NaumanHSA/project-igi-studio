@@ -6,7 +6,7 @@ the work is careful reverse engineering rather than web development.
 ## What you need
 
 - Windows, Python 3.12 or newer, and your own copy of Project I.G.I.
-- Node 20 or newer, for the desktop shell and the site.
+- Node 22 or newer, for the desktop app.
 - Nothing else. The studio never needs the game to be modded, and it never
   writes into the original install.
 
@@ -65,4 +65,11 @@ in.
 ## Pull requests
 
 Small and focused, with a note on what you tested. If it changes something the
-user sees, update the manual page in `site/` too.
+user sees, the manual needs to follow: it lives in its own repository,
+[project-igi-studio-site](https://github.com/NaumanHSA/project-igi-studio-site),
+so say what changed and it will be updated there.
+
+## Releases
+
+Built by GitHub Actions from a tag, never by hand. [docs/releasing.md](docs/releasing.md)
+has the steps.

@@ -20,7 +20,7 @@ Python, no third party toolkit, no manual steps.
 | Game versions | The current (modded) install first, stock retail and GOG after |
 | Compiler | Ours. The IGI ToolKit dependency goes away completely |
 | Signing | Unsigned while private, SignPath Foundation (free, open source) at 1.0 |
-| Site | Landing page and manual in this repo, one site, GitHub Pages |
+| Site | Landing page and manual, one site on GitHub Pages, in a repository of its own (`project-igi-studio-site`) |
 
 ## What we never ship
 
@@ -46,7 +46,7 @@ capture that knowledge before replacing it.
 **Done when** the corpus covers every level's `objects.qvm`, `mission.qvm` and
 AI scripts, and the manifest is stable across two runs.
 
-### Phase 1: repository hygiene  (done 2026-09-19, bar renaming the folder)
+### Phase 1: repository hygiene  (done 2026-09-19)
 
 - Archive `project-igi-editor` and `project-igi-editor-3.6.11-pre` out of the
   workspace; keep `IGIToolKit_v0.8.7.5` archived as the oracle until Phase 3
@@ -157,8 +157,7 @@ How it went:
   installer installed silently, the installed app walked a new user from the
   setup screen to the library with all fourteen missions, and the uninstaller
   removed the program and its entries and kept the user's folder.
-- Not yet: auto update (electron-updater) waits for public releases, and
-  signing waits for SignPath (Phase 7).
+- Auto update came in Phase 7; signing waits for SignPath.
 
 ### Phase 6: the site  (done 2026-09-19, bar publishing it)
 
@@ -182,10 +181,12 @@ and a Deploy workflow that publishes it to GitHub Pages
 (`naumanhsa.github.io/project-igi-studio-site/`), started by hand. Its README
 says how.
 
-Left: publishing it, and shrinking this repository's README. The manual now
-covers what a player needs; the README stays the developer's reference
-(formats, engine rules, how each part is built) until it is split into
-`docs/`.
+Since then: a download page (`/download`, the latest release read from
+GitHub, macOS and Linux marked as coming soon), who made it at the foot of
+the landing page, and the code signing policy (`/signing`) SignPath asks for.
+This repository's README is the public front page now; the developer's
+reference it used to hold is in `docs/`. Left: publishing the site, which
+goes out with the first release.
 
 ### Phase 7: public and signed
 
@@ -197,6 +198,45 @@ and keeps the whole history; `project-igi-studio` is the public one.
 - MIT licence in place, public repo, apply to SignPath Foundation, wire signing
   into the release workflow.
 - Releases: tagged, with installer, portable zip, checksums and notes.
+
+Done 2026-09-19:
+
+- **The history is clean.** The public history (7 commits) holds no secrets
+  and no game-derived byte in any version of any file. The local clone no
+  longer carries the private history either: its branch and the `dev` remote
+  are gone and the unreachable objects pruned (57 MB to 1 MB).
+- **Releases build themselves.** `.github/workflows/release.yml`: a tag builds
+  on Windows, checks that the tag, the app and the studio agree, and drafts
+  the release with the installer, the zip, `SHA256SUMS.txt`, the updater's
+  `latest.yml` and blockmap, and notes from `CHANGELOG.md`. Run by hand it is
+  a dry run. PyInstaller is pinned, and `studio-server.exe` now carries the
+  product name and version, as signing requires. The version is 1.0.0.
+- **Updates.** `app/updates.js` (electron-updater, GitHub releases): an
+  installed studio downloads a new version and installs it on close; the
+  portable zip only says one is out. Settings, Updates turns the check off,
+  and the privacy statement says what it sends (nothing about the user).
+  Tested on the built app: the check runs, and a failed one is only logged.
+- **The README** is a front page (banner, downloads, what's in the box, how
+  it works, building it); the reference moved to `docs/editor.md`,
+  `docs/architecture.md` and `docs/engine.md`, and `docs/releasing.md` says
+  how to cut a release and what signing will change.
+- **SignPath's conditions** (checked on signpath.org): an OSI licence, a
+  release already out in the form to be signed, CI builds, MFA for the team,
+  product name and version on every signed file, a policy page with roles and
+  a privacy statement, and a manual approval per release. So 1.0 goes out
+  unsigned, and signing follows.
+
+Left, in order:
+
+1. The owner's read of the site and the manual.
+2. A dry run of the release workflow on GitHub (Actions, Release, Run
+   workflow), to see it build on a clean Windows machine.
+3. **Going public**, all on the same day: make this repository public, run
+   the site's Deploy workflow, push the tag `v1.0.0`, read the draft release
+   and publish it.
+4. Apply to SignPath Foundation, then add signing to the workflow
+   (`docs/releasing.md`, Signing).
+5. Test on an unmodified copy of the game (GOG or Steam) when one is to hand.
 
 ### Phase 8: after 1.0
 
@@ -210,7 +250,9 @@ seam for new tools, and the stock and GOG game profiles.
 - **Everything we extracted came from a modded install.** Phase 2's
   fingerprinting makes that explicit instead of silent.
 - **PyInstaller and Python 3.14.** If unsupported, the build pins 3.12.
-- **Unsigned first releases.** Documented with the exact clicks, fixed at 1.0
-  by SignPath.
+- **Unsigned first releases.** Documented with the exact clicks; SignPath
+  needs a release out before it signs, so signing follows 1.0. Unsigned
+  PyInstaller programs are sometimes flagged by antivirus heuristics; signing
+  is the cure for that too.
 - **The corpus cannot be recreated** if the ToolKit disappears. It is archived
   alongside, and the manifest records what it contained.
