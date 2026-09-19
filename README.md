@@ -1659,6 +1659,46 @@ byte-for-byte.
 
 Level 8's graphs use a different magic number. The tools won't edit them.
 
+## The desktop app
+
+**Installing.** Run `ProjectIGIStudio-Setup-<version>.exe`. It installs for
+you alone (no administrator), into a folder you can choose, with a Start menu
+entry and a desktop shortcut. The portable zip is the same program without an
+installer: unpack it anywhere and run `Project IGI Studio.exe`. Nothing else
+is needed: no Python, and no other tool for the game.
+
+The installer is not signed yet, so Windows may say "Windows protected your
+PC". Choose **More info**, then **Run anyway**. Releases will be signed once
+the project is public.
+
+**First run.** The studio asks where the game is (Browse picks the folder),
+makes its reference copy of the levels and builds the level data (a minute or
+two), then shows the library. See *Setup* below for what happens there.
+
+**What it is.** A window (Electron) around the same studio you can run from a
+checkout. It starts the studio's server for itself alone, on a free port, and
+hands it a random token nobody else knows; every request the window makes
+carries it, and the server refuses anything without it. The page gets no
+access to the machine beyond a folder picker. The API key you type in
+Settings is encrypted for your Windows account (DPAPI) and is never written to
+the settings file.
+
+**Uninstalling** removes the program and leaves your folder alone:
+`%LOCALAPPDATA%\ProjectIGIStudio` keeps your missions, the reference copy and
+the level data, so installing again picks up where you were. Delete it by
+hand to remove everything.
+
+**Building it.** From `app/`:
+
+```
+npm install
+npm run dist        the bundled server, then the installer and the zip in app/dist
+npm start           the window around a checkout, using the Python on PATH
+```
+
+`npm run dist` bundles the server with PyInstaller in its own virtual
+environment (`app/build-server`), so nothing is installed into your Python.
+
 ## Setup
 
 You need your own copy of Project I.G.I. and Python 3. Nothing else: the

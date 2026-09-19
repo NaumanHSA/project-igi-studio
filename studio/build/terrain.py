@@ -224,7 +224,7 @@ if __name__ == "__main__":
     def arg(n, dflt=None):
         return argv[argv.index(n) + 1] if n in argv else dflt
 
-    game = pathlib.Path(arg("--game", str(paths.game())))
+    game = pathlib.Path(arg("--game") or paths.require_game())
     lv = arg("--level", "1")
     root = pathlib.Path(__file__).resolve().parents[2]
     qsc = qvm_source.level_qsc(int(lv), game)

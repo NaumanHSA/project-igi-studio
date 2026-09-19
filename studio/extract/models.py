@@ -27,7 +27,7 @@ if __name__ != "__main__":
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = paths.data()
 argv = sys.argv
-GAME = pathlib.Path(argv[argv.index("--game") + 1] if "--game" in argv else str(paths.game()))
+GAME = pathlib.Path(argv[argv.index("--game") + 1] if "--game" in argv else str(paths.require_game()))
 LEVELS = ([int(x) for x in argv[argv.index("--levels") + 1].split(",")]
           if "--levels" in argv else list(range(1, 15)))
 SCALE = 4096.0

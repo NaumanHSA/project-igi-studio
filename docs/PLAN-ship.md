@@ -127,7 +127,7 @@ entirely with our compiler plays, and the ToolKit can be uninstalled.
 **Done when** a clone of the repo contains no game-derived byte, and first run
 produces everything the editor needs in a few minutes.
 
-### Phase 5: the desktop app
+### Phase 5: the desktop app  (done 2026-09-19)
 
 - `app/`: Electron main process, preload with `contextIsolation`, no
   `nodeIntegration`. It starts the Python sidecar on a free port with a random
@@ -141,6 +141,24 @@ produces everything the editor needs in a few minutes.
 
 **Done when** the installer runs on a machine with no Python and no ToolKit,
 and builds a mission.
+
+How it went:
+
+- The key store is `studio/keystore.py`, DPAPI through ctypes, rather than
+  Electron's safeStorage. On Windows they are the same mechanism, and doing it
+  in Python keeps one path for the app and a checkout run by hand.
+- PyInstaller 6.22 supports Python 3.14, so nothing had to be pinned. The
+  bundled server is 24 MB; the installer 120 MB, the zip 164 MB (Electron is
+  most of it).
+- The server sends a Content Security Policy, and the editor's fonts are
+  bundled, so it works offline and asks no one for anything.
+- Tested: the bundled server with no Python on its PATH connected a game,
+  built a mission and applied it (to a throwaway copy of the game); the
+  installer installed silently, the installed app walked a new user from the
+  setup screen to the library with all fourteen missions, and the uninstaller
+  removed the program and its entries and kept the user's folder.
+- Not yet: auto update (electron-updater) waits for public releases, and
+  signing waits for SignPath (Phase 7).
 
 ### Phase 6: the site
 

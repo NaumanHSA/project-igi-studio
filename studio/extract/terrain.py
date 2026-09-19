@@ -88,7 +88,7 @@ def sample(args):
 def main(argv):
     levels = [int(x) for x in argv[argv.index("--levels") + 1].split(",")] if "--levels" in argv else list(range(1, 15))
     cell = float(argv[argv.index("--cell") + 1]) if "--cell" in argv else 2.0
-    game = argv[argv.index("--game") + 1] if "--game" in argv else str(paths.game())
+    game = argv[argv.index("--game") + 1] if "--game" in argv else str(paths.require_game())
     with multiprocessing.Pool(min(len(levels), os.cpu_count() or 2)) as pool:
         for lv, meta in pool.imap_unordered(sample, [(lv, game, cell) for lv in levels]):
             if meta is None:

@@ -99,9 +99,21 @@ def game():
     return pathlib.Path(os.path.expandvars(str(setting("gamePath") or "")))
 
 
+def game_set():
+    """Has a game been chosen at all? (An unset path is not ".", the current folder.)"""
+    return bool(str(setting("gamePath") or "").strip())
+
+
 def have_game():
-    g = game()
-    return bool(str(g)) and (g / "missions" / "location0").is_dir()
+    return game_set() and (game() / "missions" / "location0").is_dir()
+
+
+def require_game():
+    """The game, for a command that cannot do without one."""
+    if not game_set():
+        raise SystemExit("the studio has not been pointed at the game yet:\n"
+                         "  python -m studio setup --game <folder>")
+    return game()
 
 
 def pristine():
@@ -143,8 +155,7 @@ def levels(game_arg=None):
 
 def game_missing():
     """True when a game was set up and its folder is no longer there."""
-    g = str(game())
-    return bool(g) and not (game() / "missions" / "location0").is_dir()
+    return game_set() and not (game() / "missions" / "location0").is_dir()
 
 
 def decompiled():

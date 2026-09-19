@@ -25,7 +25,7 @@ from studio import paths
 if __name__ != "__main__":
     raise ImportError("studio.extract.graphs is a script: run it, do not import it")
 argv = sys.argv
-GAME = pathlib.Path(argv[argv.index("--game") + 1] if "--game" in argv else str(paths.game()))
+GAME = pathlib.Path(argv[argv.index("--game") + 1] if "--game" in argv else str(paths.require_game()))
 OUT = ROOT / argv[argv.index("--out") + 1] if "--out" in argv else paths.data()
 LEVELS = ([int(x) for x in argv[argv.index("--levels") + 1].split(",")]
           if "--levels" in argv else list(range(1, 15)))

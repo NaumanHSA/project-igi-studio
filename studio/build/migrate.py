@@ -190,7 +190,7 @@ def migrate(slot_json, slot_graphs, base_level, extra=None):
 
 def main(argv):
     n = int(arg(argv, "--slot", 15))
-    game = arg(argv, "--game", str(paths.game()))
+    game = arg(argv, "--game", None) or str(paths.require_game())
     level_json = json.load(open(arg(argv, "--level-json", str(DATA / ("level%d.json" % n)))))
     graphs_json = json.load(open(arg(argv, "--graphs-json", str(DATA / ("graphs%d.json" % n)))))
     base_name = next(iter(sorted(SL.slot_dir(game, n).glob("*.dat")))).stem

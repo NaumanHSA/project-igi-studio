@@ -648,7 +648,7 @@ if __name__ == "__main__":
     def arg(n, dflt=None):
         return argv[argv.index(n) + 1] if n in argv else dflt
 
-    game = pathlib.Path(arg("--game", str(paths.game())))
+    game = pathlib.Path(arg("--game") or paths.require_game())
     loc0 = game / "missions" / "location0"
     cmd = argv[1] if len(argv) > 1 else ""
     slot = loc0 / ("level%s" % arg("--slot", "15"))

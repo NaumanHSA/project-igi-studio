@@ -89,7 +89,7 @@ def mission_texts(path):
 
 
 def main(argv):
-    game = pathlib.Path(argv[argv.index("--game") + 1] if "--game" in argv else str(paths.game()))
+    game = pathlib.Path(argv[argv.index("--game") + 1] if "--game" in argv else str(paths.require_game()))
     covers = DATA / "covers"
     covers.mkdir(parents=True, exist_ok=True)
     _, sprites = MI.res_entries(game / "menusystem" / "missionsprites.res")

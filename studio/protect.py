@@ -38,7 +38,7 @@ def pristine_roots():
     roots = [str(paths.snapshot()), cfg.get("pristinePath")]
     roots += list(cfg.get("protectedPaths") or [])
     try:
-        working = paths.game().resolve() if str(paths.game()) else None
+        working = paths.game().resolve() if paths.game_set() else None
     except OSError:
         working = None
     out, seen = [], set()
@@ -76,7 +76,7 @@ def assert_writable(path, what="write to"):
     # One game is written to: the one the studio is connected to. A custom slot
     # anywhere else on the disk is still somebody's game, not ours.
     try:
-        game = paths.game().resolve() if str(paths.game()) else None
+        game = paths.game().resolve() if paths.game_set() else None
     except OSError:
         game = None
     if game is not None and not (p == game or game in p.parents):

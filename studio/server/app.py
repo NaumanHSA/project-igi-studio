@@ -60,7 +60,7 @@ from studio import paths
 from studio.qvm import source as qvm_source
 
 def DEFAULTS():
-    return {"gamePath": str(paths.game()), "slot": paths.slot(),
+    return {"gamePath": str(paths.setting("gamePath") or ""), "slot": paths.slot(),
             "pristinePath": str(paths.pristine()) if paths.setting("pristinePath") else ""}
 
 
@@ -82,21 +82,22 @@ def save_config(cfg):
 
 
 def game_state(cfg):
-    g = pathlib.Path(cfg["gamePath"] or "")
-    slot = g / "missions" / "location0" / ("level%d" % cfg["slot"])
-    ready = bool(str(g)) and (g / "missions" / "location0").is_dir()
+    raw = str(cfg["gamePath"] or "").strip()
+    g = pathlib.Path(raw) if raw else None
+    slot = g / "missions" / "location0" / ("level%d" % cfg["slot"]) if g else None
+    ready = bool(g) and (g / "missions" / "location0").is_dir()
     return {
-        "gamePath": str(g),
+        "gamePath": raw,
         "pristinePath": cfg.get("pristinePath"),
         "slot": cfg["slot"],
-        "gameExe": (g / "IGI.exe").exists(),
-        "slotExists": slot.is_dir(),
+        "gameExe": bool(g) and (g / "IGI.exe").exists(),
+        "slotExists": bool(slot) and slot.is_dir(),
         "compiler": CQ.available(),
         "missions": True,
         "ready": ready,                 # false means the setup has not run yet
         # a game was chosen and its folder is not there any more: a drive
         # unplugged, the game moved or uninstalled. Missions are unaffected.
-        "gameMissing": bool(str(g)) and not ready,
+        "gameMissing": bool(raw) and not ready,
         "levelsFrom": str(paths.levels(cfg["gamePath"])),
         "canEdit": (paths.levels(cfg["gamePath"]) / "missions" / "location0").is_dir()
                    and _data_ready(),
@@ -107,11 +108,12 @@ def game_state(cfg):
 def setup_state(cfg, find=False):
     """What the first run screen shows: the game, its build, and our copy of it."""
     from studio.setup import detect, snapshot, verify
-    g = pathlib.Path(cfg["gamePath"] or "")
-    out = {"ok": True, "ready": False, "game": str(g), "home": str(paths.home()),
+    raw = str(cfg["gamePath"] or "").strip()
+    g = pathlib.Path(raw) if raw else None
+    out = {"ok": True, "ready": False, "game": raw, "home": str(paths.home()),
            "settings": str(paths.config_file()),
-           "gameMissing": bool(str(g)) and not (g / "missions" / "location0").is_dir()}
-    if str(g) and (g / "missions" / "location0").is_dir():
+           "gameMissing": bool(g) and not (g / "missions" / "location0").is_dir()}
+    if g and (g / "missions" / "location0").is_dir():
         r = verify.check(g)
         out.update(ready=r["ok"], missing=r["missing"], levels=r["levels"],
                    custom=r.get("custom") or [], fingerprint=r.get("fingerprint"),
@@ -121,7 +123,7 @@ def setup_state(cfg, find=False):
     if snap:
         out["snapshot"] = {"path": str(paths.snapshot()), "files": snap["files"],
                            "bytes": snap["bytes"], "made": snap["made"],
-                           "stale": bool(str(g)) and snapshot.stale(g)}
+                           "stale": bool(g) and snapshot.stale(g)}
     elif out.get("ready"):
         items, total = snapshot.plan(g)
         out["snapshot"] = {"path": str(paths.snapshot()), "files": len(items),
@@ -261,7 +263,13 @@ def recover(cfg, body):
 def library(cfg):
     """Everything the mission library shows."""
     data = paths.data()
-    builtins = json.load((data / "builtins.json").open(encoding="utf-8"))
+    try:
+        builtins = json.load((data / "builtins.json").open(encoding="utf-8"))
+        needs_setup = False
+    except (OSError, ValueError):
+        # the built-in missions are read out of the game when it is connected;
+        # before that there are none to show, and the page says why
+        builtins, needs_setup = {"missions": [], "groups": []}, True
     mine = MS.list_missions()
     known = {m["id"] for m in mine}
     game = cfg["gamePath"]
@@ -276,7 +284,7 @@ def library(cfg):
     except OSError:
         pass
     return {"builtins": builtins["missions"], "groups": builtins["groups"], "missions": mine,
-            "slots": slots, "trash": len(MS.list_trash())}
+            "slots": slots, "trash": len(MS.list_trash()), "needsSetup": needs_setup}
 
 
 def _data_url_png(u):

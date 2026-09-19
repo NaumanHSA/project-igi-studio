@@ -19,6 +19,15 @@ python -m studio
 Then open http://localhost:8765. The page probes `/api/status`, so the same
 editor also runs as a plain static file, only without Apply.
 
+## The desktop app
+
+```
+cd app
+npm install
+npm start           the window around this checkout
+npm run dist        the bundled server, the installer and the zip, in app/dist
+```
+
 ## The rules this project does not bend
 
 1. **The original install is never written.** Every write goes through

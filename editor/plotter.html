@@ -9162,7 +9162,12 @@ function renderLibrary(){
     h+='</div>';
   }
   h+='</section>';
-  h+='<section class="shelf"><div class="shelf-head"><h2>Built-in missions</h2><span class="count">'+lib.builtins.length+'</span>'+
+  if(lib.needsSetup)
+    h+='<section class="shelf"><div class="shelf-head"><h2>Built-in missions</h2></div>'+
+       '<div class="shelf-empty"><p>Connect your game first.</p>'+
+       '<p class="hint">The fourteen built-in missions, and every map you build on, come from your own copy of the game.</p>'+
+       '<button class="btn primary" id="lib-setup">Set up the game</button></div></section>';
+  h+='<section class="shelf"'+(lib.needsSetup?' hidden':'')+'><div class="shelf-head"><h2>Built-in missions</h2><span class="count">'+lib.builtins.length+'</span>'+
      '<span class="hint">As the game ships them. They can’t be changed or deleted.</span></div><div class="mgrid">';
   lib.builtins.forEach(function(b){
     h+='<div class="mcard builtin">'+
@@ -9189,6 +9194,7 @@ function renderLibrary(){
     });
   });
   if($("lib-trash"))$("lib-trash").addEventListener("click",showTrash);
+  if($("lib-setup"))$("lib-setup").addEventListener("click",function(){setupSheet({first:true})});
   if($("lib-legacy"))$("lib-legacy").addEventListener("click",importLegacy);
 }
 function missionCardItems(m){
@@ -12719,6 +12725,9 @@ loadLevel(1);                 // the map behind the library
 probeServer().then(function(ok){
   Store=makeStore(ok);
   loadGroups();
+  // not set up yet: the setup is the first and only thing on screen
+  // (probeServer has opened it); the library would only have nothing to show
+  if(ok&&SRV&&(SRV.ready===false||SRV.dataReady===false))return;
   var last=null;try{last=localStorage.getItem("studio:last")}catch(e){}
   Store.library().then(function(lib){
     LIB=lib;
