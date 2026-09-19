@@ -1,6 +1,6 @@
 # Turns a Project IGI Studio plan into a compilable IGI 1 level script.
 #
-#   python -m studio build --plan plans/cold-departure.json [--out missions/plan]
+#   python -m studio build --plan my-mission.json [--out missions/plan]
 #   python -m studio build --plan - < plan.json              (read stdin)
 #
 # Input is the JSON the editor's "Copy plan" button produces, or a document

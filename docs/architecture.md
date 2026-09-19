@@ -54,10 +54,9 @@ project-igi-studio/
 │       └── live_pos.py     find and read the player's live position in a running game
 ├── app/                    the desktop app: the Electron window, the installer, the bundled server
 ├── docs/                   how the studio works: the editor, the engine, this page, releasing
-├── missions/
-│   ├── custom/<id>/        your missions: mission.json, cover.png, history/
-│   └── groups/             saved groups (reusable sets of objects)
-└── plans/                  plan JSON from before missions had a base (kept for reference)
+└── missions/
+    ├── custom/<id>/        your missions: mission.json, cover.png, history/
+    └── groups/             saved groups (reusable sets of objects)
 ```
 
 ## The desktop app
