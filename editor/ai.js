@@ -1,4 +1,4 @@
-// The AI designer (docs/PLAN-ai.md): a panel on the right edge that suggests
+// The AI designer: a panel on the right edge that suggests
 // missions for the open level and builds them in the editor while you watch.
 //
 // The loop runs here: each model turn goes through the studio server (POST

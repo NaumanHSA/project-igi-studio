@@ -7,8 +7,8 @@
 #
 # Settings come from config.json at the root of the repository. When it says
 # nothing, the fall-backs below are used, and they are the last place in the
-# project that names a drive letter. The first run wizard (docs/PLAN-ship.md,
-# phase 2) will write config.json instead, and move it to the user's app data.
+# project that names a drive letter. An installed studio keeps config.json in
+# the user's folder instead (config_file() below).
 import json, os, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]

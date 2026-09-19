@@ -63,9 +63,9 @@ file when one is installed, for anything the table does not have.
 ## The IGI ToolKit
 
 <https://github.com/IGI-Research-Devs> Not shipped and not linked against.
-Until our own compiler passes on the whole corpus, building a mission calls
-`gconv.exe` and `dconv.exe` from a ToolKit installation on the user's machine.
-Once Phase 3 of `docs/PLAN-ship.md` is done, that dependency is gone.
+The studio builds missions with its own compiler. The ToolKit is only used on a
+developer's machine, where one is installed, to capture a corpus of the game's
+scripts to test that compiler against (`studio/qvm/toolkit.py`).
 
 ## The game
 

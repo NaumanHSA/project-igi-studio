@@ -17,7 +17,7 @@
 # their collision mesh (XTVC/ECFC). Every face is kept - the map draws only
 # those facing up, the 3D preview needs the walls too.
 #
-# Characters and weapons (models 000-199) come too - see docs/PLAN-3d.md:
+# Characters and weapons (models 000-199) come too:
 #   - weapons and items are plain meshes, most of them in the archive every
 #     level of the location shares (missions/location0/common/models);
 #   - characters are skinned: each vertex is in its bone's own space (bone

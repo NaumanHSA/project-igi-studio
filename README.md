@@ -187,7 +187,6 @@ into your Python. Releases are built the same way by
 | See how the studio is put together: the app, first run, where things are kept | [docs/architecture.md](docs/architecture.md) |
 | Learn the engine's unwritten rules and the graph file format | [docs/engine.md](docs/engine.md) |
 | Cut a release | [docs/releasing.md](docs/releasing.md) |
-| Read how it got here | [docs/PLAN-ship.md](docs/PLAN-ship.md) and the other [plans](docs) |
 
 ## Contributing
 

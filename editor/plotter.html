@@ -5452,7 +5452,7 @@ function describe(o){
 // An alarm system is one AlarmControl task and everything that names it: the
 // cameras and buttons in its trigger, the guards whose AI script carries its id,
 // and the sirens, lights and guard generators that watch its isAlarm. There is
-// no area in the data - the membership IS the area. See docs/PLAN-alarm.md.
+// no area in the data - the membership IS the area.
 var ALARM_TYPES={camera:"camera",switch:"alarm button",siren:"siren",alarmlight:"alarm light"};
 function ownSystems(){return placements.filter(function(p){return p.type==="alarmctl"})}
 function alarmSystems(){
@@ -6282,7 +6282,7 @@ function drawPrefabGhost(){
 // areas apply in order, each on the ground the ones before it left, then the
 // brush; the ground under the level's own buildings is kept; and what stands on
 // the shaped ground - crates, trees, guards, pickups, the start, the navmesh -
-// moves up or down with it. See docs/PLAN-ground.md.
+// moves up or down with it.
 var GROUND_MAX=4.0;             // a height map can move the ground this far, no further
 var groundEdits=[],groundBrush={},GSEL=null,GDRAW=null,GPAINT=null;
 var GSTRAIN={};                 // uid -> {need: the most it moves the ground, clip: past what the game allows}
@@ -7191,7 +7191,7 @@ function renderGround(){
 /* ---------------- the 3D close-up ---------------- */
 // view3d.js - an ES module on three.js - draws the real geometry around one
 // item and hands back where it was put. This side gives it the item, what stands
-// within the radius, the ground, and the meshes. See docs/PLAN-3d.md.
+// within the radius, the ground, and the meshes.
 var V3D={radius:60,key:null,spot:null,at:null,ver:-1,raf:0};
 // The close-up follows the plan: a turn or a move in the panel, undo, what a
 // moved crate carried along. Once per change, right after it.
@@ -12225,7 +12225,7 @@ function coverageReady(){
   });
 }
 
-/* ---------------- the AI designer's hands (editor/ai.js, docs/PLAN-ai.md) ---------------- */
+/* ---------------- the AI designer's hands (editor/ai.js) ---------------- */
 // What the AI designer sees and does, as tools: each takes the model's
 // arguments and answers with small JSON (ok, and an error it can act on). They
 // work through the editor's own editing, so everything is an ordinary change:

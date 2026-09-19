@@ -1,4 +1,4 @@
-/* The 3D close-up (docs/PLAN-3d.md): the real geometry around one item, in
+/* The 3D close-up: the real geometry around one item, in
  * WebGL, where the item can be moved by hand onto floors, desks and walls.
  *
  *   View3D.open(opts)   show the close-up; calling it again rebuilds it (a new

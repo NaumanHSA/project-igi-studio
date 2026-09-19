@@ -24,7 +24,7 @@
 #   POST   /api/missions/<id>/uninstall      take its slot out of the game (kept in backups)
 #   GET    /api/missions/<id>/cover.png
 #   GET    /api/trash, POST /api/trash/<tid>/restore
-# The AI designer (studio/server/ai.py, docs/PLAN-ai.md):
+# The AI designer (studio/server/ai.py):
 #   GET/POST /api/ai/settings    model, thinking, pace... (the key only as "there is one")
 #   GET    /api/ai/models        the account's chat models
 #   POST   /api/ai/test          a one-line request with the settings as they are

@@ -1517,7 +1517,7 @@ BONES = {"015_01_1": 6, "012_01_1": 6}
 # there, so it happens once (an area walked out of does not un-happen). What it
 # does hangs off the latch: a message, an alarm, guards arriving, the mission
 # failing. The latch ids are taken first: guards placed below name the event
-# they arrive on. See docs/PLAN-roadmap.md, phase 2.
+# they arrive on.
 EVENTS = [e for e in (plan.get("events") or []) if isinstance(e, dict) and e.get("uid") and isinstance(e.get("when"), dict)]
 EVENT_VAR = {e["uid"]: take_id() for e in EVENTS}
 EVENT_BY = {e["uid"]: e for e in EVENTS}
@@ -1717,7 +1717,7 @@ if cameras:
 # The plan's parts carry alarmId - "lv:<task id>" for one the level ships, or
 # "own:<uid>" for one of the mission's. A system of the mission's own is written
 # the way the shipped ones are: the control holds the trigger, an EditVariable
-# holds the alarm on until a button is pressed again. See docs/PLAN-alarm.md.
+# holds the alarm on until a button is pressed again.
 for c in cameras:
     if c.get("alarm", True) and c.get("alarmId"):
         ALARM_TRIGGER.setdefault(c["alarmId"], []).append("SCamera_%d.isDetection" % c["_tid"])

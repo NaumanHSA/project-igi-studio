@@ -1,4 +1,4 @@
-# The AI designer's server side (docs/PLAN-ai.md): the API key, the model, and
+# The AI designer's server side: the API key, the model, and
 # one streamed model turn at a time for the editor's agent loop.
 #
 # The key stays here. It comes from the studio's encrypted key store
@@ -25,7 +25,7 @@
 # asks for one, and its context window. A compatible server's context is often
 # small, so every request to one is fitted into its window (fit()): the oldest
 # turns are left out whole, and then the longest tool results shortened.
-# Two models (docs/PLAN-ai.md): the main one (config "ai": OpenAI by default)
+# Two models: the main one (config "ai": OpenAI by default)
 # plans and builds; a light one (config "ai_light": LM Studio's qwen by default,
 # on this machine) titles chats, looks things up for the main one (the scout)
 # and reads pictures. A turn asks for one with {"role": "light"}.

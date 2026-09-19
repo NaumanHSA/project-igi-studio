@@ -613,7 +613,7 @@ tools; each opens its panel right beside the bar (the legend opens over it):
 - **Limit:** the game moves the ground at most 4 m either way from the
   level's own mesh, so hills and gullies are small ones. An area that asks
   for more is shaped as far as it goes and flagged in the panel and the check
-  list. See [docs/PLAN-ground.md](PLAN-ground.md).
+  list.
 
 ## Painting the ground
 
@@ -762,7 +762,7 @@ The models come from the game files: `meshes.bin` in the level data (built by
 weapons from the location's shared archive), and textured, on demand, from the
 studio server (`api/model3d`, `api/texture`, `studio/extract/model3d.py`, decoded
 textures cached in `cache/`). Without the server the close-up draws the
-models plain. See [docs/PLAN-3d.md](PLAN-3d.md) for the formats.
+models plain.
 
 ## Keyboard
 
@@ -1028,8 +1028,7 @@ a model that designs missions with you: it suggests missions for the open
 level, and builds them on the map while you watch. It works through the
 studio's own editing, so everything it does is an ordinary change: undo, the
 change log, saving, the 3D view and Apply all work on it, and building into
-the game stays yours. The plan and the reasons are in
-[docs/PLAN-ai.md](PLAN-ai.md).
+the game stays yours.
 
 - **Ideas:** it looks at the level (its named places, buildings, guards,
   alarms, walkways) and answers with designs, each a pitch with objectives,

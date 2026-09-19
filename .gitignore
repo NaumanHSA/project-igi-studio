@@ -38,3 +38,6 @@ out/
 # The desktop app: the bundled server and the installers are built, not kept
 app/dist-server/
 app/build-server/
+
+# Plans for larger changes and the roadmap: kept on this machine, not published
+.dev/

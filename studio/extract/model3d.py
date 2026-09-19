@@ -1,4 +1,4 @@
-# Textured models for the editor's 3D close-up (docs/PLAN-3d.md): a model's
+# Textured models for the editor's 3D close-up: a model's
 # render mesh with its uvs and the texture each group is drawn with, and the
 # textures themselves as PNG. studio/server/app.py serves them (api/model3d,
 # api/texture); the close-up falls back to plain shading without them.

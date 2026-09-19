@@ -53,7 +53,7 @@ project-igi-studio/
 │       ├── missions.py     custom missions: base + plan, history, trash (missions/custom/)
 │       └── live_pos.py     find and read the player's live position in a running game
 ├── app/                    the desktop app: the Electron window, the installer, the bundled server
-├── docs/                   plans for larger changes, and docs/PLAN-ship.md, the road to 1.0
+├── docs/                   how the studio works: the editor, the engine, this page, releasing
 ├── missions/
 │   ├── custom/<id>/        your missions: mission.json, cover.png, history/
 │   └── groups/             saved groups (reusable sets of objects)
