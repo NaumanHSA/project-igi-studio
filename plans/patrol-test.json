@@ -1,0 +1,27 @@
+{
+  "name": "Patrol Test",
+  "mode": "modify",
+  "level": 1,
+  "placements": [
+    {"uid":"t1","type":"soldier","ai":"AITYPE_GUARD_AK","model":"001_01_1",
+     "weapon":"WEAPON_ID_GLOCK","name":"HVT Colonel","graph":"4019","patrol":[],
+     "x":5994.03,"y":-13667.28,"z":42583.02,"gamma":3.14159},
+
+    {"uid":"t2","type":"soldier","ai":"AITYPE_GUARD_AK","model":"003_01_1",
+     "weapon":"WEAPON_ID_AK47","name":"Static bodyguard","graph":"4019","patrol":[],
+     "x":5997.5,"y":-13664.5,"z":42583.02,"gamma":3.14159},
+
+    {"uid":"t3","type":"soldier","ai":"AITYPE_PATROL_AK","model":"003_01_1",
+     "weapon":"WEAPON_ID_AK47","name":"Walker A (101 to 19)","graph":"4019",
+     "patrol":[101,19],
+     "x":5955.1,"y":-13685.8,"z":42581.7,"gamma":1.0},
+
+    {"uid":"t4","type":"soldier","ai":"AITYPE_PATROL_AK","model":"003_01_1",
+     "weapon":"WEAPON_ID_AK47","name":"Walker B (100 to 78)","graph":"4019",
+     "patrol":[100,78],
+     "x":5953.4,"y":-13685.7,"z":42581.7,"gamma":1.0},
+
+    {"uid":"t5","type":"pickup","pickupId":"WEAPON_ID_MEDIPACK","name":"Medipack",
+     "x":5991.0,"y":-13669.5,"z":42583.02,"gamma":0}
+  ]
+}

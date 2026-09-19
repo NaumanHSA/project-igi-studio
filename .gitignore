@@ -1,0 +1,36 @@
+# Game files and anything derived from them are never committed. They are
+# produced on the user's own machine from the user's own copy of the game.
+editor/data/
+backups/
+missions/_decompiled/
+missions/_empty/
+corpus/
+cache/
+
+# Generated on every Apply or dry run
+missions/plan/
+missions/plan-*/
+
+# The user's own work: missions, their build inputs, history, recordings and
+# conversations with the AI designer
+missions/custom/
+
+# Machine-specific settings written by tools/serve.py
+config.json
+
+# Secrets: API keys for the AI designer
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Node and the desktop shell
+node_modules/
+dist/
+out/
+*.tsbuildinfo
+
+# The site's build output
+site/.vitepress/cache/
+site/.vitepress/dist/

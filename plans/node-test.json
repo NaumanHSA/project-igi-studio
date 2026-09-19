@@ -1,0 +1,14 @@
+{
+  "name": "Node Test",
+  "mode": "modify",
+  "level": 1,
+  "nodes": [
+    {"uid": "nodeA", "graph": "4019", "x": 5985.0, "y": -13644.6, "z": 42581.7}
+  ],
+  "placements": [
+    {"uid":"g1","type":"soldier","ai":"AITYPE_PATROL_AK","model":"003_01_1",
+     "weapon":"WEAPON_ID_AK47","name":"Node walker","graph":"4019",
+     "patrol":[9, "n:nodeA", 9, "n:nodeA"],
+     "x":5979.0,"y":-13644.6,"z":42581.7,"gamma":0}
+  ]
+}

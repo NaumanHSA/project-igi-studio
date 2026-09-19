@@ -1,0 +1,16 @@
+﻿{
+  "name": "Cold Departure",
+  "mode": "modify",
+  "level": 15,
+  "placements": [
+    {"uid":"pkmzlkpx","type":"soldier","kind":"soldier","ai":"AITYPE_GUARD_AK",
+     "model":"003_01_1","weapon":"WEAPON_ID_AK47","name":"Guard (AK)","graph":"4019",
+     "patrol":[58,57,56,55,55,55],
+     "x":5977.97,"y":-13670.87,"z":42581.74,"gamma":3.14159},
+    {"uid":"pqncvsez","type":"soldier","kind":"soldier","ai":"AITYPE_GUARD_AK",
+     "model":"003_01_1","weapon":"WEAPON_ID_AK47","name":"Guard (AK)","graph":"4019",
+     "patrol":[32,54],
+     "x":5996.37,"y":-13672.17,"z":42583.02,"gamma":3.14159}
+  ]
+}
+
