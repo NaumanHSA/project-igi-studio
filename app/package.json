@@ -3,7 +3,7 @@
   "productName": "Project IGI Studio",
   "version": "1.0.0",
   "description": "A mission studio for Project I.G.I.: I'm Going In",
-  "author": "Nauman HSA",
+  "author": "Nouman Ahsan",
   "license": "MIT",
   "private": true,
   "main": "main.js",
@@ -20,7 +20,7 @@
   "build": {
     "appId": "io.github.naumanhsa.projectigistudio",
     "productName": "Project IGI Studio",
-    "copyright": "Copyright (c) 2026 Nauman HSA",
+    "copyright": "Copyright (c) 2026 Nouman Ahsan",
     "directories": {
       "output": "dist",
       "buildResources": "build"

@@ -137,17 +137,7 @@ designer only.
 
 ## How it works
 
-```mermaid
-flowchart LR
-  subgraph pc["Your PC"]
-    win["Studio window<br/>(Electron)"] -- "every request carries<br/>a per-launch token" --> srv["Studio server<br/>(Python, bundled)"]
-    srv -- "reads the levels" --> game[("Your copy of<br/>Project I.G.I.")]
-    srv -- "reference copy,<br/>level data, missions" --> home[("Your studio folder")]
-    srv -- "Apply: the compiled mission,<br/>into slot 15 and up" --> game
-  end
-  srv -. "only when you use it,<br/>with your key" .-> ai["AI service"]
-  win -. "is there a new version?" .-> gh["GitHub releases"]
-```
+<img src="docs/assets/how-it-works.jpg" width="100%" alt="How it works. On your PC: the studio window (Electron) talks to the studio server (Python, bundled) with a new token each launch. The server holds the QVM compiler, the mission builder, the game readers and protect.py, the one gate for writes. It reads the levels from your game and applies missions into slots 15 and up, never the originals, and keeps the reference copy, level data and missions in your studio folder. Only two things leave your PC, both optional: the AI service, when you use it with your own key, and GitHub releases, to ask whether there is a new version.">
 
 - **Nothing of the game is shipped.** The studio reads your own copy, keeps a checked reference copy of what a
   mission is built from, and builds everything the editor draws on your machine.
@@ -224,7 +214,7 @@ If the studio gave you a mission worth playing, a star helps other players find 
 <tr>
 <td><a href="https://github.com/NaumanHSA"><img src="https://github.com/NaumanHSA.png?size=160" width="80" alt="Nouman Ahsan"></a></td>
 <td>
-<b>Nouman Ahsan</b> · <a href="https://github.com/NaumanHSA">@NaumanHSA</a> · <a href="https://nomihsa.me">nomihsa.me</a><br>
+<b>Nouman Ahsan</b> · <a href="https://github.com/NaumanHSA">@NaumanHSA</a> · <a href="https://nomihsa965.me">nomihsa965.me</a><br>
 The map computer, the compiler, the AI designer, the installer and the site: one person, the long way.
 By day, an AI engineer building agentic and generative AI systems.
 </td>
