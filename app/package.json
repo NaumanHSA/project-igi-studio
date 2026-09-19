@@ -1,0 +1,53 @@
+{
+  "name": "project-igi-studio",
+  "productName": "Project IGI Studio",
+  "version": "0.9.0",
+  "description": "A mission studio for Project I.G.I.: I'm Going In",
+  "author": "Nauman HSA",
+  "license": "MIT",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node tools/build-server.js",
+    "dist": "node tools/build-server.js && electron-builder --win nsis zip",
+    "dist:dir": "node tools/build-server.js && electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "io.github.naumanhsa.projectigistudio",
+    "productName": "Project IGI Studio",
+    "copyright": "Copyright (c) 2026 Nauman HSA",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "dist-server/studio-server", "to": "server" }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "artifactName": "ProjectIGIStudio-${version}-${os}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Project IGI Studio",
+      "artifactName": "ProjectIGIStudio-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

@@ -9,6 +9,13 @@ the following third party work.
 Copyright (c) 2010 three.js authors, MIT licensed.
 See `editor/vendor/three-LICENSE.txt`.
 
+## Fonts
+
+`editor/vendor/fonts/`: Barlow Condensed (Copyright 2017 The Barlow Project
+Authors), IBM Plex Sans and IBM Plex Mono (Copyright 2017 IBM Corp.), each
+under the SIL Open Font License 1.1 (https://openfontlicense.org). Bundled so
+the studio works offline; unchanged apart from being cut to the Latin subsets.
+
 ## project-igi-editor
 
 <https://github.com/HeavenHM/project-igi-editor>

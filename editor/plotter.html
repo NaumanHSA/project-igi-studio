@@ -1,7 +1,6 @@
 <meta charset="utf-8">
 <title>Project IGI Studio</title>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
 <style>
 /* One look: the in-game map computer. Dark phosphor ground, buildings as lit
    green shapes, contacts and labels in red. */
@@ -11061,6 +11060,7 @@ function paintSetup(d,opts){
     h+='<div class="field" style="margin-top:10px"><span class="lbl">Or type the folder</span>'+
        '<input id="su-path" placeholder="C:\\Program Files (x86)\\Project IGI" value="'+esc(d.game||"")+'"></div>'+
        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">'+
+       (window.studioApp&&window.studioApp.pickFolder?'<button class="btn" id="su-browse">Browse...</button>':'')+
        '<button class="btn" id="su-again">Look again</button>'+
        '<button class="btn primary" id="su-set">Use this folder</button></div>';
     if(d.missing&&d.missing.length){
@@ -11103,6 +11103,12 @@ function paintSetup(d,opts){
     b.addEventListener("click",function(){useGame((SETUP.found||[])[+b.getAttribute("data-use")].path)});
   });
   if($("su-set"))$("su-set").addEventListener("click",function(){useGame($("su-path").value)});
+  // the desktop app has a real folder picker (app/preload.js)
+  if($("su-browse"))$("su-browse").addEventListener("click",function(){
+    window.studioApp.pickFolder("Where is Project I.G.I. installed?").then(function(dir){
+      if(dir){$("su-path").value=dir;useGame(dir)}
+    });
+  });
   if($("su-again"))$("su-again").addEventListener("click",function(){setupSheet({find:true})});
   if($("su-change"))$("su-change").addEventListener("click",function(){
     SETUP=Object.assign({},SETUP,{ready:false});setupSheet({find:true});

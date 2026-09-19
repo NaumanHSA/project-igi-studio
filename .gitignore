@@ -34,3 +34,7 @@ out/
 # The site's build output
 site/.vitepress/cache/
 site/.vitepress/dist/
+
+# The desktop app: the bundled server and the installers are built, not kept
+app/dist-server/
+app/build-server/

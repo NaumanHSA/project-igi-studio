@@ -616,6 +616,20 @@ class Handler(SimpleHTTPRequestHandler):
         # before the build
         if self.path.endswith((".json", ".js", ".html")):
             self.send_header("Cache-Control", "no-store, must-revalidate")
+        # The page loads nothing that is not its own, and talks to nothing but
+        # this server: no script from elsewhere, and no request that could carry
+        # a mission (or a key) off the machine. The AI's calls leave through the
+        # server's own proxy. Inline scripts stay allowed until the editor's
+        # main script is split into files.
+        if self.path.split("?", 1)[0].endswith((".html", "/")):
+            self.send_header("Content-Security-Policy",
+                             "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                             "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+                             "font-src 'self'; connect-src 'self'; worker-src 'self' blob:; "
+                             "object-src 'none'; base-uri 'none'; form-action 'none'; "
+                             "frame-ancestors 'none'")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
         super().end_headers()
 
     def _mission_route(self):
