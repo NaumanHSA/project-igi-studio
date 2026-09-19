@@ -137,6 +137,114 @@ def setup_state(cfg, find=False):
     return out
 
 
+class SetupProgress(object):
+    """Turns the reference copy's and the level data build's own log into a
+    percentage and a list of steps, for the setup screen to draw.
+
+    The steps are weighted by how long they really take on a typical machine:
+    the ground heights are most of the data build, the copy most of the rest.
+    """
+    COPY, CHECK = 16.0, 6.0          # the reference copy and its check
+
+    def __init__(self, say, reference=True, data=True):
+        from studio.setup import data as DATA
+        self.say = say
+        self.steps = []
+        weights = {"levels": 3, "graphs": 2, "models": 2, "catalog": 1, "terrain": 40,
+                   "ground": 5, "meshes": 5, "navtemplates": 2, "library": 1}
+        if reference:
+            self.steps += [{"key": "copy", "label": "Copying the game's own levels", "w": self.COPY},
+                           {"key": "check", "label": "Checking the copy, file by file", "w": self.CHECK}]
+        if data:
+            for name, _m, _r, what, _x in DATA.STEPS:
+                self.steps.append({"key": name, "label": what[:1].upper() + what[1:],
+                                   "w": float(weights.get(name, 2))})
+        total = sum(st["w"] for st in self.steps) or 1.0
+        acc = 0.0
+        for st in self.steps:
+            st["from"], acc = acc / total * 100.0, acc + st["w"]
+            st["to"] = acc / total * 100.0
+            st["state"], st["detail"] = "todo", ""
+        self.by = {st["key"]: st for st in self.steps}
+        self.pct = 1.0
+        self._emit()
+
+    def _start(self, key, detail=""):
+        for st in self.steps:
+            if st["key"] == key:
+                st["state"], st["detail"] = "now", detail
+                break
+            if st["state"] != "done":
+                st["state"] = "done"
+
+    def _part(self, key, frac):
+        st = self.by.get(key)
+        if st:
+            self.pct = max(self.pct, st["from"] + (st["to"] - st["from"]) * max(0.0, min(1.0, frac)))
+
+    def _emit(self):
+        self.say("PCT %d" % int(self.pct))
+        self.say("STEPS " + json.dumps([{k: st.get(k, "") for k in ("key", "label", "state", "detail")}
+                                        for st in self.steps]))
+
+    def log(self, text):
+        t = str(text)
+        low = t.strip().lower()
+        m = re.match(r"^copying (\d+) files", low)
+        if m and "copy" in self.by:
+            self._start("copy", "%s files" % m.group(1))
+        m = re.match(r"^(\d+) of (\d+)$", low)
+        if m and "copy" in self.by and self.by["copy"]["state"] == "now":
+            self._part("copy", int(m.group(1)) / float(m.group(2)))
+            self.by["copy"]["detail"] = "%s of %s files" % (m.group(1), m.group(2))
+        if low.startswith("checking the copy") and "check" in self.by:
+            self._start("check")
+            self._part("copy", 1.0)
+            total = re.search(r"of (\d+) files", self.by["copy"]["detail"] or "")
+            self.by["copy"]["detail"] = "%s files" % total.group(1) if total else ""
+        m = re.match(r"^checked (\d+) of (\d+)$", low)
+        if m and "check" in self.by:
+            self._part("check", int(m.group(1)) / float(m.group(2)))
+            self.by["check"]["detail"] = "%s of %s files" % (m.group(1), m.group(2))
+        if low.startswith("reference ready") and "check" in self.by:
+            m2 = re.search(r"(\d+) checked", low)
+            self.by["check"]["state"], self.by["check"]["detail"] = "done", ("%s files" % m2.group(1)) if m2 else ""
+            self._part("check", 1.0)
+        m = re.match(r"^stage (\d+) of (\d+): (.*)$", low)
+        if m:
+            k = int(m.group(1)) - 1
+            keys = [st["key"] for st in self.steps if st["key"] not in ("copy", "check")]
+            if 0 <= k < len(keys):
+                self._start(keys[k])
+                self._part(keys[k], 0.0)
+                self.say("STAGE " + t.strip()[6:] if t.strip().lower().startswith("stage ") else t)
+        # within a step, the extractors print a line per level: count them
+        m = re.match(r"^level\s+(\d+)\b", low)
+        if m:
+            cur = next((st for st in self.steps if st["state"] == "now"
+                        and st["key"] not in ("copy", "check")), None)
+            if cur is not None:
+                seen = cur.setdefault("_levels", set())
+                seen.add(int(m.group(1)))
+                self._part(cur["key"], len(seen) / 14.0)
+                cur["detail"] = "level %d of 14" % len(seen)
+        m = re.match(r"^(\w+) done in (\d+)s$", low)
+        if m and m.group(1) in self.by:
+            st = self.by[m.group(1)]
+            st["state"], st["detail"] = "done", "%ss" % m.group(2)
+            self._part(m.group(1), 1.0)
+        if not low.startswith("stage "):
+            self.say(t)
+        self._emit()
+
+    def finish(self):
+        for st in self.steps:
+            st["state"] = "done"
+        self.pct = 100.0
+        self._emit()
+        self.say("STAGE done")
+
+
 def setup_game(body):
     """Connect the studio to a copy of the game.
 
@@ -156,12 +264,11 @@ def setup_game(body):
 
     def work(say=print):
         from studio.setup import data as DATA
-        say("STAGE copying the game's own levels")
-        info = snapshot.make(r["path"], log=say)
-        say("STAGE building the level data")
-        DATA.build(r["path"], log=say)
+        track = SetupProgress(say, reference=True, data=True)
+        info = snapshot.make(r["path"], log=track.log)
+        DATA.build(r["path"], log=track.log)
         paths.save({"gamePath": r["path"], "pristinePath": "", "protectedPaths": []})
-        say("STAGE done")
+        track.finish()
         return {"ok": True, "reference": info, **setup_state(load_config())}
 
     return {"ok": True, "job": run_job(work)}
@@ -178,9 +285,9 @@ def setup_snapshot():
     source = pathlib.Path(named) if named and verify.check(named, deep=False)["ok"] else game
 
     def work(say=print):
-        say("STAGE copying the game's own levels")
-        info = snapshot.make(source, log=say)
-        say("STAGE done")
+        track = SetupProgress(say, reference=True, data=False)
+        info = snapshot.make(source, log=track.log)
+        track.finish()
         return {"ok": True, **info}
 
     return {"ok": True, "job": run_job(work)}
@@ -199,8 +306,9 @@ def setup_data():
         return {"ok": False, "error": "the game is not there, and the level data is read out of it"}
 
     def work(say=print):
-        info = DATA.build(game, log=say)
-        say("STAGE done")
+        track = SetupProgress(say, reference=False, data=True)
+        info = DATA.build(game, log=track.log)
+        track.finish()
         return {"ok": True, **info}
 
     return {"ok": True, "job": run_job(work)}
@@ -814,6 +922,8 @@ class Handler(SimpleHTTPRequestHandler):
         jm = re.match(r"^/api/jobs/([a-z0-9]+)$", self.path)
         if jm:
             job = JOBS.get(jm.group(1))
+            if job is not None:
+                job["elapsed"] = round(time.time() - job["started"], 1)
             if not job:
                 return self._json({"ok": False, "error": "no such job"}, 404)
             return self._json(dict(job, ok=True, elapsed=round(time.time() - job["started"], 1)))
@@ -981,6 +1091,19 @@ def run_job(fn, *args):
 
     def say(x):
         x = str(x)
+        # structured progress from a job that knows better than the keywords
+        if x.startswith("PCT "):
+            try:
+                job["pct"] = max(job["pct"], min(100, int(float(x[4:]))))
+            except ValueError:
+                pass
+            return
+        if x.startswith("STEPS "):
+            try:
+                job["steps"] = json.loads(x[6:])
+            except ValueError:
+                pass
+            return
         text = x[6:] if x.startswith("STAGE ") else x
         low = text.lower()
         for key, pct in STAGES:

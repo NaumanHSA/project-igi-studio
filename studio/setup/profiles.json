@@ -1,9 +1,9 @@
 {
  "profiles": [
   {
-   "id": "d90fa1ef26dd3398",
+   "id": "75e4049ce49c9f4d",
    "name": "Retail 1.1 with the mod this project was built against",
-   "notes": "The install Project IGI Studio was developed and tested on, 2026-09. A byte-identical copy sits at D:\\Games\\IGI.",
+   "notes": "The install Project IGI Studio was developed and tested on (September 2026): the retail game, version 1.1, with a mod applied.",
    "files": {
     "igi.exe": "fcb1e184f02fcb28949803f9cfb63884226a01b9c03b4ff091573a1bc473c44c",
     "missions/location0/level1/objects.qvm": "90acf17a8af76ddc24d40f061e796fc5964feed9298f321cb02b160ceaa89971",
@@ -20,18 +20,6 @@
     "missions/location0/level12/objects.qvm": "bba20507e9b66ae7814e64791faa367f07107f167b6b731f8b822c5ee474774c",
     "missions/location0/level13/objects.qvm": "b6208487e5dfaabfed9bb7bf5e86a39a88cfbeb42b27135fdeaafcd2816adb3a",
     "missions/location0/level14/objects.qvm": "19c93306145172897bb79d544c036781f623f5d2035417b475f618b9e385d586",
-    "language/english/objectives.res": "d0ff9e627978dea49662a30fde83ed88bc7157e2727f05556d10146597dee821",
-    "language/french/objectives.res": "9265c20520c11744ded91e38815f477cde9c19c886e1b5cef7fe2443d5b38d68",
-    "language/german/objectives.res": "37408f81b1c62ed2f04ef0957b28e2af481c58ab8a1e25ea0b974f751e521b90",
-    "language/italian/objectives.res": "405615041a1295a16a981379f127fa3fba497048097f308b7e0bd31b38e6a2c4",
-    "language/spanish/objectives.res": "bb0ccfa6e0b0935cf0bebf44101b6597b1647275cac881d120d535c4efc85cf7",
-    "language/usa/objectives.res": "d0ff9e627978dea49662a30fde83ed88bc7157e2727f05556d10146597dee821",
-    "language/english/messages.res": "3b74e47d0556b18753c9e1b5de391e5300fb0fd90da5d1e6ec8fd7bcbf6b5655",
-    "language/french/messages.res": "3e1d804b56726fe3877c11b7328fb0e6d9e26716f60abc6f0b636ea27fa276ff",
-    "language/german/messages.res": "7869034849aa82819af12ec2bc33c1843a6bca323c936ec4a3a244954513008f",
-    "language/italian/messages.res": "3312d43fe262e99140609486f20f650a13a1fe1f8e0abaefd8dc24a445fba7ba",
-    "language/spanish/messages.res": "536309e087280945c0d1e21f294f8bfccf88a0da245d436cef966df828a39da2",
-    "language/usa/messages.res": "67b328ca2addc60d42de0bce13575cb9eaf98e6cce0b5bfb6d194da86db0a754",
     "language/english/missions.res": "612e1dff146d96efd9aab37f1765b27ee7ab8c1fcb28ba654c6fd408abf9ea7c",
     "language/french/missions.res": "9d2eb824d11c92f96c8b647f6570c25b5e10c8c0cc97ac28df5bb16aa128525d",
     "language/german/missions.res": "1426ee2d71339b593fc262c3e752a2a26114ca285d894388e88bd749c18891a2",

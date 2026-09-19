@@ -32,7 +32,13 @@ def needed(game):
 
 
 #: What the fingerprint is taken over: small files that change when the game
-#: does, and never change by themselves.
+#: does, and never change by themselves, nor because of the studio. The
+#: studio adds each mission's text to objectives.res and messages.res, so
+#: those are left out: a game that has had a mission applied is still the same
+#: build.
+STUDIO_WRITES = ("objectives.res", "messages.res")
+
+
 def fingerprint_files(game):
     game = pathlib.Path(game)
     out = []
@@ -42,7 +48,7 @@ def fingerprint_files(game):
             out.append(p)
     for n in LEVELS:
         out.append(game / "missions" / "location0" / ("level%d" % n) / "objects.qvm")
-    for res in ("objectives.res", "messages.res", "missions.res"):
+    for res in ("missions.res",):
         for lang in sorted((game / "language").glob("*")) if (game / "language").is_dir() else []:
             p = lang / res
             if p.is_file():

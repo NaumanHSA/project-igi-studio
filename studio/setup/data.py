@@ -46,17 +46,24 @@ VERSION = 1          # bump when an extractor's output changes, so data is rebui
 
 
 def _run(module, args, log):
+    """Run one extractor, passing on each line it prints as it prints it, so a
+    step that takes a minute still shows it is moving."""
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
-    r = subprocess.run([sys.executable, "-m", module] + args, cwd=str(ROOT), env=env,
-                       capture_output=True, text=True, encoding="utf-8", errors="replace",
-                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    for line in (r.stdout or "").splitlines()[-3:]:
-        if line.strip():
-            log("    " + line.strip())
-    if r.returncode != 0:
-        tail = "\n".join((r.stderr or r.stdout or "").strip().splitlines()[-6:])
-        raise RuntimeError("%s failed:\n%s" % (module, tail))
+    env["PYTHONUNBUFFERED"] = "1"
+    p = subprocess.Popen([sys.executable, "-m", module] + args, cwd=str(ROOT), env=env,
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         encoding="utf-8", errors="replace",
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    tail = []
+    for line in p.stdout:
+        line = line.rstrip()
+        if not line.strip():
+            continue
+        tail = (tail + [line])[-8:]
+        log("    " + line.strip())
+    if p.wait() != 0:
+        raise RuntimeError("%s failed:\n%s" % (module, "\n".join(tail[-6:])))
 
 
 def build(game=None, log=print):

@@ -424,6 +424,113 @@ details.aplog summary{cursor:pointer;font-size:12px;color:var(--muted);margin:0 
 .stat{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);margin:3px 0}
 .stat b{width:9px;height:9px;border-radius:50%;flex:none;background:var(--ok)}
 .stat b.no{background:var(--danger)}
+/* ---------- buttons in dialogs and the library: the map computer's own keys ---------- */
+.sheet .btn,.lib .btn{font-family:"Barlow Condensed","IBM Plex Sans",sans-serif;font-weight:600;font-size:14px;
+  letter-spacing:.07em;text-transform:uppercase;padding:8px 16px;border-radius:3px;position:relative;
+  background:linear-gradient(180deg,rgba(141,255,154,.08),rgba(141,255,154,.01));border:1px solid var(--line);
+  color:var(--ink);transition:border-color .15s,color .15s,box-shadow .15s,transform .05s,background .15s}
+.sheet .btn::before,.lib .btn::before{content:"";position:absolute;inset:-1px;border-radius:3px;pointer-events:none;
+  background:linear-gradient(currentColor,currentColor) left top/9px 1px no-repeat,
+             linear-gradient(currentColor,currentColor) left top/1px 9px no-repeat,
+             linear-gradient(currentColor,currentColor) right bottom/9px 1px no-repeat,
+             linear-gradient(currentColor,currentColor) right bottom/1px 9px no-repeat;
+  opacity:.35;transition:opacity .15s}
+.sheet .btn:hover,.lib .btn:hover{border-color:var(--player);color:var(--player);
+  box-shadow:0 0 14px rgba(141,255,154,.2),inset 0 0 14px rgba(141,255,154,.07)}
+.sheet .btn:hover::before,.lib .btn:hover::before{opacity:1}
+.sheet .btn:active,.lib .btn:active{transform:translateY(1px)}
+.sheet .btn.primary,.lib .btn.primary{background:linear-gradient(180deg,#ffe38e,#ffc933);border-color:#ffd24a;
+  color:#1d1600;box-shadow:0 0 18px rgba(255,210,74,.22)}
+.sheet .btn.primary:hover,.lib .btn.primary:hover{color:#1d1600;filter:none;box-shadow:0 0 26px rgba(255,210,74,.5)}
+.sheet .btn.primary::before,.lib .btn.primary::before{opacity:.5}
+.sheet .btn[disabled]{opacity:.45;cursor:default;box-shadow:none}
+.sheet .sheet-head .btn{font-family:inherit;letter-spacing:0;text-transform:none;padding:2px 9px;font-size:17px}
+.sheet .sheet-head .btn::before{display:none}
+.lib .btn.mc-more{position:absolute;font-family:inherit;letter-spacing:0;text-transform:none;padding:0 8px;font-size:16px;line-height:1.3;
+  background:transparent;border-color:transparent;box-shadow:none}
+.lib .btn.mc-more::before{display:none}
+.lib .btn.mc-more:hover{border-color:var(--line);box-shadow:none}
+
+/* ---------- the setup: connecting a game ---------- */
+.su-head{display:flex;align-items:center;gap:16px;margin:0 0 16px}
+.su-radar{width:58px;height:58px;flex:none;border-radius:50%;border:1px solid var(--line);position:relative;overflow:hidden;
+  background:radial-gradient(circle,rgba(141,255,154,.14) 0 3px,transparent 4px),
+             repeating-radial-gradient(circle,transparent 0 9px,rgba(141,255,154,.13) 9px 10px),
+             linear-gradient(rgba(141,255,154,.13),rgba(141,255,154,.13)) center/1px 100% no-repeat,
+             linear-gradient(rgba(141,255,154,.13),rgba(141,255,154,.13)) center/100% 1px no-repeat,var(--sunken)}
+.su-radar::before{content:"";position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,rgba(141,255,154,.6),rgba(141,255,154,.0) 75deg,transparent 360deg);
+  animation:su-sweep 2.2s linear infinite}
+.su-radar::after{content:"";position:absolute;left:68%;top:30%;width:6px;height:6px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 8px var(--accent);animation:su-blip 2.2s ease-out infinite}
+.su-radar.done{border-color:var(--ok);box-shadow:0 0 14px rgba(95,212,111,.35)}
+.su-radar.done::before{animation:none;background:radial-gradient(circle,rgba(95,212,111,.35),transparent 70%)}
+.su-radar.done::after{animation:none;opacity:1;left:calc(50% - 3px);top:calc(50% - 3px);background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.su-radar.fail{border-color:var(--danger)}
+.su-radar.fail::before{animation:none;background:radial-gradient(circle,rgba(255,107,90,.3),transparent 70%)}
+.su-radar.fail::after{animation:none;background:var(--danger);box-shadow:0 0 10px var(--danger)}
+@keyframes su-sweep{to{transform:rotate(360deg)}}
+@keyframes su-blip{0%,55%{opacity:0}62%{opacity:1}100%{opacity:.1}}
+.su-title{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:24px;line-height:1.1;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink);position:relative;display:inline-block}
+.su-title.glitch{animation:su-flicker 4s infinite;text-shadow:0 0 10px rgba(141,255,154,.35)}
+.su-title.glitch::before,.su-title.glitch::after{content:attr(data-text);position:absolute;left:0;top:0;width:100%;
+  overflow:hidden;clip-path:inset(0 0 100% 0)}
+.su-title.glitch::before{color:#6fdcec;animation:su-glitch-a 2.9s infinite steps(1)}
+.su-title.glitch::after{color:#ff5546;animation:su-glitch-b 3.7s infinite steps(1)}
+@keyframes su-glitch-a{0%,90%,100%{transform:none;clip-path:inset(0 0 100% 0)}
+  91%{transform:translate(-3px,1px);clip-path:inset(15% 0 60% 0)}94%{transform:translate(2px,-1px);clip-path:inset(62% 0 8% 0)}
+  96%{transform:translate(-1px,0);clip-path:inset(40% 0 42% 0)}}
+@keyframes su-glitch-b{0%,86%,100%{transform:none;clip-path:inset(0 0 100% 0)}
+  87%{transform:translate(3px,0);clip-path:inset(45% 0 30% 0)}89%{transform:translate(-2px,1px);clip-path:inset(5% 0 78% 0)}}
+@keyframes su-flicker{0%,100%{opacity:1}95%{opacity:.95}96%{opacity:.55}97%{opacity:1}98.5%{opacity:.8}}
+.su-sub{font:12px "IBM Plex Mono",monospace;color:var(--muted);margin-top:4px;word-break:break-all}
+.su-prog{position:relative;height:16px;border:1px solid var(--line);border-radius:3px;background:var(--sunken);overflow:hidden}
+.su-prog i{position:absolute;left:0;top:0;bottom:0;width:0;transition:width .7s cubic-bezier(.2,.7,.2,1);
+  background:repeating-linear-gradient(135deg,rgba(0,0,0,.2) 0 7px,transparent 7px 14px) 0 0/20px 20px,
+             linear-gradient(90deg,#2f8f3f,#8dff9a);box-shadow:0 0 14px rgba(141,255,154,.55);
+  animation:su-stripes .8s linear infinite}
+.su-prog.done i{animation:none;background:linear-gradient(90deg,#3fae52,#8dff9a)}
+.su-prog.fail i{background:var(--danger);animation:none}
+.su-prog::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(90deg,transparent 0 9%,rgba(8,24,10,.55) 9% 10%)}
+@keyframes su-stripes{to{background-position:20px 0,0 0}}
+.su-meta{display:flex;justify-content:space-between;gap:10px;font:11.5px "IBM Plex Mono",monospace;color:var(--faint);margin:6px 0 14px}
+.su-meta b{color:var(--player);font-weight:500}
+.su-steps{list-style:none;margin:0;padding:0;display:grid;gap:2px;font-size:12.5px}
+.su-steps li{display:flex;align-items:center;gap:10px;color:var(--faint);padding:4px 8px;border-radius:3px;
+  border:1px solid transparent;transition:background .3s,color .3s}
+.su-steps li .d{width:15px;height:15px;flex:none;border:1px solid var(--grid);border-radius:3px;display:grid;
+  place-items:center;font-size:10px;line-height:1}
+.su-steps li.done{color:var(--muted)}
+.su-steps li.done .d{border-color:var(--ok);background:rgba(95,212,111,.18);color:var(--ok)}
+.su-steps li.now{color:var(--ink);background:rgba(141,255,154,.07);border-color:rgba(141,255,154,.14)}
+.su-steps li.now .d{border-color:var(--player);animation:su-pulse 1s ease-in-out infinite}
+.su-steps li.now .d::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--player)}
+.su-steps li .x{margin-left:auto;font:11px "IBM Plex Mono",monospace;color:var(--faint)}
+@keyframes su-pulse{50%{box-shadow:0 0 0 4px rgba(141,255,154,.14)}}
+.su-tip{margin-top:14px;padding:9px 12px;border-left:2px solid var(--accent);background:var(--accent-soft);
+  font-size:12.5px;color:var(--ink);min-height:38px;transition:opacity .45s}
+.su-tip small{display:block;font:600 10.5px "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:2px}
+.su-list{display:grid;gap:8px;margin:0 0 6px}
+.su-row{display:grid;grid-template-columns:16px 1fr;gap:8px;font-size:13px;color:var(--ink);align-items:start}
+.su-row .dot{width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--ok);box-shadow:0 0 7px rgba(95,212,111,.7)}
+.su-row .dot.info{background:var(--warn);box-shadow:0 0 7px rgba(255,177,59,.6)}
+.su-row .dot.bad{background:var(--danger);box-shadow:0 0 7px rgba(255,107,90,.6)}
+.su-row small{display:block;color:var(--faint);font-size:11.5px;margin-top:2px;line-height:1.4}
+.su-row .mono{font-family:"IBM Plex Mono",monospace;font-size:12px}
+.su-panel{border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin:12px 0 0;background:rgba(0,0,0,.14)}
+.su-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center;margin-top:16px}
+.su-actions .grow{flex:1}
+.su-foot{margin-top:12px;font-size:11.5px;color:var(--faint)}
+.su-foot .mono{font-family:"IBM Plex Mono",monospace}
+.su-found{display:grid;gap:6px;margin:6px 0 4px}
+.su-found .f{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:8px 10px;border:1px solid var(--line);
+  border-radius:4px;background:rgba(0,0,0,.12)}
+.su-found .f .mono{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.su-radar::before,.su-radar::after,.su-title.glitch,.su-title.glitch::before,
+  .su-title.glitch::after,.su-prog i,.su-steps li.now .d{animation:none}}
 
 /* ---- side panels, chosen by tabs on the left wall ---- */
 .tabs{flex:none;width:28px;display:flex;flex-direction:column;justify-content:center;gap:8px;
@@ -11024,16 +11131,30 @@ function showConfig(){
   });
 }
 // ---------------------------------------------------------------- first run
-// The studio needs one thing from you: where the game is. It looks for it
-// first, checks what it finds, and keeps its own copy of the parts a mission
-// is rebuilt from, so a mission built next year starts from the same level as
-// one built today. studio/setup/, /api/setup.
+// The studio needs one thing from you: where the game is. Connecting it copies
+// the parts of the game a mission is rebuilt from (checked file by file), then
+// reads the level data out of it, and only then uses it. studio/setup/,
+// /api/setup, and the job the server runs for it, which reports a percentage
+// and its steps as it goes.
 var SETUP=null;
+var SU_TIPS=[
+  "This happens once. After it, the studio opens straight to your missions.",
+  "Nothing is written to your game while this runs. It only reads.",
+  "Every mission is rebuilt from this copy, so one you make next year starts from the same level as one you make today.",
+  "The studio ships no game files. Everything it shows is read out of your own copy of the game.",
+  "The ground heights take longest: every level, measured on a one metre grid.",
+  "Your missions and settings live in your own folder, and stay there if you uninstall."
+];
 function mb(n){return (n/1048576).toFixed(0)+" MB"}
+function mmss(s){s=Math.max(0,Math.round(s||0));return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2)}
+function suRow(kind,text,small){
+  return '<div class="su-row"><span class="dot'+(kind&&kind!=="ok"?" "+kind:"")+'"></span><div>'+text+
+    (small?'<small>'+small+'</small>':'')+'</div></div>';
+}
+function suWide(){var card=$("sheet").querySelector(".sheet-card");if(card)card.classList.add("wide")}
 function setupSheet(opts){
   opts=opts||{};
-  sheet(opts.title||"Set up the game","<p class=\"hint\">Looking for your copy of the game...</p>");
-  var card=$("sheet").querySelector(".sheet-card");if(card)card.classList.add("wide");
+  sheet(opts.title||"Set up the game",'<p class="hint">Looking for your copy of the game...</p>');suWide();
   return fetch("api/setup"+(opts.find?"?find=1":"")).then(function(r){return r.json()}).then(function(d){
     SETUP=d;paintSetup(d,opts);return d;
   }).catch(function(e){
@@ -11041,199 +11162,237 @@ function setupSheet(opts){
   });
 }
 function paintSetup(d,opts){
-  var h="";
-  if(!d.ready){
-    h+=d.gameMissing
-      ? '<p style="margin:0 0 6px"><b>The game folder is not there any more.</b></p>'+
-        '<p style="margin:0 0 10px">The studio was set up with <span class="mono">'+esc(d.game)+'</span>, '+
-        'and that folder cannot be found. A drive not plugged in, the game moved, or the game uninstalled.</p>'+
-        '<p class="hint" style="margin:0 0 10px">Your missions are safe in <span class="mono">'+esc(d.home)+'</span>, '+
-        'and you can keep editing them: the studio reads the levels from its own copy. '+
-        'Only building into the game needs the game itself.</p>'
-      : '<p style="margin:0 0 10px">Project IGI Studio builds missions from your own copy of the game. '+
-        'It ships no game files, so tell it where the game is.</p>';
-    var found=d.found||[];
-    if(found.length){
-      h+='<div class="lbl" style="margin-top:6px">Copies found on this machine</div>';
-      h+=found.map(function(f,i){
-        return '<div class="set-row" style="justify-content:space-between;gap:10px">'+
-          '<span><span class="mono">'+esc(f.path)+'</span><br><span class="hint">'+esc(f.where)+'</span></span>'+
-          '<button class="btn primary" data-use="'+i+'">Use this one</button></div>';
-      }).join("");
-    } else {
-      h+='<p class="hint">No copy found in the usual places.</p>';
-    }
-    h+='<div class="field" style="margin-top:10px"><span class="lbl">Or type the folder</span>'+
-       '<input id="su-path" placeholder="C:\\Program Files (x86)\\Project IGI" value="'+esc(d.game||"")+'"></div>'+
-       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">'+
-       (window.studioApp&&window.studioApp.pickFolder?'<button class="btn" id="su-browse">Browse...</button>':'')+
-       '<button class="btn" id="su-again">Look again</button>'+
-       '<button class="btn primary" id="su-set">Use this folder</button></div>';
-    if(d.missing&&d.missing.length){
-      h+='<p class="bad" style="margin-top:10px">That folder is missing: '+d.missing.slice(0,4).map(esc).join(", ")+'</p>';
-    }
-  } else {
-    h+='<div class="stat"><b></b>The game is at <span class="mono">'+esc(d.game)+'</span></div>'+
-       '<div class="stat"><b></b>'+d.levels+' built-in missions'+
-       (d.custom&&d.custom.length?', your slots: '+d.custom.join(", "):'')+'</div>';
-    h+=d.build
-      ? '<div class="stat"><b></b>Build: '+esc(d.build)+'</div>'
-      : '<div class="stat"><b class="no"></b>This build is not one the studio knows'+
-        (d.nearest?'. Closest: '+esc(d.nearest)+' ('+d.differs+' file(s) differ)':'')+
-        '<br><span class="hint">It will still work. Missions are built from this game, whatever it is.</span></div>';
-    var sn=d.snapshot||{};
-    if(sn.made){
-      h+='<div class="stat"><b></b>Reference copy: '+sn.files+' files, '+mb(sn.bytes)+', checked'+
-         (sn.stale?' <span class="bad">(the game\'s levels have changed since it was taken)</span>':'')+'</div>';
-    } else {
-      h+='<div class="stat"><b class="no"></b>No reference copy yet ('+sn.files+' files, '+mb(sn.bytes||0)+')</div>'+
-         '<p class="hint">Every mission is rebuilt from the level it is based on, so the studio keeps its own copy '+
-         'of those parts in your folder and rebuilds from that. Nothing is written to the game until it exists.</p>';
-    }
-    var dt=d.data||{};
-    h+=dt.ready
-      ? '<div class="stat"><b></b>Level data: built from your game'+(dt.seconds?' in '+dt.seconds+' s':'')+'</div>'
-      : '<div class="stat"><b class="no"></b>No level data yet. The editor draws the levels from it.</div>';
-    h+='<div id="su-lost"></div><div id="su-job"></div>'+
-       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
-       '<button class="btn" id="su-change">Use another folder</button>'+
-       '<button class="btn" id="su-check">Check the built-in missions</button>'+
-       '<button class="btn'+(dt.ready?'':' primary')+'" id="su-data">'+(dt.ready?'Build the level data again':'Build the level data')+'</button>'+
-       '<button class="btn primary" id="su-snap">'+(sn.made?"Take the reference again":"Take the reference")+'</button>'+
-       (opts.first?'<button class="btn" id="su-skip">Later</button>':'')+'</div>';
-    h+='<p class="hint" style="margin-top:10px">Your missions and settings are kept in <span class="mono">'+esc(d.home)+'</span>.</p>';
+  if(!d.ready)paintFind(d,opts||{});
+  else paintReady(d,opts||{});
+}
+// not connected yet, or the game has gone
+function paintFind(d,opts){
+  var h='<div class="su-head"><div class="su-radar"></div><div>'+
+    '<div class="su-title glitch" data-text="'+(d.gameMissing?"Game not found":"Find your game")+'">'+
+      (d.gameMissing?"Game not found":"Find your game")+'</div>'+
+    '<div class="su-sub">'+(d.gameMissing?esc(d.game):"Project IGI Studio needs your copy of Project I.G.I.")+'</div></div></div>';
+  h+=d.gameMissing
+    ? '<p style="margin:0 0 8px">The folder the studio was set up with cannot be found: a drive not plugged in, '+
+      'the game moved, or the game uninstalled.</p>'+
+      '<p class="hint" style="margin:0 0 12px">Your missions are safe in <span class="mono">'+esc(d.home)+'</span>, '+
+      'and you can keep editing them: the studio reads the levels from its own copy. Only building into the game needs the game.</p>'
+    : '<p style="margin:0 0 12px">It builds missions from your own copy of the game, and ships no game files of its own. '+
+      'Show it where the game is installed.</p>';
+  var found=d.found||[];
+  if(found.length){
+    h+='<div class="lbl">Found on this machine</div><div class="su-found">'+found.map(function(f,i){
+      return '<div class="f"><div><span class="mono">'+esc(f.path)+'</span><br><span class="hint">'+esc(f.where)+'</span></div>'+
+        '<button class="btn primary" data-use="'+i+'">Use this one</button></div>';
+    }).join("")+'</div>';
   }
+  var desktop=window.studioApp&&window.studioApp.pickFolder;
+  h+='<div class="field" style="margin-top:12px"><span class="lbl">'+(found.length?"Or a folder of your own":"The game folder")+'</span>'+
+     '<input id="su-path" placeholder="C:\\Program Files (x86)\\Project IGI" value="'+esc(d.gameMissing?"":(d.game||""))+'"></div>';
+  if(d.missing&&d.missing.length){
+    h+='<div class="su-panel">'+suRow("bad","That folder is not a copy of the game",
+      "It has no "+d.missing.slice(0,3).map(esc).join(", ")+(d.missing.length>3?" and more":"")+".")+'</div>';
+  }
+  h+='<div class="su-actions">'+
+     (opts.first?'<button class="btn" id="su-skip">Later</button>':'')+'<span class="grow"></span>'+
+     '<button class="btn" id="su-again">Look again</button>'+
+     (desktop?'<button class="btn" id="su-browse">Browse...</button>':'')+
+     '<button class="btn primary" id="su-set">Use this folder</button></div>';
   $("sheet-body").innerHTML=h;
-
-  ($("sheet-body").querySelectorAll("[data-use]")||[]).forEach(function(b){
+  Array.prototype.forEach.call($("sheet-body").querySelectorAll("[data-use]"),function(b){
     b.addEventListener("click",function(){useGame((SETUP.found||[])[+b.getAttribute("data-use")].path)});
   });
-  if($("su-set"))$("su-set").addEventListener("click",function(){useGame($("su-path").value)});
-  // the desktop app has a real folder picker (app/preload.js)
+  $("su-set").addEventListener("click",function(){useGame($("su-path").value)});
+  $("su-path").addEventListener("keydown",function(e){if(e.key==="Enter")useGame($("su-path").value)});
+  $("su-again").addEventListener("click",function(){setupSheet({find:true,first:opts.first})});
+  if($("su-skip"))$("su-skip").addEventListener("click",function(){$("sheet").hidden=true});
   if($("su-browse"))$("su-browse").addEventListener("click",function(){
     window.studioApp.pickFolder("Where is Project I.G.I. installed?").then(function(dir){
       if(dir){$("su-path").value=dir;useGame(dir)}
     });
   });
-  if($("su-again"))$("su-again").addEventListener("click",function(){setupSheet({find:true})});
-  if($("su-change"))$("su-change").addEventListener("click",function(){
-    SETUP=Object.assign({},SETUP,{ready:false});setupSheet({find:true});
-  });
-  if($("su-snap"))$("su-snap").addEventListener("click",makeSnapshot);
-  if($("su-data"))$("su-data").addEventListener("click",buildData);
-  if($("su-lost"))lostMissions();
-  if($("su-check"))$("su-check").addEventListener("click",checkBuiltins);
-  if($("su-skip"))$("su-skip").addEventListener("click",function(){$("sheet").hidden=true});
 }
-// Every Apply writes the whole mission into its slot in the game, so a studio
-// folder that was lost, or a move to another machine, can be filled again from
-// the game itself. /api/recoverable, /api/recover.
+// connected: what the studio knows, and a way on
+function paintReady(d,opts){
+  var sn=d.snapshot||{},dt=d.data||{};
+  var h='<div class="su-head"><div class="su-radar done"></div><div>'+
+    '<div class="su-title">Game connected</div><div class="su-sub">'+esc(d.game)+'</div></div></div><div class="su-list">';
+  h+=suRow("ok",d.levels+" built-in missions"+(d.custom&&d.custom.length?", and your "+(d.custom.length>1?"slots ":"slot ")+d.custom.join(", "):""));
+  h+=d.build
+    ? suRow("ok","Build: "+esc(d.build))
+    : suRow("info","A build the studio has not seen before",
+        "That is fine: missions are built from whatever this game is."+
+        (d.nearest?" It is closest to "+esc(d.nearest)+" ("+d.differs+" file"+(d.differs===1?"":"s")+" differ).":""));
+  h+=sn.made
+    ? suRow(sn.stale?"info":"ok","Reference copy: "+sn.files+" files, "+mb(sn.bytes)+", checked",
+        sn.stale?"The game's levels have changed since it was taken. Take it again if you meant them to.":"")
+    : suRow("bad","No reference copy yet","Nothing is written to the game until there is one.");
+  h+=dt.ready
+    ? suRow("ok","Level data: built from your game"+(dt.seconds?" in "+dt.seconds+" s":""))
+    : suRow("bad","No level data yet","The editor draws the levels from it.");
+  h+='</div><div id="su-lost"></div><div id="su-job"></div>';
+  var can=sn.made&&dt.ready;
+  h+='<div class="su-actions">'+
+     '<button class="btn" id="su-change">Another folder</button>'+
+     '<button class="btn" id="su-check">Check built-in missions</button>'+
+     '<button class="btn" id="su-snap">'+(sn.made?"Retake reference":"Take the reference")+'</button>'+
+     '<button class="btn" id="su-data">'+(dt.ready?"Rebuild level data":"Build level data")+'</button>'+
+     '<span class="grow"></span>'+
+     '<button class="btn primary" id="su-open"'+(can?'':' disabled')+'>Open the studio</button></div>'+
+     '<div class="su-foot">Your missions and settings are kept in <span class="mono">'+esc(d.home)+'</span>.</div>';
+  $("sheet-body").innerHTML=h;
+  $("su-open").addEventListener("click",openStudio);
+  $("su-change").addEventListener("click",function(){paintFind(Object.assign({},d,{ready:false,missing:[]}),{})});
+  $("su-snap").addEventListener("click",makeSnapshot);
+  $("su-data").addEventListener("click",buildData);
+  $("su-check").addEventListener("click",checkBuiltins);
+  lostMissions();
+}
+function openStudio(){
+  $("sheet").hidden=true;
+  probeServer().then(function(){if(Store)showLibrary()});
+}
+// Every Apply writes the whole mission into its slot in the game, so missions
+// a new or wiped studio folder has not got can be brought back from the game.
 function lostMissions(){
   var box=$("su-lost");if(!box)return;
   fetch("api/recoverable").then(function(r){return r.json()}).then(function(d){
     var list=d.missions||[];if(!list.length){box.innerHTML="";return}
-    box.innerHTML='<div class="stat" style="margin-top:8px"><b class="no"></b>'+list.length+
-      ' mission(s) in the game are not in this studio: '+
-      list.map(function(m){return esc(m.name)+" (slot "+m.slot+")"}).join(", ")+'</div>'+
-      '<p class="hint">The game carries the whole mission, so they can be brought back.</p>'+
-      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="su-get">Bring them back</button></div>';
+    box.innerHTML='<div class="su-panel">'+suRow("info",list.length+" mission"+(list.length>1?"s":"")+" in the game, not in this studio",
+        list.map(function(m){return esc(m.name)+" (slot "+m.slot+")"}).join(", ")+
+        ". The game carries each whole mission, so it can be brought back.")+
+      '<div class="su-actions" style="margin-top:8px"><button class="btn" id="su-get">Bring '+(list.length>1?"them":"it")+' back</button></div></div>';
     $("su-get").addEventListener("click",function(){
-      box.innerHTML='<p class="hint">Bringing them back...</p>';
+      $("su-get").disabled=true;$("su-get").textContent="Bringing back...";
       fetch("api/recover",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
         .then(function(r){return r.json()}).then(function(res){
-          box.innerHTML='<p class="good">Back in the studio: '+(res.recovered||[]).map(esc).join(", ")+'</p>';
-          if(typeof refreshAll==="function")refreshAll();
-        });
+          var back=res.recovered||[],bad=res.failed||[];
+          box.innerHTML='<div class="su-panel">'+
+            (back.length?suRow("ok","Back in the studio: "+back.map(function(id){
+              var m=list.filter(function(x){return x.id===id})[0];return esc(m?m.name:id)}).join(", "),
+              "Open the studio to see "+(back.length>1?"them":"it")+" in your missions."):"")+
+            (bad.length?suRow("bad","Could not bring back: "+bad.map(function(f){return esc(f.id)}).join(", "),
+              esc(bad[0].error||"")):"")+'</div>';
+        }).catch(function(e){box.innerHTML='<div class="su-panel">'+suRow("bad","It could not be done",esc(String(e)))+'</div>'});
     });
   }).catch(function(){box.innerHTML=""});
 }
+// The job view: a radar, a glitching title, the progress bar, the steps as
+// they tick off, how long it has been, and a word now and then.
+function runSetupJob(jobId,o){
+  var t0=Date.now(),tip=Math.floor(Math.random()*SU_TIPS.length),lastTip=Date.now(),stopped=false;
+  $("sheet-body").innerHTML=
+    '<div class="su-head"><div class="su-radar" id="su-radar"></div><div>'+
+      '<div class="su-title glitch" id="su-title" data-text="'+esc(o.title)+'">'+esc(o.title)+'</div>'+
+      '<div class="su-sub">'+esc(o.sub||"")+'</div></div></div>'+
+    '<div class="su-prog" id="su-prog"><i id="su-bar"></i></div>'+
+    '<div class="su-meta"><span id="su-now">Starting...</span><span><b id="su-pct">0%</b> &middot; <span id="su-time">0:00</span></span></div>'+
+    '<ul class="su-steps" id="su-steps"></ul>'+
+    '<div class="su-tip" id="su-tip"><small>Please wait</small>'+esc(SU_TIPS[tip])+'</div>'+
+    '<div id="su-after"></div>';
+  function paint(job){
+    var pct=Math.max(0,Math.min(100,job.pct||0));
+    $("su-bar").style.width=pct+"%";$("su-pct").textContent=Math.round(pct)+"%";
+    $("su-time").textContent=mmss(job.elapsed!=null?job.elapsed:(Date.now()-t0)/1000);
+    var steps=job.steps||[],now=steps.filter(function(s){return s.state==="now"})[0];
+    $("su-now").textContent=now?now.label+(now.detail?" ("+now.detail+")":""):(job.done?"":"Working...");
+    $("su-steps").innerHTML=steps.map(function(s){
+      return '<li class="'+s.state+'"><span class="d">'+(s.state==="done"?"&#10003;":"")+'</span>'+esc(s.label)+
+        '<span class="x">'+esc(s.state==="done"?s.detail:(s.state==="now"?s.detail:""))+'</span></li>';
+    }).join("");
+    if(Date.now()-lastTip>6500){
+      lastTip=Date.now();tip=(tip+1)%SU_TIPS.length;var el=$("su-tip");el.style.opacity=0;
+      setTimeout(function(){if(!stopped){el.innerHTML='<small>Please wait</small>'+esc(SU_TIPS[tip]);el.style.opacity=1}},450);
+    }
+  }
+  (function poll(){
+    fetch("api/jobs/"+jobId).then(function(r){return r.json()}).then(function(j){
+      var job=j.job||j;
+      if(!$("su-bar"))return;                         // the sheet was closed or replaced
+      paint(job);
+      if(!job.done)return setTimeout(poll,500);
+      stopped=true;
+      var res=job.result||{};
+      $("su-title").classList.remove("glitch");
+      if(res.ok){
+        $("su-radar").classList.add("done");$("su-prog").classList.add("done");
+        $("su-title").textContent=o.doneTitle||"Done";$("su-now").textContent="Finished";
+        $("su-tip").style.display="none";
+        if(o.done)o.done(res);
+      }else{
+        $("su-radar").classList.add("fail");$("su-prog").classList.add("fail");
+        $("su-title").textContent="Stopped";$("su-tip").style.display="none";
+        $("su-after").innerHTML='<div class="su-panel">'+suRow("bad",esc(o.failed||"It could not finish"),
+            esc(String(res.error||"").split("\n").slice(-2).join(" ")))+'</div>'+
+          '<div class="su-actions"><button class="btn" id="su-back">Back</button></div>';
+        $("su-back").addEventListener("click",function(){setupSheet({find:true})});
+      }
+    }).catch(function(){setTimeout(poll,1500)});
+  })();
+}
+function startJob(url,body,o){
+  fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})
+    .then(function(r){return r.json()}).then(function(d){
+      if(!d.ok){
+        if(o.onRefused)return o.onRefused(d);
+        $("sheet-body").innerHTML='<div class="su-panel">'+suRow("bad",esc(d.error||"It could not start"))+'</div>';
+        return;
+      }
+      runSetupJob(d.job&&d.job.id?d.job.id:d.job,o);
+    });
+}
 function useGame(path){
   if(!path||!path.trim())return;
-  $("sheet-body").innerHTML='<p class="hint">Checking '+esc(path)+'...</p>';
-  fetch("api/setup/game",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({path:path.trim()})}).then(function(r){return r.json()}).then(function(d){
-    if(!d.ok){
-      SETUP=Object.assign({},SETUP||{},{ready:false,missing:d.missing||[],game:d.path||path});
-      paintSetup(SETUP,{});
-      return;
+  path=path.trim();
+  startJob("api/setup/game",{path:path},{
+    title:"Connecting",sub:path,doneTitle:"Connected",failed:"The game could not be connected",
+    onRefused:function(d){
+      SETUP=Object.assign({},SETUP||{},{ready:false,gameMissing:false,missing:d.missing||[],game:d.path||path});
+      paintFind(SETUP,{});
+    },
+    done:function(res){
+      SETUP=res;
+      $("su-after").innerHTML=
+        '<div class="su-list" style="margin-top:14px">'+
+          suRow("ok","Reference copy made and checked, file by file")+
+          suRow("ok","Level data built from your game")+
+          (res.build?suRow("ok","Build: "+esc(res.build))
+                    :suRow("info","A build the studio has not seen before","That is fine: missions are built from whatever this game is."))+
+        '</div><div id="su-lost"></div>'+
+        '<div class="su-actions"><span class="grow"></span><button class="btn primary" id="su-open">Open the studio</button></div>';
+      $("su-open").addEventListener("click",openStudio);
+      lostMissions();
+      probeServer();
     }
-    // the studio copies the levels it rebuilds missions from before it uses a
-    // game, so the first thing you see is that copy being made and checked
-    $("sheet-body").innerHTML=
-      '<p style="margin:0 0 10px">Making the studio\'s own copy of the game\'s levels, and checking it.</p>'+
-      '<p class="hint">Every mission is rebuilt from this copy, so nothing is written to the game until it is there.</p>'+
-      '<div id="su-job"></div>';
-    var box=$("su-job");
-    (function poll(){
-      fetch("api/jobs/"+d.job.id).then(function(r){return r.json()}).then(function(j){
-        var job=j.job||j;
-        box.innerHTML='<div class="bar"><i style="width:'+(job.pct||0)+'%"></i></div>'+
-          '<p class="hint">'+esc(job.detail||job.stage||"")+'</p>';
-        if(!job.done)return setTimeout(poll,400);
-        var res=job.result||{};
-        if(!res.ok){box.innerHTML='<p class="bad">'+esc(res.error||"the copy did not finish, so the game was not connected")+'</p>';return}
-        SETUP=res;paintSetup(res,{});
-        probeServer().then(function(){if(typeof refreshAll==="function")refreshAll()});
-      }).catch(function(){box.innerHTML='<p class="bad">the copy stopped</p>'});
-    })();
   });
 }
 function makeSnapshot(){
-  var box=$("su-job");if(box)box.innerHTML='<p class="hint">Copying...</p>';
-  fetch("api/setup/snapshot",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
-    .then(function(r){return r.json()}).then(function(d){
-      if(!d.ok){if(box)box.innerHTML='<p class="bad">'+esc(d.error||"it could not be copied")+'</p>';return}
-      (function poll(){
-        fetch("api/jobs/"+d.job.id).then(function(r){return r.json()}).then(function(j){
-          var job=j.job||j;
-          if(box)box.innerHTML='<div class="bar"><i style="width:'+(job.pct||0)+'%"></i></div>'+
-            '<p class="hint">'+esc(job.detail||job.stage||"")+'</p>';
-          if(!job.done)return setTimeout(poll,400);
-          setupSheet({});
-        }).catch(function(){if(box)box.innerHTML='<p class="bad">the copy stopped</p>'});
-      })();
-    });
+  startJob("api/setup/snapshot",{},{title:"Taking the reference",sub:(SETUP&&SETUP.game)||"",doneTitle:"Reference taken",
+    done:function(){setTimeout(function(){setupSheet({})},900)}});
 }
 function buildData(){
-  var box=$("su-job");if(box)box.innerHTML='<p class="hint">Reading the levels out of your game...</p>';
-  fetch("api/setup/data",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
-    .then(function(r){return r.json()}).then(function(d){
-      if(!d.ok){if(box)box.innerHTML='<p class="bad">'+esc(d.error||"it could not be built")+'</p>';return}
-      (function poll(){
-        fetch("api/jobs/"+d.job.id).then(function(r){return r.json()}).then(function(j){
-          var job=j.job||j;
-          if(box)box.innerHTML='<div class="bar"><i style="width:'+(job.pct||0)+'%"></i></div>'+
-            '<p class="hint">'+esc(job.stage&&job.stage!=="starting"?job.stage:(job.detail||""))+'</p>';
-          if(!job.done)return setTimeout(poll,500);
-          var res=job.result||{};
-          if(!res.ok){if(box)box.innerHTML='<p class="bad">'+esc(res.error||"it stopped")+'</p>';return}
-          setupSheet({});
-          if(typeof refreshAll==="function")refreshAll();
-        }).catch(function(){if(box)box.innerHTML='<p class="bad">the build stopped</p>'});
-      })();
-    });
+  startJob("api/setup/data",{},{title:"Building level data",sub:(SETUP&&SETUP.game)||"",doneTitle:"Level data built",
+    done:function(){setTimeout(function(){setupSheet({})},900)}});
 }
 function checkBuiltins(){
-  var box=$("su-job");if(box)box.innerHTML='<p class="hint">Comparing every built-in mission with the original...</p>';
+  var box=$("su-job");if(!box)return;
+  box.innerHTML='<div class="su-panel"><p class="hint" style="margin:0">Comparing every built-in mission with the reference copy...</p></div>';
   fetch("api/setup/repair",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
     .then(function(r){return r.json()}).then(function(d){
       var list=d.differences||[],drift=list.filter(function(x){return x.kind==="drift"});
-      if(!list.length){box.innerHTML='<p class="good">Every built-in mission is as it shipped.</p>';return}
-      box.innerHTML='<div class="lbl" style="margin-top:8px">'+list.length+' built-in file(s) differ</div>'+
-        list.map(function(x){
-          return '<div class="stat"><b class="'+(x.kind==="drift"?"no":"")+'"></b><span class="mono">'+esc(x.file)+'</span>'+
-                 (x.note?'<br><span class="hint">'+esc(x.note)+'</span>':'')+'</div>';
-        }).join("")+
-        (drift.length?'<p class="hint">Putting these back makes the game what it shipped as. '+
-          'The old file is kept beside it.</p>'+
-          '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn primary" id="su-fix">Put '+
-          drift.length+' file(s) back</button></div>'
-         :'<p class="hint">Every difference is deliberate, so nothing needs putting back.</p>');
+      if(!list.length){box.innerHTML='<div class="su-panel">'+suRow("ok","Every built-in mission is as it shipped")+'</div>';return}
+      box.innerHTML='<div class="su-panel"><div class="su-list">'+list.map(function(x){
+          return suRow(x.kind==="drift"?"bad":"ok",'<span class="mono">'+esc(x.file)+'</span>',
+            x.note?esc(x.note):(x.kind==="drift"?"Not as the game shipped it.":""));
+        }).join("")+'</div>'+
+        (drift.length
+          ? '<p class="hint">Putting these back makes them what the game shipped. The old file is kept beside each.</p>'+
+            '<div class="su-actions" style="margin-top:6px"><button class="btn primary" id="su-fix">Put '+drift.length+' back</button></div>'
+          : '<p class="hint" style="margin:6px 0 0">Every difference is deliberate, so nothing needs putting back.</p>')+'</div>';
       if($("su-fix"))$("su-fix").addEventListener("click",function(){
-        box.innerHTML='<p class="hint">Putting them back...</p>';
+        box.innerHTML='<div class="su-panel"><p class="hint" style="margin:0">Putting them back...</p></div>';
         fetch("api/setup/repair",{method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({apply:true})}).then(function(r){return r.json()}).then(function(res){
-            box.innerHTML='<p class="good">Put back: '+(res.restored||[]).map(esc).join(", ")+'</p>';
+            box.innerHTML='<div class="su-panel">'+suRow("ok","Put back: "+(res.restored||[]).map(esc).join(", "))+'</div>';
           });
       });
     });
