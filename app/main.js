@@ -149,8 +149,10 @@ function lockSession() {
     details.requestHeaders['X-Studio-Token'] = token;
     done({ requestHeaders: details.requestHeaders });
   });
-  // no camera, microphone, location, notifications or anything else
-  ses.setPermissionRequestHandler((wc, permission, done) => done(permission === 'clipboard-sanitized-write'));
+  // no camera, microphone, location, notifications or anything else; the 3D
+  // view may hold the mouse, as a game's camera does (pointer lock)
+  ses.setPermissionRequestHandler((wc, permission, done) =>
+    done(permission === 'clipboard-sanitized-write' || permission === 'pointerLock'));
 }
 
 function createWindow() {

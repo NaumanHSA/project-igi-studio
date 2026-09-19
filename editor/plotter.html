@@ -1022,8 +1022,13 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 body{-webkit-user-select:none;user-select:none}
 input,textarea,select,[contenteditable="true"],.ai-log,.ai-log *{-webkit-user-select:text;user-select:text}
 /* the top bar: the studio and the mission on the left, the view in the middle, the rest on the right */
+/* The layers, bottom to top: the workspace (the map, its bars, the 3D view: all
+   kept inside it), the top bar and its menus, then everything that pops up over
+   both (hover cards 25-41, the Settings and other sheets 30, the category list
+   55, tooltips 60, the right-click menu 70). */
+.workspace{isolation:isolate}
 .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:14px;padding:7px 14px;
-  padding-top:calc(7px + env(safe-area-inset-top,0px));background:linear-gradient(180deg,#10301a,#0a2010);position:relative;z-index:5;
+  padding-top:calc(7px + env(safe-area-inset-top,0px));background:linear-gradient(180deg,#10301a,#0a2010);position:relative;z-index:10;
   border-bottom:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;opacity:.7;
   background:linear-gradient(90deg,transparent,rgba(141,255,154,.6),transparent)}
@@ -1116,10 +1121,30 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
 .set-note{margin-right:auto}
 .set-note .su-row{margin:0}
 .g-check{margin-top:4px}
-.about{display:flex;gap:16px;align-items:flex-start;margin-bottom:16px}
-.about img{flex:none;filter:drop-shadow(0 0 12px rgba(141,255,154,.4))}
-.about-v{margin:2px 0 0;font-size:12px;color:var(--faint)}
-.about-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+/* Settings, About: the studio, then links, one a line, each with what it is */
+.ab-hero{display:flex;gap:16px;align-items:center;padding:2px 0 16px;border-bottom:1px dashed var(--grid)}
+.ab-hero img{flex:none;filter:drop-shadow(0 0 14px rgba(141,255,154,.45))}
+.ab-ver{display:inline-block;margin-left:10px;padding:1px 7px;border:1px solid var(--line);border-radius:2px;vertical-align:4px;
+  font:500 11px "IBM Plex Mono",monospace;letter-spacing:.04em;text-transform:none;color:var(--player);background:rgba(141,255,154,.06)}
+.ab-ver:empty{display:none}
+.ab-sec{margin:16px 0 7px}
+.ab-list{display:flex;flex-direction:column;border:1px solid var(--grid);border-radius:3px;overflow:hidden;background:rgba(3,11,4,.3)}
+.ab-row{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:12px;
+  padding:9px 14px;border-bottom:1px solid var(--grid);transition:background .15s}
+.ab-row:last-child{border-bottom:0}
+.ab-row:hover{background:rgba(141,255,154,.07)}
+.ab-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.ab-ic svg{display:block;width:20px;height:20px;fill:none;stroke:var(--player);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+  filter:drop-shadow(0 0 5px rgba(141,255,154,.35))}
+.ab-t{min-width:0}
+.ab-t b{display:block;font:500 14px "IBM Plex Sans",sans-serif;color:var(--player);text-decoration:underline;text-decoration-color:transparent;
+  text-underline-offset:3px;transition:text-decoration-color .15s}
+.ab-row:hover .ab-t b{text-decoration-color:rgba(141,255,154,.6)}
+.ab-t small{display:block;margin-top:1px;font:11.5px "IBM Plex Mono",monospace;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ab-go{font-size:18px;color:var(--faint);transition:transform .15s,color .15s}
+.ab-row:hover .ab-go{color:var(--accent);transform:translateX(3px)}
+.ab-foot{margin:18px 0 0;font-size:12px;line-height:1.7;color:var(--faint)}
+.ab-foot a{color:var(--player)}
 .set-pane a{color:var(--player)}
 @media (max-width:760px){.set-wrap{grid-template-columns:1fr}.set-nav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
   .set-row2{grid-template-columns:1fr}}
@@ -11351,22 +11376,39 @@ function paintGamePane(el){
   }
 }
 // Settings, About: what this is, where to read more, and the folders to send
-// with a problem report.
+// with a problem report. Links, one a line, each with what it is.
 function paintAbout(el){
   var app=window.studioApp,site="https://naumanhsa.github.io/project-igi-studio-site/",repo="https://github.com/NaumanHSA/project-igi-studio";
-  el.innerHTML='<div class="about"><img src="icon.png" alt="" width="64" height="64"><div><h3 class="set-h" style="margin:0">Project IGI Studio</h3>'+
-      '<p class="about-v mono" id="ab-ver">'+(SRV&&SRV.version?"Version "+esc(SRV.version):"")+'</p>'+
-      '<p class="set-lead" style="margin:8px 0 0">A mission studio for Project I.G.I.: I\'m Going In. It ships no game files: everything it needs is made on your machine, from your own copy of the game.</p></div></div>'+
-    '<div class="about-links">'+
-      '<a class="btn" href="'+site+'manual/" target="_blank" rel="noopener">The manual</a>'+
-      '<a class="btn" href="'+site+'" target="_blank" rel="noopener">The website</a>'+
-      '<a class="btn" href="'+repo+'" target="_blank" rel="noopener">Source code</a>'+
-      '<a class="btn" href="'+repo+'/issues" target="_blank" rel="noopener">Report a problem</a></div>'+
-    (app&&app.openLogs?'<div class="about-links"><button class="btn" id="ab-logs">Open the log folder</button>'+
-      '<button class="btn" id="ab-home">Open your studio folder</button></div>':'')+
-    '<p class="hint" style="margin:16px 0 0">MIT licensed. Made by <a href="https://github.com/NaumanHSA" target="_blank" rel="noopener">Nouman Ahsan</a>. '+
-    'Project I.G.I. is a trademark of its owners; this is an unofficial fan tool.</p>';
-  if(app&&app.version)app.version().then(function(v){if($("ab-ver"))$("ab-ver").textContent="Version "+v});
+  var IC={
+    book:'<path d="M4 4.5h6.5a2.5 2.5 0 0 1 2.5 2.5v12.5a2 2 0 0 0-2-2H4z"/><path d="M20 4.5h-4.5A2.5 2.5 0 0 0 13 7v12.5a2 2 0 0 1 2-2h5z"/>',
+    globe:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 9.5h17M3.5 14.5h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5S9.7 5.9 12 3.5z"/>',
+    code:'<path d="M8.5 7.5 4 12l4.5 4.5M15.5 7.5 20 12l-4.5 4.5M13.5 5l-3 14"/>',
+    flag:'<path d="M5 20.5V4M5 4.5h12l-2.5 4 2.5 4H5"/>',
+    log:'<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14 3.5V8h5M9 12h7M9 15.5h7"/>',
+    folder:'<path d="M3.5 6.5h6l2 2h9v11h-17z"/>'};
+  function row(ic,title,sub,href,id){
+    var inner='<span class="ab-ic"><svg viewBox="0 0 24 24" aria-hidden="true">'+IC[ic]+'</svg></span>'+
+      '<span class="ab-t"><b>'+title+'</b><small>'+sub+'</small></span><span class="ab-go" aria-hidden="true">›</span>';
+    return href?'<a class="ab-row" href="'+href+'" target="_blank" rel="noopener">'+inner+'</a>'
+               :'<button type="button" class="ab-row" id="'+id+'">'+inner+'</button>';
+  }
+  el.innerHTML='<div class="ab-hero"><img src="icon.png" alt="" width="60" height="60"><div>'+
+      '<h3 class="set-h" style="margin:0">Project IGI Studio<span class="ab-ver mono" id="ab-ver">'+(SRV&&SRV.version?esc(SRV.version):"")+'</span></h3>'+
+      '<p class="set-lead" style="margin:6px 0 0">A mission studio for Project I.G.I.: I\'m Going In. It ships no game files: everything it needs is made on your machine, from your own copy of the game.</p></div></div>'+
+    '<div class="lbl ab-sec">Read more</div><div class="ab-list">'+
+      row("book","The manual","Every part of the studio, page by page",site+"manual/")+
+      row("globe","The website","naumanhsa.github.io/project-igi-studio-site",site)+
+      row("code","Source code","github.com/NaumanHSA/project-igi-studio · MIT licensed",repo)+
+      row("flag","Report a problem","An issue on GitHub: say what happened, and attach the log",repo+"/issues")+
+    '</div>'+
+    (app&&app.openLogs?'<div class="lbl ab-sec">Your files</div><div class="ab-list">'+
+      row("log","Open the log folder","studio.log, what to attach to a report",null,"ab-logs")+
+      row("folder","Open your studio folder","Your missions, settings and level data",null,"ab-home")+
+    '</div>':'')+
+    '<p class="ab-foot">Made by <a href="https://github.com/NaumanHSA" target="_blank" rel="noopener">Nouman Ahsan</a> · '+
+      '<a href="https://nomihsa965.me" target="_blank" rel="noopener">nomihsa965.me</a><br>'+
+      'Project I.G.I. is a trademark of its owners; this is an unofficial fan tool.</p>';
+  if(app&&app.version)app.version().then(function(v){if($("ab-ver"))$("ab-ver").textContent=v});
   if($("ab-logs"))$("ab-logs").addEventListener("click",function(){app.openLogs()});
   if($("ab-home"))$("ab-home").addEventListener("click",function(){app.openHome()});
 }

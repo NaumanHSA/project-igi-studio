@@ -3,6 +3,25 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## 1.0.2
+
+Fixes for 1.0.1's new top bar and 3D view.
+
+### Fixed
+
+- **The mouse looks around in the 3D view.** The desktop app refused the
+  browser's request to hold the mouse, so the view only moved while Alt was
+  held. It is allowed now: click in the view, then move the mouse.
+- **Menus and dialogs are on top.** The Mission and Help menus went under the
+  map's toolbar and under the 3D view, and Settings opened behind the 3D view.
+  Everything that drops down, pops up or opens over the studio is above the map
+  and the 3D view now.
+
+### Changed
+
+- **Settings, About** lists its links one a line, each with what it is,
+  instead of a row of buttons.
+
 ## 1.0.1
 
 Fixes found by testing on a copy of the game as it shipped, a free camera for
