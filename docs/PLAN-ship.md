@@ -225,6 +225,19 @@ Done 2026-09-19:
   product name and version on every signed file, a policy page with roles and
   a privacy statement, and a manual approval per release. So 1.0 goes out
   unsigned, and signing follows.
+- **Tested on an unmodified game** (retail 1.1 as it shipped, no texture pack),
+  through the same API the app's first run uses, in a throwaway studio folder.
+  It found the one gap the plan feared: the first run failed at "what the
+  ground is made of", because the stock game keeps its terrain textures as
+  128 x 128 ARGB1555 and the reader only knew the texture pack's 512 x 512
+  B, G, R, A. (Level 14 is stock even in the modded install, but has no height
+  map, so it was never read.) `studio/extract/ground.py` now reads both, and
+  gives a neutral grey for any format not seen yet rather than failing; on the
+  modded install all 210 textures read exactly as before. After the fix: the
+  first run finished in 78 s, the Test Mission's full plan built into slot 15
+  and an empty level 1 into slot 16, both read back with our own reader, and
+  every built-in mission was as it shipped. The build is now a known profile,
+  "Retail 1.1, unmodified".
 
 Left, in order:
 
@@ -236,7 +249,8 @@ Left, in order:
    and publish it.
 4. Apply to SignPath Foundation, then add signing to the workflow
    (`docs/releasing.md`, Signing).
-5. Test on an unmodified copy of the game (GOG or Steam) when one is to hand.
+5. Play the missions built into the unmodified game (slots 15 and 16 of the
+   test copy), and try a GOG or Steam copy when one is to hand.
 
 ### Phase 8: after 1.0
 

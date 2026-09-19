@@ -42,9 +42,10 @@ own copy of the game.
 ### Good to know
 
 - Windows 10 and 11, 64-bit.
-- So far the studio has been tested on one copy of the game. Other retail,
-  GOG and Steam copies should work, because missions are built from whichever
-  copy you connect, but if yours does something odd, please
+- Tested on two copies of the game: retail 1.1 as it shipped, and retail 1.1
+  with a texture pack. Both are known builds. GOG and Steam copies should work
+  too, because missions are built from whichever copy you connect, but if yours
+  does something odd, please
   [open an issue](https://github.com/NaumanHSA/project-igi-studio/issues).
 - This release is not signed yet. Signing through SignPath Foundation follows
   in a later release.

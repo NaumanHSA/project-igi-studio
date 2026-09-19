@@ -6,10 +6,12 @@
 #       -> editor/data/ground/levelN.bin    zlib: uint8 material per terrain cell (terrain/levelN grid)
 #
 # What the level files hold (worked out here; the game's own renderer is not ported):
-#   terrain/terrain.tex   "LOOP" v9: at +32 the texture count, +40/+44 width and height
-#                         (512), then per texture a 32-byte entry whose first u32 is the
-#                         offset of its pixels, 4 bytes each (B, G, R, A). Levels carry
-#                         18 or 12 textures: 3 per material.
+#   terrain/terrain.tex   "LOOP" v9: at +32 the texture count, +40/+44 width and height,
+#                         then per texture a 32-byte entry: the offset of its pixels, their
+#                         format, and height << 16 | bytes per row. Format 2 is ARGB1555 at
+#                         128 x 128, as the game shipped; format 3 is B, G, R, A, as texture
+#                         packs replace them (512 x 512). Levels carry 18 or 12 textures: 3
+#                         per material.
 #   terrain/terrain.bit   256 headers of 12 bytes (saved pointer, 0, size), then each
 #                         mask as size*size BITS (size^2 / 8 bytes), least significant
 #                         bit first, row by row from the cube's south-west corner.
@@ -27,7 +29,7 @@
 # A material's colour is the average of the sets its entries use, each set the
 # average of its three textures; its grey tile is the first texture of the set it
 # uses most. Which texture of a set the game shows where is not known.
-import base64, json, math, os, pathlib, re, struct, sys, zlib
+import array, base64, json, math, os, pathlib, re, struct, sys, zlib
 from studio import paths
 from studio.qvm import source as qvm_source
 
@@ -69,10 +71,42 @@ def read_masks(path):
     return items
 
 
+_ARGB1555 = None
+
+
+def _bgra_rows(b, off, fmt, stride, w, h):
+    """One texture's pixels as B, G, R, A, row after row with no padding."""
+    global _ARGB1555
+    if fmt == 3:
+        return b"".join(b[off + y * stride:off + y * stride + w * 4] for y in range(h))
+    if fmt == 2:
+        if _ARGB1555 is None:
+            _ARGB1555 = [bytes(((v & 31) * 255 // 31, (v >> 5 & 31) * 255 // 31, (v >> 10 & 31) * 255 // 31, 255))
+                         for v in range(65536)]
+        px = array.array("H")
+        for y in range(h):
+            px.frombytes(b[off + y * stride:off + y * stride + w * 2])
+        return b"".join(_ARGB1555[v] for v in px)
+    # a format no copy of the game has shown yet: a neutral grey, rather than no ground at all
+    return bytes((128, 128, 128, 255)) * (w * h)
+
+
 def read_textures(path):
+    """The level's terrain textures, as B, G, R, A whatever the file keeps them as:
+    (pixels, count, width, height, the offset of each texture in pixels)."""
     b = path.read_bytes()
     n, w, h = struct.unpack_from("<I", b, 32)[0], struct.unpack_from("<I", b, 40)[0], struct.unpack_from("<I", b, 44)[0]
-    return b, n, w, h, [struct.unpack_from("<I", b, 52 + 32 * i)[0] for i in range(n)]
+    ents = [struct.unpack_from("<3I", b, 52 + 32 * i) for i in range(n)]
+    if all(fmt == 3 and (geo & 0xFFFF) in (0, w * 4) for _o, fmt, geo in ents):
+        return b, n, w, h, [off for off, _f, _g in ents]
+    out, offs = [], []
+    at = 0
+    for off, fmt, geo in ents:
+        rows = _bgra_rows(b, off, fmt, (geo & 0xFFFF) or w * (2 if fmt == 2 else 4), w, h)
+        offs.append(at)
+        out.append(rows)
+        at += len(rows)
+    return b"".join(out), n, w, h, offs
 
 
 def material_sets(tdir, lv):
@@ -111,15 +145,18 @@ def mean_rgb(b, off, w, h):
 def grey_tile(b, off, w, h):
     """The texture shrunk to TILE x TILE shades of grey, row 0 at the top."""
     out = bytearray(TILE * TILE)
-    bx, by = w // TILE, h // TILE
     for ty in range(TILE):
+        y0 = ty * h // TILE
+        y1 = max(y0 + 1, (ty + 1) * h // TILE)
         for tx in range(TILE):
+            x0 = tx * w // TILE
+            x1 = max(x0 + 1, (tx + 1) * w // TILE)
             s = 0
-            for yy in range(by):
-                base = off + ((ty * by + yy) * w + tx * bx) * 4
-                for xx in range(0, bx * 4, 4):
+            for yy in range(y0, y1):
+                base = off + yy * w * 4
+                for xx in range(x0 * 4, x1 * 4, 4):
                     s += 0.114 * b[base + xx] + 0.587 * b[base + xx + 1] + 0.299 * b[base + xx + 2]
-            out[ty * TILE + tx] = int(s / (bx * by))
+            out[ty * TILE + tx] = int(s / ((x1 - x0) * (y1 - y0)))
     return bytes(out)
 
 

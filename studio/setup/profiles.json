@@ -27,6 +27,34 @@
     "language/spanish/missions.res": "5b010dc3c8c382de90ef6a8e5358c7c9e7657bcc7320486878fa7b1e6f656f2d",
     "language/usa/missions.res": "2fb56bb43365cd943326731d0b61c13c4cb0483b273d9ae32324b1c2bd68306a"
    }
+  },
+  {
+   "id": "560ae7def60f5563",
+   "name": "Retail 1.1, unmodified",
+   "notes": "The retail game, version 1.1 (IGI.exe of 6 December 2000), as it shipped: no mods and no texture packs. Tested with Project IGI Studio 1.0 on 2026-09-19: first run, data, and missions built into slots 15 and 16.",
+   "files": {
+    "igi.exe": "d0bae7af8c1ff5c73c4aa5c81d62054e5d9c4419b59b65cc6404f81ac4c8da21",
+    "missions/location0/level1/objects.qvm": "90acf17a8af76ddc24d40f061e796fc5964feed9298f321cb02b160ceaa89971",
+    "missions/location0/level2/objects.qvm": "8496d18dc78258914789035c6625487014e9e51c70df5b42fc89a09cf15d40cd",
+    "missions/location0/level3/objects.qvm": "bf45773dbbfcbc70dfebc4e217c2a2fd85d7065585eb492e7d610df565262671",
+    "missions/location0/level4/objects.qvm": "2a73cf208de7152009ebd2103513dc2d003efdd0d9e6ca6cbc54e5d67fe3beff",
+    "missions/location0/level5/objects.qvm": "690d23d46beeef06b1eb9a5858df2a28c3a53905abd3e971e699ff657fb0340b",
+    "missions/location0/level6/objects.qvm": "3bb3f37e81c92a071b0879aae2146491f640daeb024bb73db640d01eb7abb38b",
+    "missions/location0/level7/objects.qvm": "bc2b3222e598ea7c142296e7a1b4fd2394e49fe720612b252f256f0178954dc0",
+    "missions/location0/level8/objects.qvm": "e96f301c95282fbe42ca4863e66fff5e3425a553b91026a28fe43e28eecda503",
+    "missions/location0/level9/objects.qvm": "0a61aa038f31de6c7ea2e7713dabea9113cb9571aaa61938980158ba86343e3b",
+    "missions/location0/level10/objects.qvm": "ece155a19f15bc473c4a6d9e3b56814f968fd4e714fdcde44951900077c55ad8",
+    "missions/location0/level11/objects.qvm": "a4b442b0bfce6d166a57e21dde587717ce0c0784a698d20218ce0901d8f4b36b",
+    "missions/location0/level12/objects.qvm": "e5dcb75820decd06f0fec8e8908d2fb067c3c52ab7ae071dc9c8c1e3d3f72e7d",
+    "missions/location0/level13/objects.qvm": "b6208487e5dfaabfed9bb7bf5e86a39a88cfbeb42b27135fdeaafcd2816adb3a",
+    "missions/location0/level14/objects.qvm": "19c93306145172897bb79d544c036781f623f5d2035417b475f618b9e385d586",
+    "language/english/missions.res": "612e1dff146d96efd9aab37f1765b27ee7ab8c1fcb28ba654c6fd408abf9ea7c",
+    "language/french/missions.res": "9d2eb824d11c92f96c8b647f6570c25b5e10c8c0cc97ac28df5bb16aa128525d",
+    "language/german/missions.res": "1426ee2d71339b593fc262c3e752a2a26114ca285d894388e88bd749c18891a2",
+    "language/italian/missions.res": "18c926b469303ec62a87e103678eaefaa6e3591c56ebfdff04c3a5fac89ea7c4",
+    "language/spanish/missions.res": "5b010dc3c8c382de90ef6a8e5358c7c9e7657bcc7320486878fa7b1e6f656f2d",
+    "language/usa/missions.res": "2fb56bb43365cd943326731d0b61c13c4cb0483b273d9ae32324b1c2bd68306a"
+   }
   }
  ]
 }
