@@ -239,18 +239,25 @@ Done 2026-09-19:
   every built-in mission was as it shipped. The build is now a known profile,
   "Retail 1.1, unmodified".
 
-Left, in order:
+**Public, 2026-09-19.** This repository is public, the site is live and
+publishes itself on every push to its `main`, and 1.0.0 is released: built by
+the workflow from the tag, drafted, and published by hand. The download page
+links straight to the installer and the zip. The application to SignPath
+Foundation is sent.
 
-1. The owner's read of the site and the manual.
-2. A dry run of the release workflow on GitHub (Actions, Release, Run
-   workflow), to see it build on a clean Windows machine.
-3. **Going public**, all on the same day: make this repository public, run
-   the site's Deploy workflow, push the tag `v1.0.0`, read the draft release
-   and publish it.
-4. Apply to SignPath Foundation, then add signing to the workflow
-   (`docs/releasing.md`, Signing).
-5. Play the missions built into the unmodified game (slots 15 and 16 of the
-   test copy), and try a GOG or Steam copy when one is to hand.
+Left:
+
+1. **Play the missions built into the unmodified game** (slots 15 and 16 of
+   the test copy), the one check a build cannot make.
+2. **Prove updates work** with a small 1.0.1: install 1.0.0, publish 1.0.1,
+   and watch the installed studio fetch it and install it on close. Until a
+   second release exists, the update path has only been seen to ask.
+3. **Signing, when SignPath answers**: `docs/releasing.md`, Signing. Then the
+   SmartScreen notes come out of the release notes, the install page and the
+   download page.
+4. **Tell people**: the game's communities (ModDB, its subreddit, Discord
+   servers). Players are the test the other builds need (GOG, Steam), and
+   downloads and discussion are the reputation SignPath asks for.
 
 ### Phase 8: after 1.0
 
