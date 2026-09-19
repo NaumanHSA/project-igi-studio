@@ -1,14 +1,15 @@
-# One way in to everything the studio can do from a terminal.
-#
-#   python -m studio setup              find the game and get ready
-#   python -m studio                    start the server and open the editor
-#   python -m studio serve --port 8765  the same, on a port of your choosing
-#   python -m studio build --plan p.json --out missions/plan --game <game>
-#   python -m studio corpus             capture the game's scripts (needs the ToolKit)
-#   python -m studio check              our compiler against that corpus
-#   python -m studio extract levels     rebuild the editor's data from the game
-#
-# Anything after the command is passed to it unchanged.
+"""One way in to everything the studio can do from a terminal.
+
+  python -m studio setup              find the game and get ready
+  python -m studio                    start the server and open the editor
+  python -m studio serve --port 8765  the same, on a port of your choosing
+  python -m studio build --plan p.json --out missions/plan --game <game>
+  python -m studio corpus             capture the game's scripts (needs the ToolKit)
+  python -m studio check              our compiler against that corpus
+  python -m studio extract levels     rebuild the editor's data from the game
+
+Anything after the command is passed to it unchanged.
+"""
 import runpy, sys
 
 COMMANDS = {
@@ -36,7 +37,7 @@ EXTRACT = {
 def usage(bad=None):
     if bad:
         print("unknown command: %s\n" % bad)
-    print(__doc__.strip().replace("# ", "").replace("#", ""))
+    print(__doc__.strip())
     print("\ncommands: %s" % ", ".join(sorted(COMMANDS)))
     print("extract:  %s" % ", ".join(sorted(EXTRACT)))
     return 2
