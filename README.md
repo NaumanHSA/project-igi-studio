@@ -25,6 +25,7 @@ shape the ground, or just ask the AI designer. Then apply it and play it in the 
 <a href="#whats-in-the-box">What's in the box</a> ·
 <a href="#get-started">Get started</a> ·
 <a href="#how-it-works">How it works</a> ·
+<a href="#the-compiler">The compiler</a> ·
 <a href="#building-it-yourself">Build it</a> ·
 <a href="#documentation">Docs</a>
 </p>
@@ -149,6 +150,25 @@ designer only.
   no telemetry. The [code signing policy](https://naumanhsa.github.io/project-igi-studio-site/signing) says exactly
   what goes where.
 
+## The compiler
+
+The game keeps every mission as compiled bytecode, `LOOP 8.5`, and for twenty-five years the only way to read
+one was the IGI ToolKit. The studio reads and writes the format itself, in [`studio/qvm`](studio/qvm), so there
+is nothing to install.
+
+It is held to the game's own files rather than to itself. The ToolKit's output was captured for every script
+the game ships, and then the ToolKit was retired. The reader must reproduce its decompilation byte for byte,
+and the writer must turn that back into the game's original file, byte for byte:
+
+```
+python -m studio check
+read   884 of 884 identical
+write  884 of 884 identical
+```
+
+[docs/qvm.md](docs/qvm.md) has the format itself: the header, the 49 opcodes, the calling convention, how `if`
+and `while` are built out of jumps, and what reproducing the original bytes turns out to require.
+
 ## Building it yourself
 
 You need Windows, Python 3.12 or newer (releases use 3.14), Node 22 and your own copy of the game. Python needs
@@ -185,6 +205,7 @@ into your Python. Releases are built the same way by
 | Use the studio | [The manual](https://naumanhsa.github.io/project-igi-studio-site/manual/) |
 | Know what each part of the editor does, and what it builds into the game | [docs/editor.md](docs/editor.md) |
 | See how the studio is put together: the app, first run, where things are kept | [docs/architecture.md](docs/architecture.md) |
+| Read the QVM script format: the opcodes, the calling convention, how it is tested | [docs/qvm.md](docs/qvm.md) |
 | Learn the engine's unwritten rules and the graph file format | [docs/engine.md](docs/engine.md) |
 | Cut a release | [docs/releasing.md](docs/releasing.md) |
 
