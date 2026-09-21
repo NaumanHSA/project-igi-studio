@@ -3,6 +3,49 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## 1.0.3
+
+Ground of any height, and the game's mission list in your hands.
+
+### New
+
+- **Mountains, hills and valleys of any size.** The game's height maps move
+  the ground about 4 m at most. Where you shape it further than that, the
+  studio now builds the level's terrain itself again there, so there is no
+  height limit. Raise, Lower, Level and Ramp take any height, and a big change
+  gets a wider slope of its own.
+- **A brush for the ground:** Raise, Lower, Smooth, Flatten, Roughen and
+  Erase, up to 600 m wide, with a soft, even or hard edge.
+- **Big shapes to stamp:** Mountains (a click places one, a drag places a
+  range), Hills, Plateau, Crater and Valley, each with small, mid and high
+  presets. No two stamps come out the same.
+- **Remove.** Drag round a hill and it is replaced by the ground around it.
+- **Light and shade follow the new ground.** The level's baked light is redone
+  over what you changed, so a new mountain has a lit side and a shaded side,
+  and one you took away leaves no shadow behind.
+- **A terrain budget.** The game holds a fixed amount of terrain, and a bar in
+  the Ground panel shows how much of it your mission uses. A mission that
+  would need more is stopped before Apply, with what to make smaller.
+- **The AI designer shapes ground too:** it can stamp mountains, ranges and
+  valleys, and remove hills.
+- **Copy details.** Apply's log can be selected, and a button under it copies
+  the whole log, with the studio's version on top, ready for a bug report.
+
+### Changed
+
+- **The missions in your game, as the game lists them.** The studio shows
+  every mission in slot 15 and up, in the game's order. A new mission goes
+  after the last one, missions can be reordered, and one can be taken out of
+  the game (its folder is kept in `backups/slots/removed`). The game's chain
+  from one mission to the next is kept whole through all of it.
+
+### Fixed
+
+- **A mission from a blank map applies.** Its objectives went into the level
+  script in the wrong place, and the script failed to compile (*unexpected
+  ','*). An objective that belongs to the level's own story, which a blank map
+  does not have, is now pointed out with what to do instead of failing.
+
 ## 1.0.2
 
 Fixes for 1.0.1's new top bar and 3D view.
