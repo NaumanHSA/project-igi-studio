@@ -46,6 +46,27 @@ def install_level(stage_dir, game_path, level, log=print):
         elif (stage / "terrain" / "terrain.hmp.remove").exists() and target.exists():
             target.unlink()
             log("removed terrain.hmp (no flattened ground any more)")
+    # the terrain mesh: rebuilt where the plan moves the ground further than a
+    # height map can (terrain_mesh.py), or the base level's own again; and its
+    # light maps, redone over the rebuilt ground (lightmaps.py) or the base's
+    if (dest / "terrain").is_dir():
+        dat = next(iter(sorted(dest.glob("level*.dat"))), None)
+        base = game / "missions" / "location0" / dat.stem / "terrain" if dat else None
+        staged = [stage / "terrain" / f for f in ("terrain.ctr", "terrain.cmd")]
+        if all(f.exists() for f in staged):
+            sources = staged
+        else:
+            sources = [base / f.name for f in staged] if base else []
+        lit = stage / "terrain" / "terrain.lmp"
+        sources.append(lit if lit.exists() else (base / "terrain.lmp" if base else lit))
+        for src_f in sources:
+            if not src_f.exists():
+                continue
+            target = protect.assert_writable(dest / "terrain" / src_f.name)
+            if not target.exists() or target.read_bytes() != src_f.read_bytes():
+                shutil.copyfile(src_f, target)
+                log("installed %s  (%s bytes)%s" % (src_f.name, format(src_f.stat().st_size, ","),
+                                                    "" if src_f.parent == stage / "terrain" else ", the base level's own"))
     # the ground's texture masks: the base level's plus the plan's paint
     bit = stage / "terrain" / "terrain.bit"
     if bit.exists() and (dest / "terrain").is_dir():

@@ -218,6 +218,98 @@ class Terrain:
         return None
 
 
+    # ------------------------------------------------------------ many heights at once
+    def base_block(self, min_x, min_y, n, spacing):
+        """The mesh's heights (raw, without the height maps) on an (n+1) x (n+1)
+        grid from (min_x, min_y), `spacing` raw apart, row after row; None where
+        there is no terrain. The leaves under the block are walked to once, so a
+        height map's worth of samples costs about what a few dozen z_raw do."""
+        x1, y1 = min_x + n * spacing, min_y + n * spacing
+        span = 1 << (31 - LEAF_LEVEL)                   # a leaf's width
+        cols = {}
+
+        def visit(ni, pos, level, trans):
+            dim = ROOT_HALF >> level
+            if pos[0] + dim < min_x or pos[0] - dim > x1 or pos[1] + dim < min_y or pos[1] - dim > y1:
+                return
+            node = self.nodes[ni]
+            if level == LEAF_LEVEL:
+                key = ((pos[0] - dim) // span, (pos[1] - dim) // span)
+                cols.setdefault(key, []).extend(self._leaf_tris(node[17], pos, level, trans))
+                return
+            order = CUBE_IDX_TABLE[trans * 8:trans * 8 + 8]
+            tlines = CUBE_TRANS_TABLE[trans * 8:trans * 8 + 8]
+            sub = level + 1
+            for access in CHILD_ACCESS_ORDER:
+                child = order[access]
+                if node[16] & (1 << child):
+                    dx, dy, dz = DIM_TABLE[access]
+                    visit(node[child], (pos[0] + (dx >> sub), pos[1] + (dy >> sub), pos[2] + (dz >> sub)),
+                          sub, tlines[node[8 + child]])
+        visit(1, (0, 0, 0), 0, 0)
+        out = []
+        for j in range(n + 1):
+            y = min_y + j * spacing
+            for i in range(n + 1):
+                x = min_x + i * spacing
+                z = None
+                kx, ky = x // span, y // span
+                for key in ((kx, ky), (kx - 1, ky), (kx, ky - 1), (kx - 1, ky - 1)):
+                    for t in cols.get(key, ()):
+                        if not (t[0] <= x <= t[1] and t[2] <= y <= t[3]):
+                            continue
+                        (ax, ay), (bx, by), (cx, cy) = t[4], t[5], t[6]
+                        e = 1e-3
+                        if ((bx - ax) * (y - ay) - (by - ay) * (x - ax) >= -e and
+                                (cx - bx) * (y - by) - (cy - by) * (x - bx) >= -e and
+                                (ax - cx) * (y - cy) - (ay - cy) * (x - cx) >= -e):
+                            z = -(t[7] * x + t[8] * y + t[10]) / t[9]
+                            break
+                    if z is not None:
+                        break
+                out.append(z)
+        return out
+
+    def _leaf_tris(self, off, pos, level, trans):
+        """A leaf's faces in world raw units: (x0, x1, y0, y1, a, b, c, nx, ny, nz, d)
+        with a, b, c their corners (x, y) and n.p + d = 0 their plane."""
+        ntri, _, npar, nchild = struct.unpack_from("<4H", self.cmd, off)
+        tris = struct.unpack_from("<%dI" % ntri, self.cmd, off + 8)
+        verts = struct.unpack_from("<%dI" % (npar + nchild), self.cmd, off + 8 + 4 * ntri)
+        scale = float(1 << (27 - level)) / 3.0
+        vb = []
+        for v in verts:
+            sx, sy, sz = (v >> 26) & 0x3F, (v >> 20) & 0x3F, (v >> 14) & 0x3F
+            vx, vy, vz = sx - 24, sy - 24, sz - 24
+            if trans & 4:
+                vx = 24 - sx
+            if trans & 1:
+                if trans & 2:
+                    vx = -vx
+                else:
+                    vy = 24 - sy
+                vx, vy = vy, vx
+            elif trans & 2:
+                vx = -vx
+                vy = 24 - sy
+            vb.append((vx * scale + pos[0], vy * scale + pos[1], vz * scale + pos[2]))
+        out = []
+        for t in tris:
+            ids = ((t >> 8) & 0xFF, t & 0xFF, (t >> 16) & 0xFF) if trans & 4 else ((t >> 16) & 0xFF, t & 0xFF, (t >> 8) & 0xFF)
+            if max(ids) >= len(vb):
+                continue
+            a, b1, c = vb[ids[0]], vb[ids[1]], vb[ids[2]]
+            ux, uy, uz = b1[0] - a[0], b1[1] - a[1], b1[2] - a[2]
+            wx, wy, wz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
+            nx, ny, nz = uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx
+            if nz <= 0:
+                continue                                # edge-on, or facing down: not ground
+            d = -(nx * c[0] + ny * c[1] + nz * c[2])
+            out.append((min(a[0], b1[0], c[0]), max(a[0], b1[0], c[0]), min(a[1], b1[1], c[1]),
+                        max(a[1], b1[1], c[1]), a[:2], b1[:2], c[:2], nx, ny, nz, d))
+        return out
+
+
 if __name__ == "__main__":
     argv = sys.argv
 

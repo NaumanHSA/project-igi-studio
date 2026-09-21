@@ -22,6 +22,10 @@
 #   GET    /api/missions/<id>/runs[/<run>]   play-throughs the live view recorded; POST saves one,
 #                                            DELETE .../runs/<run> removes one
 #   POST   /api/missions/<id>/uninstall      take its slot out of the game (kept in backups)
+#   POST   /api/slots/order                  {order: [slot numbers]} the studio's missions in the game, renumbered
+#                                            in that order from 15 up
+#   POST   /api/slots/<n>/remove             take out a slot the studio made that no mission here holds
+#   GET    /api/recoverable, POST /api/recover   missions in the game that this studio can take back in
 #   GET    /api/missions/<id>/cover.png
 #   GET    /api/trash, POST /api/trash/<tid>/restore
 # The AI designer (studio/server/ai.py):
@@ -430,18 +434,77 @@ def library(cfg):
     mine = MS.list_missions(view=lambda m: in_game(m, held))
     known = {m["id"] for m in mine}
     game = cfg["gamePath"]
-    slots = []
+    return {"builtins": builtins["missions"], "groups": builtins["groups"], "missions": mine,
+            "slots": game_slots(game, known), "trash": len(MS.list_trash()), "needsSetup": needs_setup,
+            "game": {"running": game_running(), "unlockedTo": _unlocked_to(game)}}
+
+
+def _unlocked_to(game):
+    try:
+        from studio.build import unlock
+        return unlock.active(game) if game else None
+    except Exception:
+        return None
+
+
+def game_slots(game, known):
+    """Every mission the game holds past its own fourteen, in the game's order,
+    as the game lists it: whether the studio made it, whether this studio holds
+    it, and whether its marker carries the whole mission (so it can be added)."""
+    out = []
+    if not game:
+        return out
     try:
         for sl in SL.list_slots(game):
             if not sl["custom"]:
                 continue
             mk = sl.get("marker") or {}
-            slots.append({"level": sl["level"], "base": sl["base"], "missionId": mk.get("missionId"),
-                          "managed": mk.get("missionId") in known})
+            d = SL.read_definition(game, sl["level"]) or {}
+            mid = mk.get("missionId")
+            whole = isinstance(mk.get("mission"), dict) and bool((mk["mission"] or {}).get("plan"))
+            out.append({"level": sl["level"], "name": d.get("name") or mk.get("name") or "",
+                        "description": d.get("description") or "", "next": d.get("next"),
+                        "base": d.get("base") or mk.get("base"), "studio": sl["marker"] is not None,
+                        "missionId": mid, "managed": mid in known,
+                        # an Apply wrote it all: it can be added to this studio's missions
+                        "recoverable": bool(mid) and mid not in known and whole,
+                        "installed": mk.get("installed")})
     except OSError:
         pass
-    return {"builtins": builtins["missions"], "groups": builtins["groups"], "missions": mine,
-            "slots": slots, "trash": len(MS.list_trash()), "needsSetup": needs_setup}
+    return out
+
+
+def slots_order(body):
+    """POST /api/slots/order {order: [slot numbers, first to last]}."""
+    cfg = load_config()
+    game = cfg["gamePath"]
+    if game_running():
+        return {"ok": False, "error": "close the game first: it holds its missions open while it runs"}
+    log = []
+    try:
+        moves = SL.order_slots(game, body.get("order") or [], log=log.append)
+    except RuntimeError as e:
+        return {"ok": False, "error": str(e), "log": log}
+    with _surf_lock:
+        _surfaces.clear()
+    _HEIGHTS.clear()
+    return {"ok": True, "moves": {str(a): b for a, b in moves.items()}, "log": log}
+
+
+def slot_remove(n):
+    """POST /api/slots/<n>/remove: take a mission the studio made out of the game,
+    when this studio does not hold it (a mission this studio holds is removed
+    from its own card). Kept in backups, as every removal is."""
+    cfg = load_config()
+    game = cfg["gamePath"]
+    if game_running():
+        return {"ok": False, "error": "close the game first: it holds its missions open while it runs"}
+    mk = SL.read_marker(game, n) or {}
+    if mk.get("missionId") and mk["missionId"] in {m["id"] for m in MS.list_missions()}:
+        return {"ok": False, "error": "mission %d is one of your missions: remove it from its card" % n}
+    log = []
+    SL.remove_slot(game, n, log=log.append)
+    return {"ok": True, "log": log}
 
 
 def _data_url_png(u):
@@ -1107,6 +1170,11 @@ class Handler(SimpleHTTPRequestHandler):
             rm, rid = self._run_route()
             if rm and not rid:
                 return self._guard(lambda: self._json({"ok": True, **MS.save_run(rm, self._body())}))
+            if re.match(r"^/api/slots/order/?$", self.path):
+                return self._guard(lambda: self._json(slots_order(self._body())))
+            sm = re.match(r"^/api/slots/(\d+)/remove/?$", self.path)
+            if sm:
+                return self._guard(lambda: self._json(slot_remove(int(sm.group(1)))))
             if self.path.startswith("/api/recover"):
                 return self._guard(lambda: self._json(recover(load_config(), self._body())))
             if self.path.startswith("/api/setup/game"):
@@ -1253,6 +1321,30 @@ def game_running():
         return False
 
 
+def keep_unlocked(every=5.0):
+    """The game keeps its settings in memory and writes them back when it closes,
+    and finishing a mission sets how far its list goes as well: either can take
+    away the missions the studio unlocked. So whenever the game is not running -
+    when the studio starts, and each time the game closes - the list is made to
+    reach the last mission in the game again, and each of the studio's missions
+    leads on to the next (slots made by an older version were not linked)."""
+    from studio.build import unlock
+    was = None
+    while True:
+        now = game_running()
+        if not now and was is not False:
+            try:
+                game = load_config().get("gamePath")
+                if game and (pathlib.Path(game) / "missions" / "location0").is_dir():
+                    say = lambda x: print("  " + x, flush=True)
+                    SL.relink(str(game), say)
+                    unlock.reach_all(str(game), log=say)
+            except Exception as e:
+                print("  the game's mission list was left as it was: %s" % e, flush=True)
+        was = now
+        time.sleep(every)
+
+
 def launch_game(cfg, say=print):
     """Start IGI.exe in the working game's folder (never the pristine one)."""
     game = pathlib.Path(cfg["gamePath"])
@@ -1324,22 +1416,42 @@ def apply_mission(mid, test=None, say=print):
         elif int(mk.get("base") or base) != base:
             return {"ok": False, "error": "slot level%d was made from level %s, this mission is based on level %d"
                                          % (n, mk.get("base"), base)}
-    if not n:
+    pl = _player_ref(base) if test else None
+    if test and not pl:
+        return {"ok": False, "error": "this level has no player start to move"}
+    created = not n
+    if created:
         n = SL.free_slot(game)
         say("STAGE copying level %d into a new mission slot (level%d)" % (base, n))
         SL.create_slot(game, n, base, m["name"], m.get("description"), mid, log=say)
     else:
         SL.write_definition(game, n, base, m["name"], m.get("description"))
-    slot = SL.slot_dir(game, n)
+    # A slot made for this Apply goes again if the mission never gets into it:
+    # left in, the game would list the bare base level under the mission's name.
+    try:
+        res = _build_into(m, mid, game, base, n, test, pl, say)
+    except BaseException:
+        if created:
+            try:
+                SL.discard_slot(game, n, log=say)
+            except Exception as e:
+                say("the new slot level%d could not be taken out again: %s" % (n, e))
+        raise
+    if created and not res.get("ok") and not res.get("installed"):
+        SL.discard_slot(game, n, log=say)
+        res["discarded"] = n
+    return res
 
+
+def _build_into(m, mid, game, base, n, test, pl, say):
+    """The build and install of apply_mission, into slot n."""
+    cfg = load_config()
+    slot = SL.slot_dir(game, n)
     build = MS.STORE / mid / "build-plan.json"
     plan = {"name": m["name"], "base": m["base"]}
     plan.update(m["plan"])
     applied = None
     if test:
-        pl = _player_ref(base)
-        if not pl:
-            return {"ok": False, "error": "this level has no player start to move"}
         start = {"ref": pl["ref"], "type": "player", "qtype": pl.get("qtype") or "HumanPlayer", "id": pl.get("id", -1),
                  "name": "Player spawn", "x": round(float(test["x"]), 3), "y": round(float(test["y"]), 3),
                  "z": round(float(test["z"]), 3), "gamma": round(float(test.get("gamma") or 0), 5)}
@@ -1413,6 +1525,7 @@ def main():
     print("STUDIO_READY port=%d" % port, flush=True)
     if "--no-browser" not in sys.argv and not TOKEN:
         threading.Timer(0.6, lambda: webbrowser.open("http://localhost:%d/plotter.html" % port)).start()
+    threading.Thread(target=keep_unlocked, daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

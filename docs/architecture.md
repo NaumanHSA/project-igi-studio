@@ -120,7 +120,20 @@ python -m studio setup --repair           put the drifted ones back
   two language files, and the game's `config.qvm`: the game only offers the
   missions a player has reached (`GOActiveMission(N)`, 1 on a fresh install),
   so `studio/build/unlock.py` raises N to each slot applied, never lowering it,
-  and again just before the studio starts the game.
+  and again when the studio starts, before it starts the game, and whenever it
+  sees the game close (the game writes its settings back as it closes). And one
+  link in a built-in mission: the menu lists missions by following each one's
+  next mission from mission 1, so level 14's `mission.qvm` leads on to the
+  first custom mission (`studio/build/slots.py` `link_campaign`), and goes back
+  to the file as it shipped when none is left.
+- **The terrain is rebuilt, never edited.** Where a mission moves the ground
+  past what a height map can, `studio/build/terrain_mesh.py` builds a new
+  `terrain.ctr`/`.cmd` for the slot: copy-on-write from the root down every
+  path into the changed area (the level's nodes are shared, turned and
+  mirrored, so none is ever changed in place), the rest reached as before, and
+  what nothing reaches any more dropped. It always starts from the reference
+  copy's terrain, like everything else a build makes, and a plan with no big
+  change puts the base level's own mesh back into the slot.
 - **Which slot holds which mission is the game's to say.** Every slot the
   studio fills carries a marker naming its mission, and the server reads the
   connected game's markers (`held_by_game`) rather than trusting the slot

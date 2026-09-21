@@ -55,10 +55,22 @@ map. All 13 empty maps compile.
 
 **Game slots:**
 
-- **Creating a slot:** on its first Apply, a mission gets the next free slot
-  (`level15`, `level16`, …). The slot is a copy of the base level's folder,
-  about 250–300 MB. Its `mission.qvm` names it in the game's mission list with
-  your name and description, and its cover is the base mission's.
+- **Creating a slot:** on its first Apply, a mission gets the slot after the
+  last one in the game (`level15`, `level16`, …; with 16 there, 17). The slot
+  is a copy of the base level's folder, about 250–300 MB. Its `mission.qvm`
+  names it in the game's mission list with your name and description, and its
+  cover is the base mission's. If that first Apply fails, the new slot is taken
+  out again, so the game never lists a bare copy of the base level.
+- **In the game:** the library's first list is every mission the game holds
+  past its fourteen, in the order it plays them, whoever made it. ↑ ↓ move the
+  studio's own (with the game closed): the folder, its definition, its strings
+  (`MS<slot>_*` in its script and the language files), its marker and its
+  restore points all take the new number. One the game holds but no mission
+  here does can be added (when its marker carries the whole mission) or taken
+  out.
+- **The chain:** the game lists missions by following each one's next mission
+  from mission 1, so level 14 leads on to the first custom mission and each of
+  the studio's missions to the next one in the game.
 - **What the slot holds:** `_mission_studio.json` records the mission and the
   build, so the game folder alone can bring a mission back.
 - **Removing:** **Remove from the game** moves the slot to
@@ -554,10 +566,10 @@ Where it applies:
 - **On by default** for real buildings (at least 2.5 m tall and 2 × 2 m, not
   walls). **Level the ground under it** in the building's panel switches it
   off. A dashed apron on the map marks a levelled pad.
-- **Limit:** a height map moves the ground about 4 m either way, so the
-  placement check allows up to 7.5 m of slope for these buildings. Beyond
-  that the ground is levelled as far as it goes, and Apply says how far short
-  it is.
+- **Steep ground:** a height map moves the ground about 4 m either way;
+  where a pad needs more, the terrain mesh under it is rebuilt (see *Shaping
+  the ground*), so the placement check allows up to 20 m of slope for these
+  buildings.
 - **Levels without height maps** (2, 4, 5, 7, 11–14) get a `terrain.hmp`
   holding only the new patches.
 
@@ -570,7 +582,7 @@ without a `terrain.hmp` read the new one.
 
 ## Shaping the ground
 
-The **Ground bar** on the map's right edge, under the view buttons, holds six
+The **Ground bar** on the map's right edge, under the view buttons, holds its
 tools; each opens its panel right beside the bar (the legend opens over it):
 
 | Tool | What it does | How |
@@ -579,41 +591,76 @@ tools; each opens its panel right beside the bar (the legend opens over it):
 | **Raise** / **Lower** | lifts or sinks an area by so many metres | drag; *Round* for an ellipse |
 | **Smooth** | evens out bumps, keeping the lie of the land (*Strength*: how wide a bump) | drag |
 | **Ramp** | an even slope between two heights (*From* / *To*, *Width*) | drag from the bottom of the slope to the top |
-| **Brush** | paints the ground freehand: *Raise*, *Lower*, *Smooth* or *Erase* wherever it passes, *Size* (radius) and *Strength* (metres per pass) | hold the button and drag |
+| **Remove** | takes a hill or a mountain away: the level's ground round its edge (48 points on the ellipse through it) drawn in across it, each weighed by the inverse square of its distance | drag round it. A mountain in a range, with high ground round it, wants *Level* to a height instead |
+| **Brush** | paints the ground freehand (below) | hold the button and drag |
 
-- **The panel** has what the next area will be (shape, height and so on) at
-  the top, and every shaped area below it as a card: *Go there*, *See it in
-  3D* and *Remove it* on each, and a click opens its settings in the card.
-  Only the area open in the panel (or under the pointer there) is drawn on
-  the map, so the ground stays readable.
+**The brush** has two rows. *Raise*, *Lower*, *Smooth*, *Flatten* (to the
+height where the stroke began), *Roughen* and *Erase*, with a *Size* (radius,
+up to 600 m), a *Strength* and an *Edge* (soft, even or hard). Up to 10 m wide
+it paints the fine layer, 1 m cells; wider, the terrain's own 4 m grid.
+Then the **shapes**, stamped into the 4 m grid: *Mountains* (a click puts one
+down, a drag a range of them), *Hills*, *Plateau*, *Crater* and *Valley*
+(carved along the stroke). Each comes in *Small*, *Mid* and *High* (radius and
+height, typed over at will) with a *Rough* for how craggy, and comes out
+different every time: ridged value noise, a footprint that wanders, the
+stroke's own seed. Overlapping mountains keep the higher of the two, so a
+range does not pile up.
+
+- **The panel** has what the next area or stroke will be at the top, and
+  every shaped area below it as a card: *Go there*, *See it in 3D* and
+  *Remove it* on each, and a click opens its settings in the card. The fine
+  strokes and the big shapes have a card each. Only the area open in the
+  panel (or under the pointer there) is drawn on the map, so the ground stays
+  readable; the brush's layers show as a green (raised) or blue (lowered)
+  wash while the Brush is open.
 - **Areas** can be dragged to move them, and have *Size*, *Turn* (rotation),
   *Shape* and *Edge*. The edge is automatic: about 2.5 m of run for every
-  metre of height, eased with a smootherstep and wandering a little (value
-  noise, the same in the editor and the build), so an area reads as ground,
-  not as a drawn shape. Type an edge to fix it; clear the box for automatic.
-- Areas apply **in order**, each on the ground the ones before it left, then
-  the brush. The relief, contours, buildable layer and every height the editor
-  reads follow at once; a brush stroke shows as a green (raised) or blue
-  (lowered) wash while you paint and the relief catches up when you let go.
+  metre of height, up to 150 m, eased with a smootherstep and wandering a
+  little (value noise, the same in the editor and the build), so an area
+  reads as ground, not as a drawn shape. Type an edge to fix it; clear the box
+  for automatic.
+- **In order:** the big shapes first, then the areas, each on the ground the
+  ones before it left, then the fine brush, then the pads of your buildings.
+  The relief, contours, buildable layer and every height the editor reads
+  follow at once; while a stroke is painted the relief catches up when you
+  let go.
 - **Nothing is left floating.** The ground never changes under anything
-  standing on it: buildings, walls, props, crates, vehicles, pickups and the
-  player start keep the ground they stand on, eased in over a few metres
-  round them. The panel (on the area's card) and the check list say what
-  stands there, so you can move or remove it first if the ground there has
-  to change. Carrying things up and down with the ground was tried and left
-  crates half in the air and a button mounted on one hanging. Guards are
-  not in it: they stand on the navmesh, and the nodes on shaped ground move
-  with it. Your own buildings level their ground with their own pad, and the
-  map and the 3D close-up show that pad too.
-- Saved in the plan as `ground` (areas) and `brush` (1 m cells, metres each),
-  listed in the change log under *Ground*, and undone like everything else.
-- On Apply, `studio/build/flatten.py` turns them into the level's height maps with
-  the buildings' pads (a dry run on level 3 matched the editor's preview to a
-  few centimetres).
-- **Limit:** the game moves the ground at most 4 m either way from the
-  level's own mesh, so hills and gullies are small ones. An area that asks
-  for more is shaped as far as it goes and flagged in the panel and the check
-  list.
+  standing on it: buildings, walls, props, crates, vehicles and pickups keep
+  the ground they stand on, eased in over a few metres round them. The panel
+  (on the area's card) and the check list say what stands there, so you can
+  move or remove it first if the ground there has to change. Carrying things
+  up and down with the ground was tried and left crates half in the air and a
+  button mounted on one hanging. Guards are not in it: they stand on the
+  navmesh, and the nodes on shaped ground move with it. Nor is the player
+  start: it is set down on the shaped ground by the build every time, so it is
+  on the slope of a mountain put over it, and back on the ground when the
+  mountain goes. Your own buildings level their ground with their own pad.
+- Saved in the plan as `ground` (areas), `brush` (1 m cells, metres each) and
+  `sculpt` (the 4 m grid, centimetres each), listed in the change log under
+  *Ground*, and undone like everything else.
+- **As high as you like.** On Apply, `studio/build/flatten.py` works out the
+  ground wanted, on the level's own ground from the reference copy (never the
+  slot's, which an earlier Apply shaped). Where it moves further than a
+  height map can carry (about 4 m; `MESH_FROM` 3 m, smoothed over the 4 m
+  round each grid point) the terrain mesh itself is rebuilt there
+  (`studio/build/terrain_mesh.py`): its grid points moved, every cube over
+  them built again at every level of detail, the rest of the level's terrain
+  kept as it is and the new cubes meeting it exactly. The height maps then
+  carry what is left, against the new mesh. A 30 m raise came out within 3 cm
+  on its top and 0 outside; the finest points follow to the height step of
+  their level (a point every 128 m and more can be a few metres off, spread as
+  a tilt; the build says when).
+- **The terrain budget:** the game holds 32,767 terrain nodes and the level's
+  own use 11,000–15,000. Every Apply's dry run says how many the plan needs:
+  the *Terrain* bar at the top of the panel, a warning in the check list past
+  90 %, and an error (and no Apply) past the limit. Flat ground is cheap - the
+  same flat cube is written once - and steep new ground is not.
+- **The light:** the level's baked terrain light is redone over rebuilt ground
+  (`studio/build/lightmaps.py`): the direction of the level's light worked out
+  from its own light maps against the lie of its land, and each light map
+  pixel over changed ground made brighter or darker by how the change turned
+  the ground to it. A level whose light does not follow the land (night and
+  rain levels) keeps its light maps as they are.
 
 ## Painting the ground
 

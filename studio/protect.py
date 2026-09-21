@@ -9,13 +9,18 @@
 # language/<lang>/objectives.res and messages.res under the mission's MS<slot>_
 # prefix; studio/build/lang.py touches no other key and backs the files up first.
 # And one more: the game's config.qvm, whose GOActiveMission says how far its
-# mission list goes (studio/build/unlock.py, the same care).
+# mission list goes (studio/build/unlock.py, the same care). And the last: the
+# game lists its missions by following each one's "next mission" from mission
+# 1, so the last built-in mission's mission.qvm has to lead on to the first
+# custom one, or none is ever listed; studio/build/slots.py changes that one
+# link and nothing else, and puts it back as shipped when no custom mission is left.
 #
 #   import protect
 #   protect.assert_writable(path)          raises ProtectedPath if it is not a custom slot
 #   protect.assert_deletable_slot(dir)     ... and it must be a whole slot we made
 #   protect.assert_language_file(path)     objectives.res / messages.res of a working game
 #   protect.assert_config_file(path)       the connected game's config.qvm, nothing else
+#   protect.assert_mission_link(path)      a built-in mission's mission.qvm, for its next-mission link
 import json, os, pathlib, re
 from studio import paths
 
@@ -125,6 +130,29 @@ def assert_config_file(path):
     if game is None or p != game / "config.qvm":
         raise ProtectedPath("refusing to write %s: the only settings the studio changes are the "
                             "connected game's config.qvm" % p)
+    return p
+
+
+def assert_mission_link(path):
+    """The last exception: a built-in mission's definition, missions/location0/
+    level<N>/mission.qvm with N below 15, in the connected game. The game lists
+    missions by following "next mission" from mission 1, so the campaign's last
+    one must lead on to the first custom mission (slots.link_campaign: it changes
+    that link alone, and checks the rest of the file came out the same)."""
+    p = pathlib.Path(path).resolve()
+    for root in pristine_roots():
+        if p == root or root in p.parents:
+            raise ProtectedPath("refusing to write %s: the studio only ever reads that" % p)
+    try:
+        game = paths.game().resolve() if paths.game_set() else None
+    except OSError:
+        game = None
+    if game is None or not (game in p.parents):
+        raise ProtectedPath("refusing to write %s: the studio writes to the connected game and nowhere else" % p)
+    s = slot_of(p)
+    if s is None or s[0] >= FIRST_CUSTOM or p != s[1] / "mission.qvm":
+        raise ProtectedPath("refusing to write %s: only a built-in mission's mission.qvm takes a link "
+                            "on to the custom missions" % p)
     return p
 
 

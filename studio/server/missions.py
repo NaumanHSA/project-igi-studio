@@ -15,7 +15,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 STORE = paths.missions() / "custom"
 TRASH = STORE / ".trash"
 PLAN_KEYS = ("placements", "nodes", "nodeEdits", "edits", "removeRefs", "removals", "objectives",
-              "ground", "brush", "events", "paint")
+              "ground", "brush", "sculpt", "events", "paint")
+LAYERS = ("brush", "sculpt")    # cells, not changes: a layer counts once
 KEEP_HISTORY = 30
 HISTORY_EVERY = 120          # seconds: saves closer together than this share a snapshot
 
@@ -49,7 +50,7 @@ def summary(m):
     inst = m.get("installed")
     return {"id": m["id"], "name": m["name"], "description": m.get("description", ""),
             "base": m["base"], "slot": m.get("slot"), "created": m.get("created"), "updated": m.get("updated"),
-            "changes": sum(len(p.get(k) or []) for k in PLAN_KEYS),
+            "changes": sum((1 if p.get(k) else 0) if k in LAYERS else len(p.get(k) or []) for k in PLAN_KEYS),
             "guards": sum(1 for x in p.get("placements") or [] if x.get("type") == "soldier"),
             "cover": (_dir(m["id"]) / "cover.png").exists(),
             "installed": inst, "upToDate": bool(inst and inst.get("hash") == plan_hash(m))}

@@ -46,8 +46,9 @@ def _chained_to(path):
     """The slot a mission.qvm sends the player to next, when it names one.
 
     Making mission 14 lead to mission 15 is how a custom mission is reached
-    from the campaign. It is a deliberate change to a built-in mission, so a
-    repair must recognise it instead of quietly undoing it.
+    from the campaign: the game lists its missions by following those links.
+    The studio sets it (studio/build/slots.py link_campaign), so a repair must
+    recognise it instead of quietly undoing it.
     """
     try:
         from studio.qvm import read as R
@@ -58,6 +59,19 @@ def _chained_to(path):
     if not m:
         return None
     return int(m.group(1)) if m.group(1).isdigit() else None
+
+
+def _unlinked(path):
+    """A mission.qvm's definition with its next-mission link left out, to tell a
+    file that differs only there (the studio's link) from one that drifted."""
+    try:
+        from studio.qvm import read as R
+        from studio.build.slots import R_NEXT
+        text = R.decompile(R.parse(path))
+    except Exception:
+        return None
+    m = R_NEXT.search(text)
+    return text[:m.start(2)] + "*" + text[m.end(2):] if m else None
 
 
 def differences(game=None, source=None, deep=False):
@@ -76,11 +90,12 @@ def differences(game=None, source=None, deep=False):
         d = {"file": str(rel).replace("\\", "/"), "kind": "drift",
              "size": dst.stat().st_size, "was": src.stat().st_size, "note": ""}
         if dst.name.lower() == "mission.qvm":
-            now, before = _chained_to(dst), _chained_to(src)
-            if now and now >= protect.FIRST_CUSTOM and now != before:
+            now, bare = _chained_to(dst), _unlinked(dst)
+            if bare is not None and bare == _unlinked(src):
                 d["kind"] = "chain"
-                d["note"] = ("it sends the player to mission %d after this one, "
-                             "which is how a custom mission is reached from the campaign" % now)
+                d["note"] = ("it sends the player to mission %d after this one, which is how the game's list "
+                             "reaches the custom missions" % now if now and now >= protect.FIRST_CUSTOM
+                             else "only its link on to the next mission differs, which the studio sets")
         out.append(d)
     return out
 

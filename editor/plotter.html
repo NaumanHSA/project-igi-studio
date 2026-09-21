@@ -365,6 +365,20 @@ canvas{display:block}
 .mc-st{font-size:11.5px;color:var(--muted)}.mc-st.ok{color:var(--ok)}
 .mc-more{position:absolute;right:6px;bottom:8px;padding:0 8px;font-size:16px;line-height:1.3}
 .mc-from{margin:0 10px 10px;padding:3px 8px;font-size:12px}
+.gslots{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.gs{display:flex;align-items:center;gap:12px;padding:8px 10px;border-top:1px solid var(--line);background:var(--sunken)}
+.gs:first-child{border-top:0}
+.gs.current{box-shadow:inset 3px 0 0 var(--accent)}
+.gs-n{font:600 13px "IBM Plex Mono",monospace;color:var(--accent);min-width:2.2em;text-align:right;flex:none}
+.gs-t{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1;font-size:12.5px;color:var(--muted);line-height:1.4}
+.gs-t b{font-family:"Barlow Condensed",sans-serif;font-size:16px;font-weight:600;letter-spacing:.02em;color:var(--ink)}
+.gs-t .ok{color:var(--ok)}
+.gs-acts{display:flex;gap:6px;flex:none}
+.lib .gs-acts .btn{padding:2px 10px;font-size:12.5px}
+.gs-move{display:flex;gap:2px;flex:none;min-width:56px;justify-content:flex-end}
+.lib .gs-move .btn{padding:0 8px;font-size:14px;line-height:1.6}
+.note.warn{background:color-mix(in srgb,var(--warn) 12%,transparent);color:var(--warn)}
+@media (max-width:640px){.gs{flex-wrap:wrap}.gs-acts{margin-left:calc(2.2em + 12px)}}
 .sheet-card.wide{max-width:980px}
 .seg{display:inline-flex;gap:0}.seg .btn{border-radius:0}.seg .btn:first-child{border-radius:4px 0 0 4px}
 .seg .btn:last-child{border-radius:0 4px 4px 0;margin-left:-1px}
@@ -419,6 +433,8 @@ canvas{display:block}
 .apbar.fail .ap-fill{background:var(--danger);box-shadow:none}
 .apbar.fail .ap-stage{color:var(--danger)}
 details.aplog summary{cursor:pointer;font-size:12px;color:var(--muted);margin:0 0 6px}
+.ap-logbar{display:flex;justify-content:flex-end;margin-top:6px}
+.ap-logbar .btn{padding:3px 10px;font-size:12px}
 .ap-done{font-size:13px;line-height:1.5;margin:0 0 10px}
 .applylog .good{color:var(--ok)}
 .cfgrow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:12px}
@@ -753,6 +769,12 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .mc-obj li{margin:2px 0}
 #groundpop{right:80px;top:108px;width:340px;max-height:calc(100% - 124px);overflow:hidden;padding:10px 12px 12px;display:flex;flex-direction:column}
 #groundpop[hidden]{display:none}
+.gd-budget{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-size:11.5px;color:var(--muted)}
+.gd-budget i{flex:1;height:6px;border-radius:3px;background:var(--sunken);border:1px solid var(--line);overflow:hidden}
+.gd-budget i b{display:block;height:100%;background:var(--ok)}
+.gd-budget.near i b{background:var(--warn)}.gd-budget.over i b{background:var(--danger)}
+.gd-budget em{font-style:normal;font:11px "IBM Plex Mono",monospace;color:var(--ink);min-width:3.5em;text-align:right}
+.gd-budget.over em{color:var(--danger)}
 #groundpop>.gd-head,#groundpop>.gd-new,#groundpop>.gd-lh,#groundpop>.gd-ingame{flex:none}
 #groundpop>.gd-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:4px;align-content:start}
 .gd-ingame{margin:8px 0 0;font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
@@ -774,6 +796,11 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .gd-opts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
 .gd-opts .grp{display:flex;align-items:center;gap:2px}
 .gd-opts .grp>span{color:var(--faint);font-size:11px;margin-right:4px}
+.gd-seg{padding:3px 9px;border:1px solid var(--line);background:var(--sunken);color:var(--muted);font:12px "IBM Plex Sans",sans-serif;cursor:pointer;margin-left:-1px}
+.gd-seg:first-of-type{border-radius:4px 0 0 4px}.gd-seg:last-child{border-radius:0 4px 4px 0}
+.gd-seg:hover{color:var(--ink)}
+.gd-seg.on{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);position:relative}
+.gd-seg:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .gd-f{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
 .gd-f input{width:58px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:3px 5px;font:12px "IBM Plex Mono",monospace}
 .gd-f input.wide{width:86px}
@@ -1018,9 +1045,10 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 }
 
 /* ================= the look of the site: the map computer's keys and panels ================= */
-/* text is for reading, not selecting: only what you type, and the AI designer's chat */
+/* text is for reading, not selecting: only what you type, the AI designer's chat,
+   and the logs, which are there to be pasted into a bug report */
 body{-webkit-user-select:none;user-select:none}
-input,textarea,select,[contenteditable="true"],.ai-log,.ai-log *{-webkit-user-select:text;user-select:text}
+input,textarea,select,[contenteditable="true"],.ai-log,.ai-log *,.applylog,.applylog *{-webkit-user-select:text;user-select:text}
 /* the top bar: the studio and the mission on the left, the view in the middle, the rest on the right */
 /* The layers, bottom to top: the workspace (the map, its bars, the 3D view: all
    kept inside it), the top bar and its menus, then everything that pops up over
@@ -2138,6 +2166,8 @@ function syncHeights(){
     }).catch(function(){HSYNC.busy=false});
 }
 function applyHeights(j){
+  var tb=j.terrain||null;
+  if(JSON.stringify(tb)!==JSON.stringify(TBUDGET)){TBUDGET=tb;if(groundOpen())renderGround()}
   var moves=[];
   placements.forEach(function(q){
     var z=(j.placements||{})[q.uid];
@@ -2148,6 +2178,13 @@ function applyHeights(j){
     var e=edits[ref],o=objByRef(ref),z=(j.edits||{})[ref];
     if(!o||e.exact||z==null||Math.abs(z-o.z)<0.02)return;
     moves.push({o:o,z:z,riders:ridersOf(o,false)});
+  });
+  // the player start the build set down on shaped ground: shown there (the
+  // build does it every time, so it is not a change of the plan's)
+  Object.keys(j.edits||{}).forEach(function(ref){
+    if(edits[ref])return;
+    var o=objByRef(ref);
+    if(o&&o.type==="player"&&Math.abs(j.edits[ref]-o.z)>=0.02){o.z=j.edits[ref];draw();sync3d()}
   });
   if(!moves.length)return;
   // what the game already has as it is: the game has these heights too (the build
@@ -3177,7 +3214,7 @@ function renderMapComputer(){
   var list=objectives.slice(0,6);
   h+=list.length?'<ol class="mc-obj">'+list.map(function(ob){
       return '<li>'+esc(ob.kind==="level"?(ob.text||ob.key||""):((ob.text||"").trim()||objDefaultText(ob)))+'</li>'}).join("")+'</ol>':
-    '<p class="hint">None of the mission\'s own: the level\'s own list shows.</p>';
+    '<p class="hint">'+(MODE==="empty"?'None: the list is empty.':'None of the mission\'s own: the level\'s own list shows.')+'</p>';
   if(objectives.length>6)h+='<p class="hint bad">'+(objectives.length-6)+' more are left out: it lists six.</p>';
   if(mu)h+='<p class="sg-stat"><b>'+mu.need+'</b> of '+HILIGHT_MAX+' markers and labels'+(mu.need>HILIGHT_MAX?' <span class="bad">(too many)</span>':'')+
     ': the level\'s '+mu.level+', '+mu.labs+' label'+(mu.labs===1?'':'s')+' of yours.</p>';
@@ -3592,7 +3629,7 @@ function drawBuildable(){
 // A new building gets the ground under it levelled when the mission is built
 // (studio/build/flatten.py writes height maps): real buildings by default, not walls
 // or small props. One height map moves the ground about 4 m either way.
-var FLAT_MAX=7.5,FLAT_APRON=1.5;
+var FLAT_MAX=20,FLAT_APRON=1.5;          // ground up to 20 m uneven can be levelled: past 4 m, by the terrain itself
 function wantsFlat(model){
   var z=MODELS&&MODELS.sizes&&MODELS.sizes[model];
   return !!(z&&z.body&&z.body.length&&z.h>=2.5&&Math.min(z.w,z.d)>=2&&z.w*z.d>=16&&!segInfo(model));
@@ -4110,7 +4147,7 @@ function buildCompound(cx,cy,C){
   var res={made:made,noWalk:noWalk,near:near,rough:rough};
   toast("A compound of "+made.length+" pieces"+(area?" on levelled ground":"")+". It is selected: drag it to move it, R to turn it"+
     (noWalk?". No guards: the nearest walkways are "+(near?Math.round(near.d)+" m":"far")+" away, so they would walk off there":"")+
-    (rough>GROUND_MAX?". The ground there varies by "+rough.toFixed(1)+" m and the game moves it "+GROUND_MAX+" m at most, so part of it stays uneven":""));
+    (rough>GROUND_MAX?". The ground there varies by "+rough.toFixed(1)+" m, so the build rebuilds the terrain under it":""));
   return res;
 }
 function endOf(o){
@@ -4660,7 +4697,7 @@ function flattenSection(o){
   return '<div class="lbl" style="margin-top:12px">Ground</div>'+
     '<label class="sg-t"><input type="checkbox" id="iflat"'+(on?' checked':'')+'> Level the ground under it</label>'+
     '<p class="hint" style="margin:2px 0 0">'+(sp==null?'':'The ground under it varies '+sp.toFixed(1)+' m. ')+
-    (on?(sp!=null&&sp>FLAT_MAX?'That is more than a height map can move (about 4 m either way): it is levelled as far as it goes.':
+    (on?(sp!=null&&sp>GROUND_MAX?'That is more than a height map can move: the build rebuilds the terrain under it, so it is levelled all the same.':
         'When the mission is built the ground is levelled at its median height, with a '+FLAT_APRON+' m apron easing back into the slope.')
       :'It rests on the lowest ground under it, and sinks into the slope on the high side.')+'</p>';
 }
@@ -4762,7 +4799,7 @@ function appliedIndex(){
   if(!a)return null;
   if(APPLIED_IX&&APPLIED_IX.src===a)return APPLIED_IX;
   var ix={src:a,placements:{},placementObj:{},edits:{},removeRefs:{},nodes:{},nodeEdits:{},objectives:{},ground:{},groundObj:{},
-    brush:JSON.stringify(a.brush||[]),paint:JSON.stringify(a.paint||[]),settings:JSON.stringify(a.settings||{}),events:{},eventObj:{}};
+    brush:JSON.stringify(a.brush||[]),sculpt:JSON.stringify(a.sculpt||[]),paint:JSON.stringify(a.paint||[]),settings:JSON.stringify(a.settings||{}),events:{},eventObj:{}};
   (a.events||[]).forEach(function(v){ix.events[v.uid]=JSON.stringify(v);ix.eventObj[v.uid]=v});
   (a.placements||[]).forEach(function(q){ix.placements[q.uid]=JSON.stringify(q);ix.placementObj[q.uid]=q});
   (a.edits||[]).forEach(function(e){if(e.ref)ix.edits[e.ref]=JSON.stringify(e)});
@@ -4776,7 +4813,7 @@ function appliedIndex(){
 function appliedState(){
   var ix=appliedIndex();
   if(APPLIED_ST.ver===planVer&&APPLIED_ST.ix===ix)return APPLIED_ST;
-  var st={ver:planVer,ix:ix,placements:{},edits:{},removeRefs:{},nodes:{},nodeEdits:{},objectives:{},ground:{},brush:false,paint:false,settings:false,events:{},n:0};
+  var st={ver:planVer,ix:ix,placements:{},edits:{},removeRefs:{},nodes:{},nodeEdits:{},objectives:{},ground:{},brush:false,sculpt:false,paint:false,settings:false,events:{},n:0};
   if(ix){
     var cur=planOf();
     function mark(list,key,into,idx){list.forEach(function(q){var k=key(q);if(k!=null&&idx[k]===JSON.stringify(q)){into[k]=1;st.n++}})}
@@ -4788,6 +4825,7 @@ function appliedState(){
     mark(cur.objectives,function(o){return o.uid},st.objectives,ix.objectives);
     mark(cur.ground,function(g){return g.uid},st.ground,ix.ground);
     if(cur.brush.length&&JSON.stringify(cur.brush)===ix.brush){st.brush=true;st.n++}
+    if(cur.sculpt.length&&JSON.stringify(cur.sculpt)===ix.sculpt){st.sculpt=true;st.n++}
     if(cur.paint.length&&JSON.stringify(cur.paint)===ix.paint){st.paint=true;st.n++}
     if(Object.keys(cur.settings).length&&JSON.stringify(cur.settings)===ix.settings){st.settings=true;st.n++}
     mark(cur.events,function(v){return v.uid},st.events,ix.events);
@@ -4871,6 +4909,13 @@ function renderList(){
       name:"Painted ground",meta:paintKeys().length+" m² painted",
       go:function(){GSEL="paint";GMODE.mode="paint";openGround();jumpTo((pbx[0]+pbx[1])/2,(pbx[2]+pbx[3])/2)},
       undo:canEdit()?clearPaint:null,undoTip:"Clear all paint",undoIcon:IC.trash});
+  }
+  if(hasSculpt()&&!AS.sculpt){
+    var sbx=sculptBox();
+    rows.ground.push({thumb:function(){return iconSwatch("dot","rgb("+GM_COL.raise+")",18)},
+      name:"Big shapes",meta:Math.round(sculptKeys().length*SCULPT_M*SCULPT_M/1000)/1000+" km², up to "+Math.round(sculptPeak())+" m",
+      go:function(){GSEL="sculpt";GMODE.mode="brush";openGround();jumpTo((sbx[0]+sbx[1])/2,(sbx[2]+sbx[3])/2)},
+      undo:canEdit()?clearSculpt:null,undoTip:"Clear all big shapes",undoIcon:IC.trash});
   }
   if(hasBrush()&&!AS.brush){
     var bbx=brushBox();
@@ -6283,9 +6328,12 @@ function drawPrefabGhost(){
 // brush; the ground under the level's own buildings is kept; and what stands on
 // the shaped ground - crates, trees, guards, pickups, the start, the navmesh -
 // moves up or down with it.
-var GROUND_MAX=4.0;             // a height map can move the ground this far, no further
-var groundEdits=[],groundBrush={},GSEL=null,GDRAW=null,GPAINT=null;
-var GSTRAIN={};                 // uid -> {need: the most it moves the ground, clip: past what the game allows}
+var GROUND_MAX=4.0;             // a height map moves the ground this far; further, the build rebuilds the terrain itself (terrain_mesh.py)
+var SHAPE_MAX=600;              // the most any one change may move the ground, metres
+var SCULPT_M=4;                 // the big shapes' grid: the terrain mesh's own, a height every 4 m (flatten.py SCULPT_M)
+var TBUDGET=null;               // terrain nodes the last dry run of the build needed (heights.json "terrain")
+var groundEdits=[],groundBrush={},groundSculpt={},GSEL=null,GDRAW=null,GPAINT=null;
+var GSTRAIN={};                 // uid -> {need: the most it moves the ground, big: past a height map (the terrain is rebuilt there)}
 var GRIDE={things:[],nodes:0,kept:0};   // what the shaping carries with it, and the buildings whose ground it keeps
 var GTOOLS=[
   ["level","Level","Flatten an area at one height: a yard, a road, a firing position. Drag to mark it."],
@@ -6293,22 +6341,25 @@ var GTOOLS=[
   ["lower","Lower","Sink an area: a ditch, a hollow, a crater. Drag to mark it."],
   ["smooth","Smooth","Even out bumps and sharp edges, keeping the lie of the land. Drag to mark it."],
   ["ramp","Ramp","An even slope between two heights. Drag from the bottom of the slope to the top."],
-  ["brush","Brush","Paint the ground freehand, like a paint program: hold the button and drag to raise, lower or smooth wherever the brush passes."],
+  ["remove","Remove","Take a hill or a mountain away: the ground its surroundings suggest takes its place. Drag round it. For a mountain in a range, Level to a height instead."],
+  ["brush","Brush","Paint the ground freehand: raise, lower, smooth, flatten or roughen it, and stamp mountains, hills, plateaus, craters and valleys. As high as you like: past what a height map can do, the build rebuilds the terrain itself."],
   ["paint","Paint","What the ground is made of: grass, dirt, rock, as the level has them. Pick one and drag over the map."]];
-var GM_TEXT={level:"Level",raise:"Raise",lower:"Lower",smooth:"Smooth",ramp:"Ramp",brush:"Brush",paint:"Paint"};
-var GM_COL={level:"255,210,74",raise:"140,255,150",lower:"110,200,255",smooth:"205,165,255",ramp:"255,150,90",brush:"140,255,150",paint:"255,190,120"};
+var GM_TEXT={level:"Level",raise:"Raise",lower:"Lower",smooth:"Smooth",ramp:"Ramp",remove:"Remove",brush:"Brush",paint:"Paint"};
+var GM_COL={level:"255,210,74",raise:"140,255,150",lower:"110,200,255",smooth:"205,165,255",ramp:"255,150,90",remove:"255,130,110",brush:"140,255,150",paint:"255,190,120"};
 var GT_ICONS={
   level:'<rect x="2.5" y="9" width="19" height="6.5" rx="1.6"/><path d="M9.5 9v6.5M14.5 9v6.5"/><circle cx="12" cy="12.25" r="1.1"/>',
   raise:'<path d="M2 20h20"/><path d="M3.5 20c2.5-5 5.2-7.5 8.5-7.5s6 2.5 8.5 7.5"/><path d="M12 9.5V3M9 6l3-3 3 3"/>',
   lower:'<path d="M2 13h4.5c1.8 0 2.7 5 5.5 5s3.7-5 5.5-5H22"/><path d="M12 3v8M9 8l3 3 3-3"/>',
   smooth:'<path d="M2 9.5l3-3.5 2.2 4.5L10.5 5l2.3 5.5 3-4 2.2 3.5 4-2.5"/><path d="M2 17.5c3.3-2.4 6.7-2.4 10 0s6.7 2.4 10 0"/>',
   ramp:'<path d="M2 20h20"/><path d="M3 20 21 8v12"/><path d="M8.5 13.2l6-4M12 8.6l2.6.6-.5 2.6"/>',
+  remove:'<path d="M2 20h20"/><path d="M3.5 20 10 9.5l3.2 4.4 2.3-2.6L20.5 20"/><path d="M15.5 4.5h6"/>',
   brush:'<path d="M14.5 3.5l6 6-7.8 7.8-6-6z"/><path d="M6.7 11.3 4.5 13.5c-1.6 1.6-.8 4.2-2.3 6.3 2.1-1.5 4.7-.7 6.3-2.3l2.2-2.2"/>',
   paint:'<rect x="3.5" y="3.5" width="14" height="6" rx="1.2"/><path d="M17.5 6.5h2.5v5h-8v3"/><rect x="10.5" y="14.5" width="3" height="6.5" rx="1"/>'
 };
 var GMODE=(function(){
-  var d={mode:"level",round:false,by:1,smooth:4,rampWidth:6,brush:{op:"raise",size:5,strength:0.5},paint:{mat:1,size:3}};
+  var d={mode:"level",round:false,by:1,smooth:4,rampWidth:6,brush:{op:"raise",size:5,strength:0.5,edge:"soft",height:60,rough:0.5},paint:{mat:1,size:3}};
   try{var s=JSON.parse(localStorage.getItem("plotter:ground2")||"{}");for(var k in s)if(k in d)d[k]=s[k]}catch(e){}
+  d.brush=Object.assign({op:"raise",size:5,strength:0.5,edge:"soft",height:60,rough:0.5},d.brush||{});
   if(!GM_TEXT[d.mode])d.mode="level";
   return d;
 })();
@@ -6398,18 +6449,40 @@ function areaMedian(a){
   return zs[zs.length>>1];
 }
 function rampZ(a,lx){var t=Math.max(0,Math.min(1,(lx+a.w/2)/a.w));return a.z0+(a.z1-a.z0)*t}
+// ---- Remove: the ground its surroundings suggest (flatten.py _ring, ring_fill):
+// the level's own ground at 48 points on the ellipse through the area's outer
+// edge, drawn in across it, each weighed by the inverse square of its distance
+var RING_N=48;
+function areaRing(a){
+  var sig=[a.x,a.y,a.w,a.h,a.angle||0,a.blend||0].join(",");
+  if(a._ring&&a._ringSig===sig)return a._ring;
+  var bl=a.blend||0,rx=a.w/2+bl,ry=a.h/2+bl,g=a.angle||0,c=Math.cos(g),s=Math.sin(g),out=[];
+  for(var k=0;k<RING_N;k++){
+    var t=2*Math.PI*k/RING_N,mx=rx*Math.cos(t),my=ry*Math.sin(t),x=a.x+mx*c-my*s,y=a.y+mx*s+my*c,z=baseZ(x,y);
+    if(z!=null)out.push([x,y,z]);
+  }
+  a._ring=out;a._ringSig=sig;
+  return out;
+}
+function ringFill(a,x,y){
+  var R=areaRing(a),tw=0,tz=0;
+  for(var i=0;i<R.length;i++){var w=1/((R[i][0]-x)*(R[i][0]-x)+(R[i][1]-y)*(R[i][1]-y)+1);tw+=w;tz+=w*R[i][2]}
+  return tw?tz/tw:null;
+}
 // the edge, when it is left to the tool: wide enough that the slope it leaves
 // is a natural one (about 2.5 m of run for every metre of height)
 function autoBlend(a){
   var need=0;
   if(a.mode==="raise"||a.mode==="lower")need=Math.abs(a.delta||0);
   else if(a.mode==="smooth")return Math.max(3,Math.min(20,a.strength||4));
+  else if(a.mode==="remove")return Math.round(Math.max(6,Math.min(40,0.25*Math.max(a.w,a.h)))*2)/2;
   else areaSamples(a,function(x,y,lx){
     var z=baseZ(x,y);if(z==null)return;
     var want=a.mode==="ramp"?rampZ(a,lx):a.height;
     if(want!=null)need=Math.max(need,Math.abs(want-z));
   });
-  return Math.round(Math.max(3,Math.min(20,2.5*need))*2)/2;
+  // big ones get a wide edge (a 30 m raise eases over 75 m), up to 150 m
+  return Math.round(Math.max(3,Math.min(150,2.5*need))*2)/2;
 }
 
 // ---- nothing that stands on the ground has it moved from under it (flatten.py
@@ -6420,7 +6493,7 @@ function autoBlend(a){
 // not in it: they stand on the navmesh, which goes up and down with the ground.
 // Your own building that levels its ground has its own pad instead.
 var KEEP_NEAR=0.5,KEEP_EASE=3.0,KEEP_POINT=0.6;
-var KEEP_TYPES={building:1,prop:1,explodable:1,vehicle:1,pickup:1,player:1,fence:1};
+var KEEP_TYPES={building:1,prop:1,explodable:1,vehicle:1,pickup:1,fence:1};   // not the player start: it goes with the ground (apply_plan.py)
 function keepsGround(o){
   if(!o||o.cutscene||!KEEP_TYPES[o.type]||o.x==null)return false;
   if(o.onLevel)return false;                  // set on ground levelled for it (a compound)
@@ -6475,6 +6548,29 @@ function brushBox(){
   return x0>x1?null:[x0-1,x1+2,y0-1,y1+2];
 }
 
+// ---- the big shapes: metres on the terrain mesh's own 4 m grid, point (ix, iy) at
+// (4 ix, 4 iy); bilinear between (flatten.py _sculpt_at). They apply first,
+// before the areas, the brush and the building pads.
+function hasSculpt(){for(var k in groundSculpt)return true;return false}
+function sculptKeys(){return Object.keys(groundSculpt)}
+function sculptAt(x,y){
+  var fx=x/SCULPT_M,fy=y/SCULPT_M,ix=Math.floor(fx),iy=Math.floor(fy),tx=fx-ix,ty=fy-iy,S=groundSculpt;
+  function g(i,j){return S[i+","+j]||0}
+  return (g(ix,iy)*(1-tx)+g(ix+1,iy)*tx)*(1-ty)+(g(ix,iy+1)*(1-tx)+g(ix+1,iy+1)*tx)*ty;
+}
+function sculptBox(){
+  var x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(var k in groundSculpt){var p=k.split(","),ix=+p[0],iy=+p[1];
+    if(ix<x0)x0=ix;if(ix>x1)x1=ix;if(iy<y0)y0=iy;if(iy>y1)y1=iy}
+  return x0>x1?null:[(x0-1)*SCULPT_M,(x1+1)*SCULPT_M,(y0-1)*SCULPT_M,(y1+1)*SCULPT_M];
+}
+function sculptPlan(){return sculptKeys().map(function(k){var p=k.split(",");return [+p[0],+p[1],Math.round(groundSculpt[k]*100)]})}
+function sculptPeak(){var m=0;for(var k in groundSculpt)m=Math.max(m,Math.abs(groundSculpt[k]));return m}
+function clearSculpt(){
+  if(!hasSculpt())return;
+  groundSculpt={};GSCULPT_CV=null;areaChanged();toast("Big shapes cleared");
+}
+
 // ---- the plan's shaping, applied to the terrain the plan draws
 function cellsOf(x0,x1,y0,y1){
   var m=TERR.meta;
@@ -6513,6 +6609,7 @@ function shapeZ(a,z,wt,x,y,grid,k){
     return z+(grid.z[j*grid.nx+i]-z)*wt;
   }
   if(a.mode==="ramp")return z+(rampZ(a,areaLocal(a,x,y)[0])-z)*wt;
+  if(a.mode==="remove"){var f=ringFill(a,x,y);return f==null?z:z+(f-z)*wt}
   return a.height==null?z:z+(a.height-z)*wt;
 }
 // The pads the build levels under your buildings (flatten.py pad_for, FLAT and
@@ -6572,15 +6669,16 @@ function padsSoon(){
 function applyGround(){
   if(!TERR)return;
   PAD_SIG=padSignature();
-  var any=groundEdits.length||hasBrush()||PAD_SIG;
+  var any=groundEdits.length||hasBrush()||hasSculpt()||PAD_SIG;
   if(!TERR.h0){
     if(!any)return;                  // nothing shaped yet: the level's ground as it is
     TERR.h0=TERR.h.slice(0);
   }
   var m=TERR.meta,h=TERR.h,h0=TERR.h0,W_=m.w;
   h.set(h0);GSTRAIN={};
-  var boxes=groundEdits.map(function(a){var R=areaReach(a);return [a.x-R,a.x+R,a.y-R,a.y+R]}),bb0=brushBox();
+  var boxes=groundEdits.map(function(a){var R=areaReach(a);return [a.x-R,a.x+R,a.y-R,a.y+R]}),bb0=brushBox(),sb0=sculptBox();
   if(bb0)boxes.push(bb0);
+  if(sb0)boxes.push(sb0);
   var keeps=boxes.length?keepList().filter(function(k){
     return boxes.some(function(q){return q[0]<=k.box[1]&&q[1]>=k.box[0]&&q[2]<=k.box[3]&&q[3]>=k.box[2]})}):[];
   if(!TERR.kf||TERR.kf.length!==h.length)TERR.kf=new Float32Array(h.length);
@@ -6588,6 +6686,15 @@ function applyGround(){
   function kfAt(k,x,y){var f=KF[k];if(f<0)f=KF[k]=keeps.length?keepAt(keeps,x,y):1;return f}
   var touched=null;
   function grow(c){touched=touched?[Math.min(touched[0],c[0]),Math.max(touched[1],c[1]),Math.min(touched[2],c[2]),Math.max(touched[3],c[3])]:c.slice()}
+  // the big shapes first, as the build lays them (flatten.py _sample)
+  if(sb0){
+    var cs=cellsOf(sb0[0],sb0[1],sb0[2],sb0[3]);grow(cs);
+    for(var js=cs[2];js<=cs[3];js++)for(var is=cs[0];is<=cs[1];is++){
+      var ks=js*W_+is;if(h[ks]!==h[ks])continue;
+      var xs=m.x0+is*m.cell,ys=m.y0+js*m.cell,sd=sculptAt(xs,ys);
+      if(sd){var fs=kfAt(ks,xs,ys);if(fs>0)h[ks]+=sd*fs}
+    }
+  }
   groundEdits.forEach(function(a){
     if(a.auto!==false)a.blend=autoBlend(a);
     var R=areaReach(a),c=cellsOf(a.x-R,a.x+R,a.y-R,a.y+R),grid=a.mode==="smooth"?smoothGrid(a,R):null,need=0,over=0,lim=(a.blend||0)+areaAmp(a);
@@ -6607,7 +6714,7 @@ function applyGround(){
       if(Math.abs(tot)>over&&own*tot>0&&Math.abs(own)>0.05)over=Math.abs(tot);
       h[k]=nz;
     }
-    GSTRAIN[a.uid]={need:need,over:over,clip:need>GROUND_MAX+0.05||over>GROUND_MAX+0.05};
+    GSTRAIN[a.uid]={need:need,over:over,big:need>GROUND_MAX+0.05||over>GROUND_MAX+0.05};
   });
   // the ground as the areas leave it: what the brush paints on
   if(!TERR.ha||TERR.ha.length!==h.length)TERR.ha=new Float32Array(h.length);
@@ -6631,10 +6738,6 @@ function applyGround(){
       if(best)h[k3]=h[k3]+(best.target-h[k3])*bw;
     }
   }
-  if(touched)for(var j2=touched[2];j2<=touched[3];j2++)for(var i2=touched[0];i2<=touched[1];i2++){
-    var k2=j2*W_+i2,dz=h[k2]-h0[k2];
-    if(dz>GROUND_MAX)h[k2]=h0[k2]+GROUND_MAX;else if(dz<-GROUND_MAX)h[k2]=h0[k2]-GROUND_MAX;
-  }
   TERR.kfAt=kfAt;
   TERR.img=null;TERR.job=null;TERR.build={};placeMemo={};
   countRiders();
@@ -6646,7 +6749,7 @@ function brushCells(c,kfAt){
     var k=j*m.w+i;if(ha[k]!==ha[k])continue;
     var x=m.x0+i*m.cell,y=m.y0+j*m.cell,bd=brushAt(x,y),v=ha[k];
     if(bd){var f=kfAt?kfAt(k,x,y):1;v+=bd*f}
-    var dz=v-h0[k];h[k]=dz>GROUND_MAX?h0[k]+GROUND_MAX:dz<-GROUND_MAX?h0[k]-GROUND_MAX:v;
+    var dz=v-h0[k];h[k]=dz>SHAPE_MAX?h0[k]+SHAPE_MAX:dz<-SHAPE_MAX?h0[k]-SHAPE_MAX:v;
   }
 }
 // what stands on the shaped ground: its ground is kept (keepList), and the panel
@@ -6659,7 +6762,7 @@ function countRiders(){
   LEVEL.objects.concat(placements).forEach(function(o){
     if(o.x==null||o.cutscene)return;
     var hitA=groundEdits.filter(function(a){return inArea2(a,o.x,o.y)});
-    var inB=bb&&o.x>=bb[0]&&o.x<=bb[1]&&o.y>=bb[2]&&o.y<=bb[3]&&Math.abs(brushAt(o.x,o.y))>0.02;
+    var inB=(bb&&o.x>=bb[0]&&o.x<=bb[1]&&o.y>=bb[2]&&o.y<=bb[3]&&Math.abs(brushAt(o.x,o.y))>0.02)||Math.abs(sculptAt(o.x,o.y))>0.02;
     if(!hitA.length&&!inB)return;
     if(o.type==="soldier"){GRIDE.guards++;return}
     if(!keepsGround(o))return;
@@ -6723,20 +6826,46 @@ function areaText(a){
   if(a.mode==="level")return "level "+(a.height!=null?a.height.toFixed(1)+" m":"?");
   if(a.mode==="raise"||a.mode==="lower")return (a.mode==="raise"?"raise ":"lower ")+Math.abs(a.delta||0).toFixed(1)+" m";
   if(a.mode==="smooth")return "smooth "+(a.strength||4)+" m";
+  if(a.mode==="remove")return "remove";
   return "ramp "+(a.z1-a.z0>=0?"+":"")+(a.z1-a.z0).toFixed(1)+" m";
 }
 
 // ---- the brush at work
-function paintAt(x,y){
+// Up to 10 m wide it paints the fine layer (1 m cells, groundBrush); wider, and
+// for the big shapes, the terrain's own 4 m grid (groundSculpt), which the build
+// turns into the terrain mesh itself where it moves the ground past 4 m.
+var BRUSH_OPS=[["raise","up","Raise"],["lower","down","Lower"],["smooth","smooth","Smooth"],["flatten","level","Flatten: to the height where the stroke began"],
+  ["roughen","rough","Roughen"],["erase","erase","Erase strokes"]];
+var STAMP_OPS=[["mountains","mountain","Mountains: one at a click, a range along a stroke"],["hills","hill","Hills"],
+  ["plateau","plateau","Plateau: a flat top on steep sides"],["crater","crater","Crater"],["valley","valley","Valley: carved along the stroke"]];
+// the sizes a stamp comes in: radius and height, metres
+var STAMP_PRESETS={
+  mountains:{small:[60,25],medium:[140,70],high:[260,160]},
+  hills:{small:[25,5],medium:[55,12],high:[100,28]},
+  plateau:{small:[35,8],medium:[70,18],high:[130,40]},
+  crater:{small:[20,5],medium:[45,12],high:[90,25]},
+  valley:{small:[12,4],medium:[25,10],high:[50,25]}};
+function isStamp(op){return STAMP_OPS.some(function(o){return o[0]===op})}
+function brushBig(){var b=GMODE.brush;return isStamp(b.op)||(b.size||5)>10}
+function edgeF(d){
+  var e=GMODE.brush.edge||"soft";
+  if(e==="linear")return 1-d;
+  if(e==="hard")return d<0.8?1:smoother((1-d)/0.2);
+  return smoother(1-d);
+}
+function brushAt1(x,y){
+  // the fine layer
   var b=GMODE.brush,r=Math.max(1,b.size||5),amt=Math.max(0.05,b.strength||0.5)*0.25;
   var ix0=Math.floor(x-r),ix1=Math.ceil(x+r),iy0=Math.floor(y-r),iy1=Math.ceil(y+r),B=groundBrush;
   for(var iy=iy0;iy<=iy1;iy++)for(var ix=ix0;ix<=ix1;ix++){
     var cx=ix+0.5,cy=iy+0.5,d=Math.hypot(cx-x,cy-y)/r;
     if(d>=1)continue;
-    var f=smoother(1-d),key=ix+","+iy,cur=B[key]||0;
+    var f=edgeF(d),key=ix+","+iy,cur=B[key]||0;
     if(b.op==="raise")cur+=amt*f;
     else if(b.op==="lower")cur-=amt*f;
     else if(b.op==="erase")cur-=cur*Math.min(1,0.6*f);
+    else if(b.op==="roughen")cur+=(vnoise(cx/3+GPAINT.seed,cy/3)-0.5)*2*amt*f;
+    else if(b.op==="flatten"){var hz=terrainZ(cx,cy);if(hz!=null&&GPAINT.target!=null)cur+=(GPAINT.target-hz)*Math.min(1,0.25+amt)*f}
     else if(b.op==="smooth"){
       // towards the ground averaged round the cell
       var s=0,n=0;
@@ -6744,19 +6873,109 @@ function paintAt(x,y){
       var here=terrainZ(cx,cy);
       if(n&&here!=null)cur+=(s/n-here)*0.5*f;
     }
-    cur=Math.max(-GROUND_MAX,Math.min(GROUND_MAX,cur));
+    cur=Math.max(-SHAPE_MAX,Math.min(SHAPE_MAX,cur));
     if(Math.abs(cur)<0.01)delete B[key];else B[key]=Math.round(cur*100)/100;
   }
   if(TERR&&TERR.ha&&TERR.h0){brushCells(cellsOf(x-r-1,x+r+1,y-r-1,y+r+1),TERR.kfAt)}
   GBRUSH_CV=null;
 }
+// the big layer: sets each 4 m point it covers (combine: how the new value meets
+// the old), then shows the change on the map at once (the relief catches up
+// when the stroke ends)
+function sculptCells(x,y,r,fn){
+  var S=groundSculpt,chg={},i0=Math.floor((x-r)/SCULPT_M),i1=Math.ceil((x+r)/SCULPT_M),j0=Math.floor((y-r)/SCULPT_M),j1=Math.ceil((y+r)/SCULPT_M);
+  for(var j=j0;j<=j1;j++)for(var i=i0;i<=i1;i++){
+    var cx=i*SCULPT_M,cy=j*SCULPT_M,d=Math.hypot(cx-x,cy-y)/r;
+    if(d>=1)continue;
+    var key=i+","+j,old=S[key]||0,v=fn(cx,cy,d,old);
+    if(v==null||v===old)continue;
+    v=Math.max(-SHAPE_MAX,Math.min(SHAPE_MAX,v));
+    if(Math.abs(v)<0.01)delete S[key];else S[key]=Math.round(v*100)/100;
+    chg[key]=(S[key]||0)-old;
+  }
+  // the change, on the map's own ground, straight away
+  if(TERR&&TERR.h0){
+    var m=TERR.meta,c=cellsOf(x-r-SCULPT_M,x+r+SCULPT_M,y-r-SCULPT_M,y+r+SCULPT_M),H=TERR.h;
+    for(var jj=c[2];jj<=c[3];jj++)for(var ii=c[0];ii<=c[1];ii++){
+      var k=jj*m.w+ii;if(H[k]!==H[k])continue;
+      var wx=m.x0+ii*m.cell,wy=m.y0+jj*m.cell,fx=wx/SCULPT_M,fy=wy/SCULPT_M,ix=Math.floor(fx),iy=Math.floor(fy),tx=fx-ix,ty=fy-iy;
+      var g=function(a,b){return chg[a+","+b]||0};
+      var dd=(g(ix,iy)*(1-tx)+g(ix+1,iy)*tx)*(1-ty)+(g(ix,iy+1)*(1-tx)+g(ix+1,iy+1)*tx)*ty;
+      if(dd)H[k]+=dd*(TERR.kfAt?TERR.kfAt(k,wx,wy):1);
+    }
+  }
+  GSCULPT_CV=null;
+}
+function sculptDab(x,y){
+  var b=GMODE.brush,r=Math.max(2,b.size||20),amt=Math.max(0.05,b.strength||0.5),op=b.op;
+  var sm=Math.max(4,r/6);
+  sculptCells(x,y,r,function(cx,cy,d,old){
+    var f=edgeF(d);
+    if(op==="raise")return old+amt*0.25*f;
+    if(op==="lower")return old-amt*0.25*f;
+    if(op==="erase")return old-old*Math.min(1,0.6*f);
+    if(op==="roughen")return old+(fbm(cx/Math.max(8,r/3),cy/Math.max(8,r/3),GPAINT.seed,3)-0.5)*2*amt*f;
+    var here=terrainZ(cx,cy);if(here==null)return null;
+    if(op==="flatten")return GPAINT.target==null?null:old+(GPAINT.target-here)*Math.min(1,0.25+amt*0.1)*f;
+    if(op==="smooth"){
+      var s=0,n=0;
+      for(var dy=-1;dy<=1;dy++)for(var dx=-1;dx<=1;dx++){var z=terrainZ(cx+dx*sm,cy+dy*sm);if(z!=null){s+=z;n++}}
+      return n?old+(s/n-here)*0.5*f:null;
+    }
+    return null;
+  });
+}
+// ---- the big shapes, stamped: natural-looking, different every time (the
+// stroke's own seed), baked into the 4 m layer where they are put
+function fbm(x,y,seed,oct){
+  var t=0,a=0.5,w=0,f=1;
+  for(var o=0;o<(oct||4);o++){t+=a*vnoise(x*f+seed*0.37+o*17.1,y*f-seed*0.21+o*31.7);w+=a;a*=0.5;f*=2.03}
+  return t/w;
+}
+function ridged(x,y,seed){
+  var t=0,a=0.5,w=0,f=1;
+  for(var o=0;o<4;o++){var n=1-Math.abs(2*vnoise(x*f+seed*0.53+o*11.3,y*f+seed*0.17-o*7.9)-1);t+=a*n*n;w+=a;a*=0.5;f*=2.1}
+  return t/w;
+}
+function stampAt(x,y){
+  var b=GMODE.brush,op=b.op,r=Math.max(6,b.size||60),H=Math.max(0.5,b.height||20),rough=b.rough==null?0.5:b.rough;
+  var seed=(GPAINT.seed+GPAINT.n*97)%65536;
+  sculptCells(x,y,r,function(cx,cy,d,old){
+    // the footprint wanders a little, so no two are round
+    var wob=(fbm(cx/r*1.6,cy/r*1.6,seed+5,2)-0.5)*0.35,t=Math.max(0,Math.min(1,d*(1+wob)));
+    if(t>=1)return null;
+    var v;
+    if(op==="mountains"){
+      var prof=Math.pow(1-t*t,2)*(0.55+0.45*(1-t)),rn=ridged(cx/(r*0.45),cy/(r*0.45),seed);
+      v=H*prof*(1-0.45*rough+0.9*rough*rn);
+      return Math.max(old,v);
+    }
+    if(op==="hills"){v=H*smoother(1-t)*(0.85+0.3*fbm(cx/(r*0.6),cy/(r*0.6),seed,3)*rough*2);return Math.max(old,v)}
+    if(op==="plateau"){v=H*(t<0.6?1:smoother((1-t)/0.4))*(1+(fbm(cx/(r*0.5),cy/(r*0.5),seed,3)-0.5)*0.2*rough);return Math.max(old,v)}
+    if(op==="crater"){
+      var bowl=t<0.7?-(1-Math.pow(t/0.7,2)):0,rim=0.4*Math.exp(-Math.pow((t-0.78)/0.12,2));
+      return old+H*(bowl+rim)*(1+(fbm(cx/(r*0.4),cy/(r*0.4),seed,2)-0.5)*0.3*rough);
+    }
+    if(op==="valley"){v=-H*smoother(1-t)*(0.9+0.2*fbm(cx/(r*0.8),cy/(r*0.8),seed,2));return Math.min(old,v)}
+    return null;
+  });
+}
+function paintAt(x,y){
+  var op=GMODE.brush.op;
+  if(isStamp(op))stampAt(x,y);
+  else if(brushBig())sculptDab(x,y);
+  else brushAt1(x,y);
+}
 function paintTo(x,y){
   if(!GPAINT)return;
-  var r=Math.max(1,GMODE.brush.size||5),step=Math.max(0.5,r/4),l=GPAINT.last,d=Math.hypot(x-l[0],y-l[1]);
+  var b=GMODE.brush,r=Math.max(1,b.size||5);
+  // mountains and the like stand a little apart along a stroke; the rest overlap
+  var step=b.op==="valley"?Math.max(1,r/4):isStamp(b.op)?Math.max(4,r*1.1):Math.max(0.5,r/4);
+  var l=GPAINT.last,d=Math.hypot(x-l[0],y-l[1]);
   if(d<step)return;
   var n=Math.floor(d/step);
-  for(var i=1;i<=n;i++)paintAt(l[0]+(x-l[0])*i/n,l[1]+(y-l[1])*i/n);
-  GPAINT.last=[x,y];GPAINT.n+=n;
+  for(var i=1;i<=n;i++){GPAINT.n++;paintAt(l[0]+(x-l[0])*i/n,l[1]+(y-l[1])*i/n)}
+  GPAINT.last=[x,y];
 }
 // ---- paint: what the ground is made of, cell by cell
 // 1 m cells on the world grid, which is the grid of the game's 64 m terrain
@@ -6873,6 +7092,22 @@ function clearBrush(){
 }
 
 // ---- drawn over the map
+var GSCULPT_CV=null;
+function sculptCanvas(){
+  var bb=sculptBox();if(!bb)return null;
+  if(GSCULPT_CV&&GSCULPT_CV.bb+""===bb+"")return GSCULPT_CV;
+  var i0=Math.round(bb[0]/SCULPT_M),j1=Math.round(bb[3]/SCULPT_M),w=Math.round((bb[1]-bb[0])/SCULPT_M)+1,h=Math.round((bb[3]-bb[2])/SCULPT_M)+1;
+  var c=document.createElement("canvas");c.width=w;c.height=h;
+  var g=c.getContext("2d"),img=g.createImageData(w,h),D=img.data,top=Math.max(4,sculptPeak());
+  for(var k in groundSculpt){
+    var p=k.split(","),i=+p[0]-i0,j=j1-+p[1],v=groundSculpt[k],o=(j*w+i)*4,al=Math.min(1,Math.abs(v)/top);
+    if(i<0||j<0||i>=w||j>=h)continue;
+    if(v>0){D[o]=140;D[o+1]=255;D[o+2]=150}else{D[o]=110;D[o+1]=200;D[o+2]=255}
+    D[o+3]=Math.round(30+140*Math.sqrt(al));
+  }
+  g.putImageData(img,0,0);
+  c.bb=bb;GSCULPT_CV=c;return c;
+}
 var GBRUSH_CV=null;
 function brushCanvas(){
   var bb=brushBox();if(!bb)return null;
@@ -6900,6 +7135,13 @@ function drawGround(){
     ctx.drawImage(pc,ptl[0],ptl[1],pc.width*view.k,pc.height*view.k);
     ctx.globalAlpha=1;ctx.imageSmoothingEnabled=true;
   }
+  var sc=shownBrush||GSEL==="sculpt"||GHOVER==="sculpt"?sculptCanvas():null;
+  if(sc){
+    var stl=w2s(sc.bb[0]-SCULPT_M/2,sc.bb[3]+SCULPT_M/2);
+    ctx.globalAlpha=open?0.6:0.3;ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(sc,stl[0],stl[1],sc.width*SCULPT_M*view.k,sc.height*SCULPT_M*view.k);
+    ctx.globalAlpha=1;
+  }
   var bc=shownBrush?brushCanvas():null;
   if(bc){
     var tl=w2s(bc.bb[0],bc.bb[3]);
@@ -6919,7 +7161,7 @@ function drawGround(){
       ctx.stroke();
     }
     ctx.setLineDash(on?[]:[6,4]);ctx.lineWidth=on?2:1.2;
-    ctx.strokeStyle=st.clip?"rgba(255,176,64,.9)":"rgba("+col+","+(on?".95":".6")+")";ctx.fillStyle="rgba("+col+",.10)";
+    ctx.strokeStyle="rgba("+col+","+(on?".95":".6")+")";ctx.fillStyle="rgba("+col+",.10)";
     ctx.beginPath();
     if(a.round&&a.mode!=="ramp")ctx.ellipse(0,0,rw,rh,0,0,6.2832);else ctx.rect(-rw,-rh,rw*2,rh*2);
     ctx.fill();ctx.stroke();ctx.setLineDash([]);
@@ -6961,7 +7203,8 @@ function drawGround(){
     ctx.fillText(m2,b2[0]+8,b2[1]+4);
   }
   if(open&&GMODE.mode==="brush"&&mouse.inside){
-    var bp=w2s(mouse.wx,mouse.wy),br=(GMODE.brush.size||5)*view.k,bcol=GMODE.brush.op==="lower"?"110,200,255":GMODE.brush.op==="erase"?"255,120,110":GMODE.brush.op==="smooth"?"205,165,255":"140,255,150";
+    var bop=GMODE.brush.op,bp=w2s(mouse.wx,mouse.wy),br=(GMODE.brush.size||5)*view.k,
+      bcol=bop==="lower"||bop==="valley"||bop==="crater"?"110,200,255":bop==="erase"?"255,120,110":bop==="smooth"||bop==="flatten"?"205,165,255":"140,255,150";
     ctx.strokeStyle="rgba("+bcol+",.95)";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(bp[0],bp[1],br,0,6.2832);ctx.stroke();
     ctx.strokeStyle="rgba("+bcol+",.45)";ctx.beginPath();ctx.arc(bp[0],bp[1],br*0.5,0,6.2832);ctx.stroke();
   }
@@ -6973,7 +7216,7 @@ function buildGroundBar(){
   var host=$("gbar");if(!host)return;
   var ro=!canEdit(),on=groundOpen();
   host.innerHTML='<div class="gbar-t">Ground</div>'+GTOOLS.map(function(t){
-    var n=t[0]==="brush"?(hasBrush()?1:0):t[0]==="paint"?(hasPaint()?1:0):groundEdits.filter(function(a){return a.mode===t[0]}).length;
+    var n=t[0]==="brush"?(hasBrush()||hasSculpt()?1:0):t[0]==="paint"?(hasPaint()?1:0):groundEdits.filter(function(a){return a.mode===t[0]}).length;
     return '<button type="button" data-g="'+t[0]+'" aria-pressed="'+(on&&GMODE.mode===t[0])+'"'+(ro?' disabled':'')+
       ' data-tip="'+esc(t[1]+"\n"+t[2]+(ro?" Open one of your missions to shape its ground.":""))+'" aria-label="'+t[1]+'">'+
       '<svg viewBox="0 0 24 24" aria-hidden="true">'+GT_ICONS[t[0]]+'</svg><span>'+t[1]+'</span>'+
@@ -7015,7 +7258,14 @@ var GP_IC={
   match:'<path d="M3 18.5h18"/><path d="M6 14.5h12"/><path d="M12 3.5v7M9 7.5l3 3 3-3"/>',
   up:'<path d="M12 19.5v-15M6 10.5l6-6 6 6"/>',
   down:'<path d="M12 4.5v15M6 13.5l6 6 6-6"/>',
-  erase:'<path d="M4.5 15.5 13 7l6.5 6.5-6.5 6.5H8.5z"/><path d="M10 11l6.5 6.5M12 20h8"/>'
+  erase:'<path d="M4.5 15.5 13 7l6.5 6.5-6.5 6.5H8.5z"/><path d="M10 11l6.5 6.5M12 20h8"/>',
+  rough:'<path d="M2 16l2.5-3 2 2.5 2.5-5 2 3 2.5-4.5 2 4 2.5-2.5 2 3 2-1.5"/><path d="M2 20h20"/>',
+  mountain:'<path d="M1.5 20 8.5 7l3.5 5.5 2.5-3.5 8 11z"/><path d="M6.5 11.3 8.5 13l2-1.8"/>',
+  hill:'<path d="M2 19.5c3-6.5 6-9 9-9s5.5 2 7 4.5c1 1.6 2 3 4 4.5"/><path d="M2 19.5h20"/>',
+  plateau:'<path d="M2 19.5 6.5 9h11l4.5 10.5"/><path d="M2 19.5h20"/>',
+  crater:'<path d="M2 12.5h3.5c1.5 0 1.8-2.5 3.5-2.5s1.5 6 3 6 1.5-6 3-6 2 2.5 3.5 2.5H22"/>',
+  valley:'<path d="M2 7.5c3 0 4 11 10 11s7-11 10-11"/>',
+  big:'<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M3.5 17 9 10.5l3 3.5 2.5-2.5 6 6"/>'
 };
 function gpi(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(GP_IC[k]||GT_ICONS[k]||"")+'</svg>'}
 var GHOVER=null;
@@ -7025,6 +7275,7 @@ function rowTitle(a){
   if(a.mode==="raise")return "Raise by "+Math.abs(a.delta||0).toFixed(1)+" m";
   if(a.mode==="lower")return "Lower by "+Math.abs(a.delta||0).toFixed(1)+" m";
   if(a.mode==="smooth")return "Smooth, "+(a.strength||4)+" m";
+  if(a.mode==="remove")return "Remove: the ground round it";
   return "Ramp, "+(a.z1-a.z0>=0?"up ":"down ")+Math.abs(a.z1-a.z0).toFixed(1)+" m";
 }
 function renderGround(){
@@ -7054,15 +7305,33 @@ function renderGround(){
       '<div class="gd-opts">'+fld("gd-psize","Size",PM.size,"m",0.5,20,0.5)+'</div>'+
       '<p class="gd-hint" style="margin-top:6px">The game paints its ground in 1 m squares; a painted square takes the material the level uses for it, with its own textures. To be confirmed in game.</p>';
   }else if(mode==="brush"){
-    var B=GMODE.brush;
-    h+='<p class="gd-hint">Hold the button and drag over the map to paint the ground.</p>'+
-      '<div class="gd-opts"><span class="grp" id="gd-bop">'+[["raise","up","Raise"],["lower","down","Lower"],["smooth","smooth","Smooth"],["erase","erase","Erase strokes"]].map(function(o){
-        return '<button type="button" class="gd-ib'+(B.op===o[0]?' on':'')+'" data-op="'+o[0]+'" title="'+o[2]+'" aria-label="'+o[2]+'">'+gpi(o[1])+'</button>'}).join("")+'</span>'+
-      fld("gd-bsize","Size",B.size,"m",1,30,0.5)+fld("gd-bstr","Strength",B.strength,"m",0.1,2,0.1)+'</div>';
+    var B=GMODE.brush,stamp=isStamp(B.op);
+    function opBtns(list){return list.map(function(o){
+      return '<button type="button" class="gd-ib'+(B.op===o[0]?' on':'')+'" data-op="'+o[0]+'" title="'+esc(o[2])+'" aria-label="'+esc(o[2].split(":")[0])+'">'+gpi(o[1])+'</button>'}).join("")}
+    h+='<p class="gd-hint">'+(stamp?(B.op==="valley"?"Drag along where the valley runs.":"Click to put one down; drag to put a row of them."):
+        "Hold the button and drag over the map.")+'</p>'+
+      '<div class="gd-opts"><span class="grp" id="gd-bop">'+opBtns(BRUSH_OPS)+'</span></div>'+
+      '<div class="gd-opts"><span class="grp" id="gd-bop2"><span>Shapes</span>'+opBtns(STAMP_OPS)+'</span></div>';
+    if(stamp){
+      var pr=STAMP_PRESETS[B.op]||{};
+      h+='<div class="gd-opts"><span class="grp" id="gd-bpre"><span>Size</span>'+["small","medium","high"].map(function(k){
+          return '<button type="button" class="gd-seg" data-pre="'+k+'" title="'+pr[k][0]+' m across the middle, '+pr[k][1]+' m high">'+
+            (k==="high"?(B.op==="valley"||B.op==="crater"?"Deep":"High"):k==="medium"?"Mid":"Small")+'</button>'}).join("")+'</span></div>'+
+        '<div class="gd-opts">'+fld("gd-bsize","Radius",B.size,"m",6,600,1)+fld("gd-bh",B.op==="valley"||B.op==="crater"?"Depth":"Height",B.height,"m",0.5,SHAPE_MAX,0.5)+'</div>'+
+        (B.op!=="valley"?'<div class="gd-opts">'+fld("gd-brough","Rough",Math.round((B.rough==null?0.5:B.rough)*100),"%",0,100,5)+'</div>':'');
+    }else{
+      h+='<div class="gd-opts">'+fld("gd-bsize","Size",B.size,"m",1,600,0.5)+
+        (B.op==="erase"||B.op==="smooth"?'':fld("gd-bstr","Strength",B.strength,"m",0.1,40,0.1))+'</div>'+
+        '<div class="gd-opts"><span class="grp" id="gd-bedge"><span>Edge</span>'+[["soft","Soft"],["linear","Even"],["hard","Hard"]].map(function(e){
+          return '<button type="button" class="gd-seg'+((B.edge||"soft")===e[0]?' on':'')+'" data-edge="'+e[0]+'">'+e[1]+'</button>'}).join("")+'</span></div>';
+    }
+    h+='<p class="gd-hint" style="margin-top:6px">'+(stamp||(B.size||5)>10?
+      "Big: it shapes the terrain itself, on its 4 m grid, as high or deep as you like.":
+      "Fine: 1 m detail. Past 10 m wide the brush shapes the terrain itself instead.")+'</p>';
   }else{
     h+='<p class="gd-hint">'+(mode==="ramp"?"Drag from the bottom of the slope to the top.":"Drag on the map to mark the ground, or click for a 12 m patch.")+'</p>'+
       '<div class="gd-opts">'+(mode!=="ramp"?shapeBtns("nshape",GMODE.round):fld("gd-rw","Width",GMODE.rampWidth,"m",2,40,0.5))+
-      (mode==="raise"||mode==="lower"?fld("gd-by","By",GMODE.by,"m",0.1,GROUND_MAX,0.1):"")+
+      (mode==="raise"||mode==="lower"?fld("gd-by","By",GMODE.by,"m",0.1,SHAPE_MAX,0.1):"")+
       (mode==="smooth"?fld("gd-sm","Strength",GMODE.smooth,"m",1,20,0.5):"")+'</div>';
   }
   h+='</div>';
@@ -7074,6 +7343,17 @@ function renderGround(){
   var bIn=AS.ix&&AS.brush,pIn=AS.ix&&AS.paint;
   var n=shownAreas.length+(hasBrush()&&(!bIn||GROUND_SHOW_ALL)?1:0)+(hasPaint()&&(!pIn||GROUND_SHOW_ALL)?1:0);
   var inGameN=groundEdits.length-groundEdits.filter(function(a){return !inG(a)}).length+(hasBrush()&&bIn?1:0)+(hasPaint()&&pIn?1:0);
+  var sIn=AS.ix&&AS.sculpt;
+  n+=hasSculpt()&&(!sIn||GROUND_SHOW_ALL)?1:0;
+  inGameN+=hasSculpt()&&sIn?1:0;
+  if(TBUDGET&&TBUDGET.nodes){
+    var pct=Math.min(100,Math.round(100*TBUDGET.nodes/TBUDGET.limit));
+    h+='<div class="gd-budget'+(TBUDGET.over?' over':pct>90?' near':'')+'" title="The terrain the big changes rebuild: the game holds '+
+      TBUDGET.limit.toLocaleString()+' nodes of it, the level\'s own use '+TBUDGET.was.toLocaleString()+'">'+
+      '<span>Terrain</span><i><b style="width:'+pct+'%"></b></i><em>'+(TBUDGET.over?"too much":pct+"%")+'</em></div>'+
+      (TBUDGET.over?'<p class="gd-note warn">The big changes need '+TBUDGET.nodes.toLocaleString()+' terrain nodes; the game holds '+
+        TBUDGET.limit.toLocaleString()+'. Make the biggest shapes smaller or fewer.</p>':'');
+  }
   h+='<div class="gd-lh"><span>'+(AS.ix&&!GROUND_SHOW_ALL?"Shaped since the last Apply":"Shaped ground")+'</span><span class="n">'+n+'</span></div>';
   if(inGameN)h+='<p class="gd-ingame">'+inGameN+' already in the game. <button type="button" id="gd-all">'+(GROUND_SHOW_ALL?"Hide them":"Show them")+'</button></p>';
   h+='<div class="gd-list">';
@@ -7081,7 +7361,7 @@ function renderGround(){
   groundEdits.forEach(function(a,k){
     if(shownAreas.indexOf(a)<0)return;
     var st=GSTRAIN[a.uid]||{},on=a.uid===GSEL,kept=(GRIDE.byArea||{})[a.uid];
-    h+='<div class="gd-card'+(on?' on':'')+(st.clip||(kept&&kept.length)?' warn':'')+'" data-u="'+a.uid+'"><div class="gd-top">'+
+    h+='<div class="gd-card'+(on?' on':'')+(kept&&kept.length?' warn':'')+'" data-u="'+a.uid+'"><div class="gd-top">'+
       '<button type="button" class="gd-main" data-open="'+a.uid+'" aria-expanded="'+on+'"><span class="mi" style="color:rgb('+GM_COL[a.mode]+')">'+gpi(a.mode)+'</span>'+
       '<span class="t"><b>'+(k+1)+'. '+esc(rowTitle(a))+'</b><i>'+Math.round(a.w)+' × '+Math.round(a.h)+' m'+(a.round&&a.mode!=="ramp"?', round':'')+'</i></span></button>'+
       '<button type="button" class="gd-ib" data-act="go" title="Go there" aria-label="Go there">'+gpi("go")+'</button>'+
@@ -7091,21 +7371,30 @@ function renderGround(){
       h+='<div class="gd-edit">';
       if(a.mode==="level")h+='<div class="ln">'+fld("gd-h","Height",a.height!=null?a.height.toFixed(1):"","m",-99999,99999,0.1,"","wide")+
         '<button type="button" class="gd-ib" id="gd-match" title="Match the ground under it" aria-label="Match the ground under it">'+gpi("match")+'</button></div>';
-      else if(a.mode==="raise"||a.mode==="lower")h+='<div class="ln">'+fld("gd-d","By",Math.abs(a.delta||0).toFixed(1),"m",0,GROUND_MAX,0.1)+'</div>';
+      else if(a.mode==="raise"||a.mode==="lower")h+='<div class="ln">'+fld("gd-d","By",Math.abs(a.delta||0).toFixed(1),"m",0,SHAPE_MAX,0.1)+'</div>';
+      else if(a.mode==="remove")h+='<p class="gd-hint">The ground at its edge, drawn in across it. For a mountain in a range, where the ground round it is high too, Level it to a height instead.</p>';
       else if(a.mode==="smooth")h+='<div class="ln">'+fld("gd-str","Strength",a.strength||4,"m",1,20,0.5)+'</div>';
-      else h+='<div class="ln">'+fld("gd-z0","From",a.z0.toFixed(1),"m",-99999,99999,0.1,"","wide")+fld("gd-z1","To",a.z1.toFixed(1),"m",-99999,99999,0.1,"","wide")+'</div>';
-      h+='<div class="ln">'+fld("gd-w",a.mode==="ramp"?"Length":"Size",a.w.toFixed(1),"×",1.5,300,0.5)+fld("gd-hh","",a.h.toFixed(1),"m",1.5,300,0.5)+'</div>'+
+      else if(a.mode==="ramp")h+='<div class="ln">'+fld("gd-z0","From",a.z0.toFixed(1),"m",-99999,99999,0.1,"","wide")+fld("gd-z1","To",a.z1.toFixed(1),"m",-99999,99999,0.1,"","wide")+'</div>';
+      h+='<div class="ln">'+fld("gd-w",a.mode==="ramp"?"Length":"Size",a.w.toFixed(1),"×",1.5,2000,0.5)+fld("gd-hh","",a.h.toFixed(1),"m",1.5,2000,0.5)+'</div>'+
         '<div class="ln">'+fld("gd-ang","Turn",Math.round((a.angle||0)*180/Math.PI),"°",-360,360,5)+
-        fld("gd-ablend","Edge",a.auto!==false?"":a.blend,"m",0,30,0.5,"auto")+'</div>'+
+        fld("gd-ablend","Edge",a.auto!==false?"":a.blend,"m",0,300,0.5,"auto")+'</div>'+
         (a.mode!=="ramp"?'<div class="ln gd-opts" style="margin:0">'+shapeBtns("ashape",a.round)+'</div>':'');
-      if(st.clip)h+='<p class="gd-note warn">'+(st.need>GROUND_MAX+0.05?'It needs '+st.need.toFixed(1)+' m in places':
-        'With the areas before it, the ground here moves '+st.over.toFixed(1)+' m')+'. The game stops at '+GROUND_MAX+
-        ' m, so the ground there stays short of it.</p>';
+      if(st.big)h+='<p class="gd-note">'+(st.need>GROUND_MAX+0.05?'It moves the ground '+st.need.toFixed(1)+' m':
+        'With the areas before it, the ground here moves '+st.over.toFixed(1)+' m')+': past what a height map can, so the build rebuilds the terrain itself there.</p>';
       if(kept&&kept.length)h+='<p class="gd-note warn">'+esc(ridersText(a.uid))+'</p>';
       h+='</div>';
     }
     h+='</div>';
   });
+  if(hasSculpt()&&(!sIn||GROUND_SHOW_ALL)){
+    var son=GSEL==="sculpt";
+    h+='<div class="gd-card'+(son?' on':'')+'" data-u="sculpt"><div class="gd-top">'+
+      '<button type="button" class="gd-main" data-open="sculpt" aria-expanded="'+son+'"><span class="mi" style="color:rgb('+GM_COL.raise+')">'+gpi("big")+'</span>'+
+      '<span class="t"><b>Big shapes</b><i>'+(Math.round(sculptKeys().length*SCULPT_M*SCULPT_M/10000)/100)+' km², up to '+Math.round(sculptPeak())+' m</i></span></button>'+
+      '<button type="button" class="gd-ib" data-act="go" title="Go there" aria-label="Go there">'+gpi("go")+'</button>'+
+      '<button type="button" class="gd-ib" data-act="3d" title="See it in 3D" aria-label="See it in 3D">'+gpi("cube")+'</button>'+
+      '<button type="button" class="gd-ib danger" data-act="del" title="Clear all big shapes" aria-label="Clear all big shapes">'+gpi("trash")+'</button></div></div>';
+  }
   if(hasBrush()&&(!bIn||GROUND_SHOW_ALL)){
     var bon=GSEL==="brush",bk=(GRIDE.byArea||{}).brush;
     h+='<div class="gd-card'+(bon?' on':'')+(bk&&bk.length?' warn':'')+'" data-u="brush"><div class="gd-top">'+
@@ -7136,14 +7425,38 @@ function renderGround(){
   p.querySelectorAll("[data-nshape]").forEach(function(b2){
     b2.addEventListener("click",function(){GMODE.round=b2.getAttribute("data-nshape")==="round";saveGMode();renderGround()});
   });
-  p.querySelectorAll("#gd-bop [data-op]").forEach(function(b2){
-    b2.addEventListener("click",function(){GMODE.brush.op=b2.getAttribute("data-op");saveGMode();renderGround();present()});
+  p.querySelectorAll("#gd-bop [data-op], #gd-bop2 [data-op]").forEach(function(b2){
+    b2.addEventListener("click",function(){
+      var op=b2.getAttribute("data-op"),was=isStamp(GMODE.brush.op);
+      GMODE.brush.op=op;
+      // a shape starts at its middle size; the other brushes go back to theirs
+      if(isStamp(op)&&(!was||!GMODE.brush.stampSize)){var pr=STAMP_PRESETS[op].medium;GMODE.brush.size=pr[0];GMODE.brush.height=pr[1]}
+      if(!isStamp(op)&&was)GMODE.brush.size=GMODE.brush.plainSize||5;
+      GMODE.brush.stampSize=isStamp(op);
+      saveGMode();renderGround();present();
+    });
   });
+  p.querySelectorAll("#gd-bpre [data-pre]").forEach(function(b2){
+    b2.addEventListener("click",function(){
+      var pr=STAMP_PRESETS[GMODE.brush.op];if(!pr)return;
+      var v=pr[b2.getAttribute("data-pre")];GMODE.brush.size=v[0];GMODE.brush.height=v[1];saveGMode();renderGround();present();
+    });
+  });
+  p.querySelectorAll("#gd-bedge [data-edge]").forEach(function(b2){
+    b2.addEventListener("click",function(){GMODE.brush.edge=b2.getAttribute("data-edge");saveGMode();renderGround()});
+  });
+  on("gd-bh","change",function(){var v=val("gd-bh",0.5,SHAPE_MAX);if(v!=null){GMODE.brush.height=v;saveGMode()}});
+  on("gd-brough","change",function(){var v=val("gd-brough",0,100);if(v!=null){GMODE.brush.rough=v/100;saveGMode()}});
   on("gd-rw","change",function(){var v=val("gd-rw",2,40);if(v!=null){GMODE.rampWidth=v;saveGMode()}});
-  on("gd-by","change",function(){var v=val("gd-by",0.1,GROUND_MAX);if(v!=null){GMODE.by=v;saveGMode()}});
+  on("gd-by","change",function(){var v=val("gd-by",0.1,SHAPE_MAX);if(v!=null){GMODE.by=v;saveGMode()}});
   on("gd-sm","change",function(){var v=val("gd-sm",1,20);if(v!=null){GMODE.smooth=v;saveGMode()}});
-  on("gd-bsize","change",function(){var v=val("gd-bsize",1,30);if(v!=null){GMODE.brush.size=v;saveGMode();present()}});
-  on("gd-bstr","change",function(){var v=val("gd-bstr",0.1,2);if(v!=null){GMODE.brush.strength=v;saveGMode()}});
+  on("gd-bsize","change",function(){
+    var v=val("gd-bsize",1,600);if(v==null)return;
+    var big=(GMODE.brush.size||5)>10;
+    GMODE.brush.size=v;if(!isStamp(GMODE.brush.op))GMODE.brush.plainSize=v;
+    saveGMode();present();if(big!==(v>10))renderGround();
+  });
+  on("gd-bstr","change",function(){var v=val("gd-bstr",0.1,40);if(v!=null){GMODE.brush.strength=v;saveGMode()}});
   on("gd-psize","change",function(){var v=val("gd-psize",0.5,20);if(v!=null){GMODE.paint.size=v;saveGMode();present()}});
   p.querySelectorAll("[data-mat]").forEach(function(b2){
     b2.addEventListener("click",function(){GMODE.paint.mat=+b2.getAttribute("data-mat");saveGMode();renderGround()});
@@ -7152,7 +7465,7 @@ function renderGround(){
   });
   // the cards
   p.querySelectorAll(".gd-card").forEach(function(card){
-    var u=card.getAttribute("data-u"),a=u==="brush"||u==="paint"?null:groundEdits.filter(function(g){return g.uid===u})[0];
+    var u=card.getAttribute("data-u"),a=u==="brush"||u==="paint"||u==="sculpt"?null:groundEdits.filter(function(g){return g.uid===u})[0];
     card.addEventListener("mouseenter",function(){if(GHOVER!==u){GHOVER=u;present()}});
     card.addEventListener("mouseleave",function(){if(GHOVER===u){GHOVER=null;present()}});
     card.querySelector(".gd-main").addEventListener("click",function(){
@@ -7160,26 +7473,26 @@ function renderGround(){
     });
     card.querySelectorAll("[data-act]").forEach(function(btn){
       btn.addEventListener("click",function(){
-        var act=btn.getAttribute("data-act"),c=u==="brush"||u==="paint"?(function(){var b3=u==="paint"?paintBox():brushBox();return b3?[(b3[0]+b3[1])/2,(b3[2]+b3[3])/2]:null})():[a.x,a.y];
+        var act=btn.getAttribute("data-act"),c=u==="brush"||u==="paint"||u==="sculpt"?(function(){var b3=u==="paint"?paintBox():u==="sculpt"?sculptBox():brushBox();return b3?[(b3[0]+b3[1])/2,(b3[2]+b3[3])/2]:null})():[a.x,a.y];
         if(act==="go"&&c){GSEL=u;jumpTo(c[0],c[1]);renderGround();present()}
-        else if(act==="3d"&&c){GSEL=u;renderGround();open3dAt(c[0],c[1],u==="brush"?40:areaReach(a)>30?60:areaReach(a)>15?40:20)}
-        else if(act==="del"){if(u==="brush")clearBrush();else if(u==="paint")clearPaint();else removeArea(a)}
+        else if(act==="3d"&&c){GSEL=u;renderGround();open3dAt(c[0],c[1],u==="brush"?40:u==="sculpt"?60:areaReach(a)>30?60:areaReach(a)>15?40:20)}
+        else if(act==="del"){if(u==="brush")clearBrush();else if(u==="paint")clearPaint();else if(u==="sculpt")clearSculpt();else removeArea(a)}
       });
     });
   });
   var a=groundSel();
   if(!a)return;
   on("gd-h","change",function(){var v=val("gd-h",-99999,99999);if(v!=null){a.height=v;areaChanged()}});
-  on("gd-d","change",function(){var v=val("gd-d",0,GROUND_MAX);if(v!=null){a.delta=(a.mode==="raise"?1:-1)*v;areaChanged()}});
+  on("gd-d","change",function(){var v=val("gd-d",0,SHAPE_MAX);if(v!=null){a.delta=(a.mode==="raise"?1:-1)*v;areaChanged()}});
   on("gd-str","change",function(){var v=val("gd-str",1,20);if(v!=null){a.strength=v;areaChanged()}});
   on("gd-z0","change",function(){var v=val("gd-z0",-99999,99999);if(v!=null){a.z0=v;areaChanged()}});
   on("gd-z1","change",function(){var v=val("gd-z1",-99999,99999);if(v!=null){a.z1=v;areaChanged()}});
-  on("gd-w","change",function(){var v=val("gd-w",1.5,300);if(v!=null){a.w=v;areaChanged()}});
-  on("gd-hh","change",function(){var v=val("gd-hh",1.5,300);if(v!=null){a.h=v;areaChanged()}});
+  on("gd-w","change",function(){var v=val("gd-w",1.5,2000);if(v!=null){a.w=v;areaChanged()}});
+  on("gd-hh","change",function(){var v=val("gd-hh",1.5,2000);if(v!=null){a.h=v;areaChanged()}});
   on("gd-ang","change",function(){var v=val("gd-ang",-360,360);if(v!=null){a.angle=v*Math.PI/180;areaChanged()}});
   on("gd-ablend","change",function(){
     var raw=$("gd-ablend").value.trim();
-    if(raw===""){a.auto=true}else{var v=val("gd-ablend",0,30);if(v==null)return;a.auto=false;a.blend=v}
+    if(raw===""){a.auto=true}else{var v=val("gd-ablend",0,300);if(v==null)return;a.auto=false;a.blend=v}
     areaChanged();
   });
   on("gd-match","click",function(){a.height=areaMedian(a);areaChanged()});
@@ -8092,7 +8405,8 @@ function objDefaultText(ob){
     reach:"Reach the marked area.",hack:"Hack the terminal.",destroy:"Destroy the "+(n||"target").toLowerCase()+"."}[ob.kind]||"";
 }
 function objProblem(ob){
-  if(ob.kind==="level")return null;
+  // what completes it is the level's own logic, which an empty map has none of
+  if(ob.kind==="level")return MODE==="empty"?"the empty map has none of the level's mission logic, so it can never be completed":null;
   if(ob.kind==="killAll")return null;
   if(ob.kind==="reach")return ob.x==null?"no area set":null;
   if(!ob.target)return "no target picked";
@@ -9015,12 +9329,12 @@ function legendRows(){
         lv?"Too steep even to level (over "+lim[1]+" m)":"Too steep to build (over "+lim[1]+" m)");
     }
   }
-  if(groundEdits.length||hasBrush()){
+  if(groundEdits.length||hasBrush()||hasSculpt()){
     var gm={};groundEdits.forEach(function(a){gm[a.mode]=(gm[a.mode]||0)+1});
-    if(hasBrush())gm.brush=1;
-    ["level","raise","lower","smooth","ramp","brush"].forEach(function(m){
+    if(hasBrush()||hasSculpt())gm.brush=1;
+    ["level","raise","lower","smooth","ramp","remove","brush"].forEach(function(m){
       if(gm[m])row("Ground",function(){return fillSwatch("rgba("+GM_COL[m]+",.35)")},
-        {level:"Ground levelled",raise:"Ground raised",lower:"Ground lowered",smooth:"Ground smoothed",ramp:"Ramp",brush:"Brush strokes"}[m],
+        {level:"Ground levelled",raise:"Ground raised",lower:"Ground lowered",smooth:"Ground smoothed",ramp:"Ramp",remove:"Ground removed",brush:"Brush strokes"}[m],
         m==="brush"?null:gm[m]);
     });
   }
@@ -9205,7 +9519,7 @@ function planOf(){
         delta:a.mode==="raise"||a.mode==="lower"?+(a.delta||0).toFixed(2):undefined,
         strength:a.mode==="smooth"?+(a.strength||4):undefined,
         z0:a.mode==="ramp"?+a.z0.toFixed(2):undefined,z1:a.mode==="ramp"?+a.z1.toFixed(2):undefined}}),
-    brush:brushPlan(),paint:paintPlan(),
+    brush:brushPlan(),sculpt:sculptPlan(),paint:paintPlan(),
     nodes:navNodes.map(function(n){return {uid:n.uid,graph:n.graph,x:n.x,y:n.y,z:n.z}}),
     nodeEdits:Object.keys(nodeEdits).map(function(k){return nodeEdits[k]}),
     edits:Object.keys(edits).map(function(k){return edits[k]}),removeRefs:removeRefs.slice()};
@@ -9216,6 +9530,7 @@ function payload(){
 }
 var coverAt=0;
 function save(withApplied){
+  saveTimer=null;                               // no save waiting any more (syncHeights waits for one)
   if(!M||READONLY||!Store)return;
   var body={plan:planOf(),name:MISSION};
   if(withApplied&&M.applied)body.applied=M.applied;     // heights the game already has (applyHeights)
@@ -9255,7 +9570,7 @@ function makeCover(){
     groundCv=null;
   }
 }
-var PLAN_KEYS=["placements","nodes","nodeEdits","edits","removeRefs","removals","objectives","ground","brush","events","paint"];
+var PLAN_KEYS=["placements","nodes","nodeEdits","edits","removeRefs","removals","objectives","ground","brush","sculpt","events","paint"];
 function makeStore(serverOk){
   function api(method,url,body){
     return fetch(url,{method:method,headers:body?{"Content-Type":"application/json"}:{},
@@ -9277,6 +9592,10 @@ function makeStore(serverOk){
       .then(function(r){return r.ok?r.json():null}).catch(function(){return null})},
     job:function(jid){return api("GET","api/jobs/"+jid)},
     uninstall:function(id){return api("POST","api/missions/"+id+"/uninstall",{})},
+    // the game's missions past its fourteen: their order, and the ones no mission here holds
+    orderSlots:function(order){return api("POST","api/slots/order",{order:order})},
+    removeSlot:function(n){return api("POST","api/slots/"+n+"/remove",{})},
+    recover:function(ids){return api("POST","api/recover",{ids:ids})},
     trash:function(){return api("GET","api/trash").then(function(j){return j.trash})},
     restore:function(tid){return api("POST","api/trash/"+tid+"/restore",{}).then(function(j){return j.mission})},
     cleanup:function(id){return api("GET","api/missions/"+id+"/cleanup")},
@@ -9290,7 +9609,7 @@ function makeStore(serverOk){
   function read(k){try{return JSON.parse(ls().getItem(k))}catch(e){return null}}
   function write(k,v){var s=ls();if(!s)throw new Error("this browser does not allow saving");s.setItem(k,JSON.stringify(v))}
   function summary(m){
-    var p=m.plan||{},n=0;PLAN_KEYS.forEach(function(k){n+=(p[k]||[]).length});
+    var p=m.plan||{},n=0;PLAN_KEYS.forEach(function(k){n+=k==="brush"||k==="sculpt"?((p[k]||[]).length?1:0):(p[k]||[]).length});
     return {id:m.id,name:m.name,description:m.description||"",base:m.base,slot:null,created:m.created,updated:m.updated,
       changes:n,guards:(p.placements||[]).filter(function(x){return x.type==="soldier"}).length,
       cover:!!m.coverData,coverData:m.coverData||null,installed:null,upToDate:false};
@@ -9345,8 +9664,12 @@ function loadLevel(n,then){
         :fetch("data/navtemplates.json?v="+DATAV).then(function(r){return r.json()}).catch(function(){return null})
   ]).then(function(res){
     LEVEL=res[0];GRAPHS=res[1];MODELS=res[2]||MODELS;CATALOG=res[3]||CATALOG;NAVT=res[4]||NAVT;
-    // an empty map: the terrain and navmesh stay, of the level only its player
-    if(MODE==="empty")LEVEL.objects=LEVEL.objects.filter(function(o){return o.type==="player"});
+    // an empty map: the terrain and navmesh stay, of the level only its player -
+    // none of its objectives, alarm systems or map computer markers
+    if(MODE==="empty"){
+      LEVEL.objects=LEVEL.objects.filter(function(o){return o.type==="player"});
+      LEVEL.objectiveSets=[];LEVEL.alarms=[];LEVEL.hilights={total:0,numbered:0};LEVEL.levelFlow=null;
+    }
     surfMemo={};labelPlaces=null;placeMemo={};
     loadTerrain(n).then(function(t){if(t&&LV===n){applyGround();draw();buildLegend()}});
     if(window.MapFX)MapFX.glitch(1);
@@ -9403,9 +9726,83 @@ function showLibrary(){
   Store.library().then(function(lib){LIB=lib;renderLibrary()})
     .catch(function(e){$("libbody").innerHTML='<p class="note bad">'+esc(e.message)+'</p>'});
 }
+// The game's own list past its fourteen: what it holds, in the order it plays
+// them, whoever made them. The studio's own can be moved; one this studio does
+// not hold can be added (when the game carries the whole mission) or taken out.
+function gameShelf(lib){
+  var sl=lib.slots||[],g=lib.game||{},h="";
+  var ours=sl.filter(function(s){return s.studio}),byId={};
+  lib.missions.forEach(function(m){byId[m.id]=m});
+  h+='<section class="shelf"><div class="shelf-head"><h2>In the game</h2><span class="count">'+sl.length+'</span>'+
+     '<span class="hint">After its own fourteen, in the order the game plays them</span></div>';
+  if(g.running)
+    h+='<div class="note warn" style="margin:0 0 10px">The game is running. It lists the missions it found when it started, '+
+       'so close it and start it again to see changes. Missions can be moved once it is closed.</div>';
+  if(!sl.length)
+    return h+'<p class="hint" style="margin:0">None yet. A mission goes in when you apply it, after the last one: mission 15 first.</p></section>';
+  h+='<ol class="gslots">';
+  sl.forEach(function(s){
+    var m=s.managed?byId[s.missionId]:null,i=ours.indexOf(s),b=builtin(s.base);
+    var on=b?b.name:"level "+s.base,meta,acts="";
+    if(m){
+      meta=esc(baseLabel(m.base))+' · <span class="'+(m.installed&&m.upToDate?'ok':'')+'">'+
+        (m.installed&&m.installed.test?"a test build":m.installed&&m.upToDate?"up to date":"changes to apply")+'</span>';
+      acts='<button class="btn" data-open="'+esc(m.id)+'">Open</button>';
+    }else if(s.recoverable){
+      meta='Built on '+esc(on)+'. Not in your missions here: the game holds all of it, so it can be added';
+      acts='<button class="btn" data-recover="'+esc(s.missionId)+'">Add to your missions</button>';
+    }else if(s.studio){
+      meta=s.installed?'Built on '+esc(on)+' by an older version, which did not keep the mission in the game'
+        :'A copy of '+esc(on)+' as it ships: an Apply that did not finish left it here';
+      acts='<button class="btn" data-rmslot="'+s.level+'" data-name="'+esc(s.name)+'">Remove from the game…</button>';
+    }else{
+      meta='Not made by the studio. It stays as it is';
+    }
+    h+='<li class="gs'+(m&&M&&M.id===m.id?' current':'')+'"><span class="gs-n">'+s.level+'</span>'+
+      '<span class="gs-t"><b>'+esc(s.name||"Mission "+s.level)+'</b><span>'+meta+'</span></span>'+
+      '<span class="gs-acts">'+acts+'</span>'+
+      (s.studio?'<span class="gs-move">'+
+        '<button class="btn ghost" data-move="'+s.level+'" data-dir="-1" aria-label="Move '+esc(s.name)+' earlier"'+(i===0||g.running?' disabled':'')+'>↑</button>'+
+        '<button class="btn ghost" data-move="'+s.level+'" data-dir="1" aria-label="Move '+esc(s.name)+' later"'+(i===ours.length-1||g.running?' disabled':'')+'>↓</button></span>'
+        :'<span class="gs-move"></span>')+'</li>';
+  });
+  h+='</ol>';
+  var last=sl[sl.length-1].level;
+  if(g.unlockedTo!=null&&g.unlockedTo<last)
+    h+='<p class="note warn" style="margin:8px 0 0">The game’s list stops at mission '+g.unlockedTo+', so it does not offer '+
+       (g.unlockedTo<sl[0].level?'these':'the ones after it')+' yet. The studio opens it up as soon as the game is closed.</p>';
+  else if(g.unlockedTo!=null)
+    h+='<p class="hint" style="margin:8px 0 0">All of them are unlocked: the game offers missions 1 to '+g.unlockedTo+
+       '. It unlocks by that one number, so the built-in missions before them are offered too.</p>';
+  return h+'</section>';
+}
+function moveGameSlot(level,dir){
+  var ours=(LIB.slots||[]).filter(function(s){return s.studio}).map(function(s){return s.level});
+  var i=ours.indexOf(level),j=i+dir;
+  if(i<0||j<0||j>=ours.length)return;
+  ours[i]=ours[j];ours[j]=level;
+  Store.orderSlots(ours).then(function(){
+    toast("Mission order changed in the game");
+    if(M)Store.get(M.id).then(function(x){if(M&&x&&x.id===M.id){M.slot=x.slot;M.installed=x.installed;paintStatus()}});
+    showLibrary();
+  }).catch(function(e){toast("Could not move it: "+e.message)});
+}
+function removeSlotDialog(n,name){
+  sheet("Remove from the game",
+    '<p>Take <b>'+esc(name||"mission "+n)+'</b> (mission '+n+') out of the game’s mission list?</p>'+
+    '<p class="hint">None of your missions here holds it. The slot’s folder is kept in <span class="mono">backups/slots/removed</span>.</p>'+
+    '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="rs-no">Keep it in the game</button>'+
+    '<button class="btn" id="rs-yes" style="color:var(--danger);border-color:var(--danger)">Remove from the game</button></div>');
+  $("rs-no").addEventListener("click",function(){$("sheet").hidden=true});
+  $("rs-yes").addEventListener("click",function(){
+    Store.removeSlot(n).then(function(){$("sheet").hidden=true;toast("Removed from the game");showLibrary()})
+      .catch(function(e){toast("Could not remove it: "+e.message)});
+  });
+}
 function renderLibrary(){
   var lib=LIB,h="";
   var legacy=legacyPlans();
+  if(Store&&!Store.local&&!lib.needsSetup)h+=gameShelf(lib);
   h+='<section class="shelf"><div class="shelf-head"><h2>Your missions</h2><span class="count">'+lib.missions.length+'</span>'+
      (lib.trash?'<button class="btn ghost" id="lib-trash">Trash ('+lib.trash+')</button>':'')+'</div>';
   if(legacy.length)
@@ -9463,6 +9860,15 @@ function renderLibrary(){
       var m=lib.missions.filter(function(x){return x.id===b.getAttribute("data-more")})[0];if(!m)return;
       var r=b.getBoundingClientRect();
       openPopup(r.right-220,r.bottom+4,missionCardItems(m));
+    });
+  });
+  body.querySelectorAll("[data-move]").forEach(function(b){b.addEventListener("click",function(){moveGameSlot(+b.getAttribute("data-move"),+b.getAttribute("data-dir"))})});
+  body.querySelectorAll("[data-rmslot]").forEach(function(b){b.addEventListener("click",function(){removeSlotDialog(+b.getAttribute("data-rmslot"),b.getAttribute("data-name"))})});
+  body.querySelectorAll("[data-recover]").forEach(function(b){
+    b.addEventListener("click",function(){
+      b.disabled=true;
+      Store.recover([b.getAttribute("data-recover")]).then(function(){toast("Added to your missions");showLibrary()})
+        .catch(function(e){b.disabled=false;toast("Could not add it: "+e.message)});
     });
   });
   if($("lib-trash"))$("lib-trash").addEventListener("click",showTrash);
@@ -9591,6 +9997,7 @@ function openMission(id){
     placements=(p.placements||[]).map(function(q){if(!q.uid)q.uid=uid();q.own=true;q.patrol=q.patrol||[];return q});
     groundEdits=(p.ground||[]).map(function(a){if(!a.uid)a.uid=uid();return a});GSEL=null;
     groundBrush={};(p.brush||[]).forEach(function(r){if(r&&r[2])groundBrush[r[0]+","+r[1]]=r[2]});GBRUSH_CV=null;
+    groundSculpt={};(p.sculpt||[]).forEach(function(r){if(r&&r[2])groundSculpt[r[0]+","+r[1]]=r[2]/100});GSCULPT_CV=null;TBUDGET=null;
     groundPaint={};(p.paint||[]).forEach(function(r){if(r&&r[2]!=null&&r[2]>=0)groundPaint[r[0]+","+r[1]]=r[2]});GPAINT_CV=null;
     removals=(p.removals||[]).slice();
     navNodes=(p.nodes||[]).map(function(n){return {uid:n.uid||uid(),own:true,type:"navnode",graph:String(n.graph),x:n.x,y:n.y,z:n.z}});
@@ -9621,7 +10028,7 @@ function viewBuiltin(level){
   var b=builtin(level);
   M=null;READONLY=true;MODE="copy";MISSION=b?b.name:"Level "+level;
   placements=[];removals=[];navNodes=[];nodeEdits={};edits={};removeRefs=[];nodeVer++;planVer++;
-  objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];groundBrush={};GBRUSH_CV=null;groundPaint={};GPAINT_CV=null;GSEL=null;
+  objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
   sel=null;tool=null;patrolMode=false;
   rememberLast(null);
   $("start").hidden=true;
@@ -9652,7 +10059,7 @@ function pendingObj(o){
 function pendingGroup(g){
   var AS=appliedState(),IX=AS.ix;
   if(!IX)return true;
-  if(g==="Ground")return groundEdits.some(function(a){return !AS.ground[a.uid]})||(hasBrush()&&!AS.brush)||(hasPaint()&&!AS.paint)||
+  if(g==="Ground")return groundEdits.some(function(a){return !AS.ground[a.uid]})||(hasBrush()&&!AS.brush)||(hasSculpt()&&!AS.sculpt)||(hasPaint()&&!AS.paint)||
     Object.keys(IX.groundObj).some(function(u){return !groundEdits.some(function(a){return a.uid===u})});
   if(g==="Objectives")return objectives.some(function(o){return !AS.objectives[o.uid]})||(settingsText()&&!AS.settings)||!!IX.src.failOnAlarm!==!!failOnAlarm;
   if(g==="Events")return events.some(function(v){return !AS.events[v.uid]})||Object.keys(edits).some(function(r){return !AS.edits[r]});
@@ -9662,7 +10069,7 @@ function pendingChanges(){
   var AS=appliedState(),IX=AS.ix;
   if(!IX)return null;
   var total=placements.length+Object.keys(edits).length+removeRefs.length+navNodes.length+Object.keys(nodeEdits).length+
-    objectives.length+groundEdits.length+(hasBrush()?1:0)+(hasPaint()?1:0)+(settingsText()?1:0)+events.length;
+    objectives.length+groundEdits.length+(hasBrush()?1:0)+(hasSculpt()?1:0)+(hasPaint()?1:0)+(settingsText()?1:0)+events.length;
   var gone=Object.keys(IX.placementObj).filter(function(u){return !placements.some(function(q){return q.uid===u})}).length+
     Object.keys(IX.groundObj).filter(function(u){return !groundEdits.some(function(g){return g.uid===u})}).length+
     (IX.settings!=="{}"&&!settingsText()?1:0)+(!!IX.src.failOnAlarm!==!!failOnAlarm?1:0)+
@@ -9820,7 +10227,8 @@ function bind(){
         // a stroke: one undo step; the relief catches up when it ends
         if(TERR&&!TERR.h0)TERR.h0=TERR.h.slice(0);
         if(TERR&&!TERR.ha)applyGround();
-        GPAINT={last:[mouse.wx,mouse.wy],n:1};paintAt(mouse.wx,mouse.wy);present();return;
+        GPAINT={last:[mouse.wx,mouse.wy],n:1,seed:(Math.random()*65535)|0,target:terrainZ(mouse.wx,mouse.wy)};
+        paintAt(mouse.wx,mouse.wy);present();return;
       }
       // on an area: pick it up; anywhere else: start drawing one
       var ga=groundSel();
@@ -11027,13 +11435,13 @@ function localChecks(){
       o.own?{label:"Set it on the ground",fn:function(){setProp(o,{x:o.x,y:o.y,z:gz})}}:null,num(o.x)+", "+num(o.y));
   });
   if(GRIDE.things.length)add("warn","Ground",ridersText());
-  groundEdits.forEach(function(a,i){
-    var st=GSTRAIN[a.uid]||{};
-    if(st.clip)add("warn","Ground","Ground area "+(i+1)+(st.need>GROUND_MAX+0.05?" asks for "+st.need.toFixed(1)+" m":
-      " takes the ground "+st.over.toFixed(1)+" m from where it was, with the areas before it")+
-      ". The game can move it "+GROUND_MAX+" m, so part of it stays short",null,null,num(a.x)+", "+num(a.y));
-    if(st.clip)rows[rows.length-1].area=a;
-  });
+  // the terrain the big changes rebuild has to fit the game's node indices
+  if(TBUDGET&&TBUDGET.over)
+    add("error","Ground","The shaped ground needs "+TBUDGET.nodes.toLocaleString()+" terrain nodes; the game holds "+
+      TBUDGET.limit.toLocaleString()+" (the level's own use "+TBUDGET.was.toLocaleString()+"). Make the biggest shapes smaller or fewer");
+  else if(TBUDGET&&TBUDGET.nodes>0.9*TBUDGET.limit)
+    add("warn","Ground","The shaped ground uses "+TBUDGET.nodes.toLocaleString()+" of the game's "+TBUDGET.limit.toLocaleString()+
+      " terrain nodes: there is little room left for more big shapes");
   // fence and wall runs laid before the panels were measured from their meshes
   // (2026-09-19) leave a gap at each joint in the game
   var gaps=fenceGaps();
@@ -11750,7 +12158,15 @@ function applyToGame(opts){
     '<div class="apbar run" id="ap-bar"><div class="ap-stage"><b id="ap-stage">Saving the mission</b><em id="ap-pct">0%</em></div>'+
     '<div class="ap-track"><div class="ap-fill" id="ap-fill"></div></div><div class="ap-detail" id="ap-detail">writing the plan to disk…</div></div>'+
     '<div id="ap-result"></div>'+
-    '<details class="aplog" id="ap-logbox"><summary>Details</summary><pre class="applylog" id="ap-log"></pre></details>');
+    '<details class="aplog" id="ap-logbox"><summary>Details</summary><pre class="applylog" id="ap-log"></pre>'+
+    '<div class="ap-logbar"><button class="btn ghost" id="ap-copy">Copy details</button></div></details>');
+  // the whole log, headed by the version, ready for a bug report
+  $("ap-copy").addEventListener("click",function(){
+    var t=$("ap-log").textContent;
+    if(!t.trim()){toast("Nothing to copy yet");return}
+    navigator.clipboard.writeText((SRV&&SRV.version?"Project IGI Studio "+SRV.version+"\n":"")+t)
+      .then(function(){toast("Details copied")}).catch(function(){toast("Copy failed")});
+  });
   function set(stage,pct,detail){
     if(!$("ap-bar"))return;
     if(stage!=null)$("ap-stage").textContent=stage;
@@ -12397,6 +12813,8 @@ var AIB=(function(){
       player_start:pl?{id:idOf(pl),x:r1(pl.x),y:r1(pl.y),z:r1(pl.z),facing:bearing(pl)}:null,
       level_has:cnt,yours:mine,objectives:objList(),events:eventList(),settings:settingsNow(),
       ground_areas:groundEdits.map(function(g){return {id:"g:"+g.uid,mode:g.mode,x:r1(g.x),y:r1(g.y),size:Math.round(g.w)+" x "+Math.round(g.h)+" m"}}),
+      big_shapes:hasSculpt()?{area_km2:Math.round(sculptKeys().length*SCULPT_M*SCULPT_M/10000)/100,highest_m:Math.round(sculptPeak())}:null,
+      terrain_budget:TBUDGET?{nodes:TBUDGET.nodes,limit:TBUDGET.limit,level_own:TBUDGET.was,over:!!TBUDGET.over}:null,
       walkway_points_added:navNodes.length,
       alarm_systems:alarmSystems().map(function(a){return {alarm:a.key,name:a.name,x:r1(a.x),y:r1(a.y)}}),
       places:places().filter(function(p){return !p.side}).slice(0,45).map(function(p){return {name:p.name,x:r1(p.x),y:r1(p.y)}}),
@@ -12615,7 +13033,7 @@ var AIB=(function(){
     renderList();
     var notes=[];
     if(res.noWalk)notes.push("No guards: the nearest walkways are "+(res.near?Math.round(res.near.d)+" m":"far")+" away, and guards walk off to them.");
-    if(res.rough>GROUND_MAX)notes.push("The ground there varies by "+r1(res.rough)+" m; the game moves it "+GROUND_MAX+" m at most, so part stays uneven.");
+    if(res.rough>GROUND_MAX)notes.push("The ground there varies by "+r1(res.rough)+" m; the build rebuilds the terrain under it.");
     var made=res.made||[];
     return {ok:true,pieces:made.length,guards:made.filter(function(o){return o.type==="soldier"}).map(function(o){return idOf(o)}),
       gate:C.gate,notes:notes,ids:made.map(function(o){return o.uid}),at:{x:w.x,y:w.y}};
@@ -12870,7 +13288,7 @@ var AIB=(function(){
   H.shape_ground=function(a){
     if(!editable())return fail(RO);
     var mode=String(a.mode||"level"),ar;
-    if(["level","raise","lower","smooth","ramp"].indexOf(mode)<0)return fail("mode is level, raise, lower, smooth or ramp.");
+    if(["level","raise","lower","smooth","ramp","remove"].indexOf(mode)<0)return fail("mode is level, raise, lower, smooth, ramp or remove.");
     if(mode==="ramp"){
       var A0=a.from,B0=a.to;
       if(!Array.isArray(A0)||!Array.isArray(B0))return fail("A ramp needs from and to: [x, y] at its two ends.");
@@ -12880,18 +13298,46 @@ var AIB=(function(){
       ar={uid:uid(),angle:Math.atan2(B0[1]-A0[1],B0[0]-A0[0]),round:false,auto:true,blend:null,mode:"ramp",
         x:(+A0[0]+ +B0[0])/2,y:(+A0[1]+ +B0[1])/2,w:len,h:Math.max(2,Math.min(40,+a.width||6)),z0:+(+z0).toFixed(2),z1:+(+z1).toFixed(2)};
     }else{
-      var w=where(a),W2=Math.max(1.5,Math.min(200,+a.width||20)),D2=Math.max(1.5,Math.min(200,+a.depth||+a.width||20));
+      var w=where(a),W2=Math.max(1.5,Math.min(2000,+a.width||20)),D2=Math.max(1.5,Math.min(2000,+a.depth||+a.width||20));
       ar={uid:uid(),angle:(+a.turn_deg||0)*Math.PI/180,round:!!a.round,auto:true,blend:null,mode:mode,x:w.x,y:w.y,w:W2,h:D2};
       if(mode==="level")ar.height=a.height!=null&&isFinite(+a.height)?+(+a.height).toFixed(2):areaMedian(ar);
       else if(mode==="raise")ar.delta=Math.abs(+a.by_m||1);
       else if(mode==="lower")ar.delta=-Math.abs(+a.by_m||1);
-      else ar.strength=Math.max(1,Math.min(10,+a.strength||4));
+      else if(mode==="smooth")ar.strength=Math.max(1,Math.min(10,+a.strength||4));
     }
     groundEdits.push(ar);areaChanged();
     var stn=GSTRAIN[ar.uid]||{},notes=[];
-    if(stn.clip)notes.push("The game moves the ground "+GROUND_MAX+" m at most, so part of it stays short"+(stn.need?" (it asks for "+stn.need.toFixed(1)+" m)":"")+".");
+    if(stn.big)notes.push("It moves the ground "+(stn.need||0).toFixed(1)+" m: the build rebuilds the terrain itself there.");
     if(((GRIDE.byArea||{})[ar.uid]||[]).length)notes.push(ridersText(ar.uid));
     return {ok:true,area:{id:"g:"+ar.uid,mode:mode,size:Math.round(ar.w)+" x "+Math.round(ar.h)+" m",height:ar.height!=null?r1(ar.height):undefined},notes:notes,at:{x:ar.x,y:ar.y}};
+  };
+  // the big shapes, as the brush stamps them (stampAt): at a point, or along a line
+  H.sculpt_terrain=function(a){
+    if(!editable())return fail(RO);
+    var shape=String(a.shape||"mountains");
+    if(!isStamp(shape))return fail("shape is mountains, hills, plateau, crater or valley.");
+    var pre=STAMP_PRESETS[shape].medium,r=Math.max(6,Math.min(600,+a.radius_m||pre[0])),hgt=Math.max(0.5,Math.min(SHAPE_MAX,+a.height_m||pre[1]));
+    var pts=[];
+    if(Array.isArray(a.along)&&a.along.length>=2){
+      // a range or a valley: one along the line every so often, as a stroke would
+      var step=shape==="valley"?Math.max(1,r/4):Math.max(4,r*1.1);
+      for(var i=1;i<a.along.length;i++){
+        var p0=a.along[i-1],p1=a.along[i],L=Math.hypot(p1[0]-p0[0],p1[1]-p0[1]),n=Math.max(1,Math.round(L/step));
+        for(var k=i===1?0:1;k<=n;k++)pts.push([p0[0]+(p1[0]-p0[0])*k/n,p0[1]+(p1[1]-p0[1])*k/n]);
+      }
+    }else{var w=where(a);pts.push([w.x,w.y])}
+    if(!pts.length||pts.length>400)return fail("A line of 2 to a few hundred points, or x and y for one.");
+    if(TERR&&!TERR.h0)TERR.h0=TERR.h.slice(0);
+    if(TERR&&!TERR.ha)applyGround();
+    var keep=JSON.stringify(GMODE.brush),was=GPAINT;
+    GMODE.brush=Object.assign({},GMODE.brush,{op:shape,size:r,height:hgt,rough:a.rough!=null?Math.max(0,Math.min(1,+a.rough)):0.5});
+    GPAINT={last:pts[0],n:0,seed:(Math.random()*65535)|0,target:null};
+    try{pts.forEach(function(q){GPAINT.n++;stampAt(q[0],q[1])})}
+    finally{GMODE.brush=JSON.parse(keep);GPAINT=was}
+    areaChanged();
+    var notes=["Stamped into the big shapes (the terrain's own 4 m grid). The terrain budget comes back from the build in a few seconds; get_overview shows it."];
+    if(TBUDGET&&TBUDGET.over)notes.push("The last build said the big shapes need more terrain than the game holds: make them smaller.");
+    return {ok:true,shape:shape,count:pts.length,radius_m:r,height_m:hgt,notes:notes,at:{x:pts[0][0],y:pts[0][1]}};
   };
   H.remove_ground_area=function(a){
     if(!editable())return fail(RO);
@@ -13046,11 +13492,15 @@ var AIB=(function(){
       sees_m:{type:"number"},view_deg:{type:"number"}}),["name","type"])},
     {name:"place_design",description:"Place a design (from design_structure, design_character, or list_catalog designs) on the map, centred on a point.",parameters:P(Object.assign(withXY({id:{type:"string"}}),FACE),["id"])},
     {name:"add_walkways",description:"Lay walkway points (the guards' navmesh) from the nearest walkway to a place, along a way on foot, every spacing metres; with area_radius, rings of them round the place too. Guards keep to walkways, so this makes a place usable for guards and patrols. Points must stay on one floor level (steps of 2.5 m at most).",parameters:P(withXY({spacing:{type:"number",description:"4 to 12 m, default 9"},area_radius:{type:"number",description:"0 to 36 m: rings of points round the place"}}))},
-    {name:"shape_ground",description:"Shape the ground in a rectangle (or round) at a point: level (to a height, or its middle height), raise or lower (by_m), smooth; or a ramp from one point to another. The game moves the ground 4 m at most.",parameters:P(withXY({
-      mode:{type:"string",enum:["level","raise","lower","smooth","ramp"]},width:{type:"number"},depth:{type:"number"},turn_deg:{type:"number",description:"how far the rectangle is turned, anticlockwise"},
+    {name:"shape_ground",description:"Shape the ground in a rectangle (or round) at a point: level (to a height, or its middle height), raise or lower (by_m, as far as you like: past 4 m the build rebuilds the terrain), smooth, remove (a hill or mountain taken away: the ground round it drawn in across it); or a ramp from one point to another.",parameters:P(withXY({
+      mode:{type:"string",enum:["level","raise","lower","smooth","ramp","remove"]},width:{type:"number"},depth:{type:"number"},turn_deg:{type:"number",description:"how far the rectangle is turned, anticlockwise"},
       round:{type:"boolean"},height:{type:"number",description:"for level: the height (z) to level to"},by_m:{type:"number",description:"for raise and lower"},strength:{type:"number",description:"for smooth, 1 to 10"},
       from:{type:"array",items:{type:"number"}},to:{type:"array",items:{type:"number"}},z_from:{type:"number"},z_to:{type:"number"}}),["mode"])},
     {name:"remove_ground_area",description:"Take out a ground area (ids from get_overview ground_areas).",parameters:P({id:{type:"string"}},["id"])},
+    {name:"sculpt_terrain",description:"Big natural shapes on the terrain itself, as high as you like: mountains (one at x, y, or a range along a line), hills, a plateau, a crater, or a valley carved along a line. Each comes out different. The game holds a limited amount of new terrain: a 150 m mountain 800 m across is about as much as a level takes.",parameters:P(withXY({
+      shape:{type:"string",enum:["mountains","hills","plateau","crater","valley"]},radius_m:{type:"number",description:"how far it reaches from its middle (mountains 60-260, hills 25-100)"},
+      height_m:{type:"number",description:"its height (or depth, for a crater or valley)"},rough:{type:"number",description:"0 smooth to 1 craggy"},
+      along:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]: a range or a valley along this line"}}),["shape"])},
     {name:"stealth_check",look:true,description:"How stealthy the mission is: the quietest way on foot from the player start to each objective, how many metres of it guards and cameras watch, the watched stretches, and who watches it most. Draws the routes on the user's map. Takes a few seconds.",parameters:P({})},
     {name:"write_texts",description:"Write the mission's texts in the game's style: name, description (the game's mission list line, under 60 characters), objective texts by number (under 60 characters), map computer labels of your own buildings (title under 20, info under 40), and a briefing of one to three short lines shown as messages at the start.",parameters:P({
       name:{type:"string"},description:{type:"string"},briefing:{type:"string",description:"one to three short lines, one per line"},

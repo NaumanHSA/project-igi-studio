@@ -235,6 +235,11 @@ def pad_for_area(a, terrain):
     elif mode == "smooth":
         pad["target"] = None
         pad["radius"] = max(1.0, min(20.0, float(a.get("strength") or 4.0)))
+    elif mode == "remove":
+        pad["target"] = None
+        pad["ring"] = _ring(pad, w, h, blend, terrain)
+        if not pad["ring"]:
+            return None
     elif mode == "ramp":
         pad["target"] = None
         ends = [_to_world(pad, -w / 2, 0.0), _to_world(pad, w / 2, 0.0)]
@@ -249,6 +254,34 @@ def pad_for_area(a, terrain):
     r = math.hypot(w, h) / 2 + blend + pad["amp"]
     pad["box"] = (pad["x"] - r, pad["x"] + r, pad["y"] - r, pad["y"] + r)
     return pad
+
+
+RING = 48                       # points round a Remove area its fill is drawn from
+
+
+def _ring(pad, w, h, blend, terrain):
+    """A Remove area's surroundings: the level's ground at RING points on the
+    ellipse through its outer edge (the area plus its blend), as (x, y, z)."""
+    out = []
+    rx, ry = w / 2 + blend, h / 2 + blend
+    for k in range(RING):
+        t = 2 * math.pi * k / RING
+        x, y = _to_world(pad, rx * math.cos(t), ry * math.sin(t))
+        z = terrain.z(x, y)
+        if z is not None:
+            out.append((x, y, z))
+    return out
+
+
+def ring_fill(ring, x, y):
+    """The ground a Remove area leaves: its surroundings drawn in across it,
+    each weighed by the inverse square of its distance (plotter.html ringFill)."""
+    tw = tz = 0.0
+    for rx, ry, rz in ring:
+        w = 1.0 / ((rx - x) ** 2 + (ry - y) ** 2 + 1.0)
+        tw += w
+        tz += w * rz
+    return tz / tw
 
 
 def _median(pad, terrain):
@@ -317,8 +350,39 @@ def brush_cells(rows):
         except (TypeError, ValueError, IndexError):
             continue
         if d:
-            out[(ix, iy)] = max(-4.0, min(4.0, d))
+            out[(ix, iy)] = max(-SHAPE_MAX, min(SHAPE_MAX, d))
     return out
+
+
+# The big shapes: brush strokes wider than the fine brush's and the mountains,
+# hills, craters and valleys stamped with it, as metres on the terrain mesh's
+# own 4 m grid (plan "sculpt": [[ix, iy, centimetres], ...], cell (ix, iy) at
+# (4 ix, 4 iy)). They apply first, before the areas, the fine brush and the
+# building pads (plotter.html sculptAt, in the same order).
+SCULPT_M = 4.0
+SHAPE_MAX = 600.0               # a sanity bound on any one change, metres
+
+
+def sculpt_cells(rows):
+    out = {}
+    for r in rows or []:
+        try:
+            ix, iy, cm = int(r[0]), int(r[1]), float(r[2])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if cm:
+            out[(ix, iy)] = max(-SHAPE_MAX, min(SHAPE_MAX, cm / 100.0))
+    return out
+
+
+def _sculpt_at(cells, gx, gy):
+    """Bilinear between the 4 m grid points."""
+    fx, fy = gx / SCULPT_M, gy / SCULPT_M
+    ix, iy = math.floor(fx), math.floor(fy)
+    tx, ty = fx - ix, fy - iy
+    g = cells.get
+    return ((g((ix, iy), 0.0) * (1 - tx) + g((ix + 1, iy), 0.0) * tx) * (1 - ty) +
+            (g((ix, iy + 1), 0.0) * (1 - tx) + g((ix + 1, iy + 1), 0.0) * tx) * ty)
 
 
 def _brush_at(cells, gx, gy):
@@ -384,6 +448,8 @@ def _shape(pad, g, wt, gx, gy):
     if mode == "smooth":
         grid = pad.get("grid")
         return g if grid is None else g + (_grid_at(grid, gx, gy) - g) * wt
+    if mode == "remove":
+        return g + (ring_fill(pad["ring"], gx, gy) - g) * wt
     if mode == "ramp":
         dx, dy = gx - pad["x"], gy - pad["y"]
         mx = dx * pad["c"] + dy * pad["s"]
@@ -398,8 +464,9 @@ class Shaped:
     """The level's ground with the areas and brush strokes applied - what a
     building placed on shaped ground is measured against (pad_for(..., Shaped))."""
 
-    def __init__(self, terrain, areas, keep=None, brush=None):
+    def __init__(self, terrain, areas, keep=None, brush=None, sculpt=None):
         self.t, self.areas, self.keep, self.brush = terrain, areas, keep or [], brush or {}
+        self.sculpt = sculpt or {}
         for pad in areas:
             if pad.get("mode") == "smooth" and "grid" not in pad:
                 pad["grid"] = _smoothed(terrain, pad)
@@ -411,6 +478,8 @@ class Shaped:
         kf = _keep(self.keep, x, y) if self.keep else 1.0
         if kf <= 0:
             return g
+        if self.sculpt:
+            g += _sculpt_at(self.sculpt, x, y) * kf
         for pad in self.areas:
             bx0, bx1, by0, by1 = pad["box"]
             if bx0 <= x <= bx1 and by0 <= y <= by1:
@@ -423,7 +492,171 @@ class Shaped:
 
 
 # ------------------------------------------------------------------ patches
-def build_patches(terrain, pads, first_id, keep=None, brush=None):
+def _sample(near, keeps, brush, brushed, gx, gy, v0, base_at, sculpt=None):
+    """The ground wanted at one point (metres), and whether anything shapes it:
+    the areas in order, then the brush, then the nearest building pad - each on
+    the ground the ones before it left, starting from the level's own (its mesh,
+    base_at() in raw units, plus its height map, v0). Returns (ground, mesh
+    height, touched, the pad that holds it fully or None)."""
+    g = base = full = None
+    touched = False
+    kf = None
+    best, bw = None, 0.0
+    if sculpt:
+        sd = _sculpt_at(sculpt, gx, gy)
+        if sd:
+            kf = _keep(keeps, gx, gy) if keeps else 1.0
+            if kf > 0:
+                base = base_at()
+                if base is not None:
+                    g = base / SCALE + (v0 - 64.0) * STEP + sd * kf
+                    touched = True
+    for pad in near:
+        bx0, bx1, by0, by1 = pad["box"]
+        if not (bx0 <= gx <= bx1 and by0 <= gy <= by1):
+            continue
+        wt = _weight(pad, _distance(pad, gx, gy), gx, gy)
+        if wt <= 0:
+            continue
+        if not pad.get("area"):
+            if wt > bw:              # buildings: the nearest pad wins, after the areas
+                best, bw = pad, wt
+            continue
+        if keeps:
+            if kf is None:
+                kf = _keep(keeps, gx, gy)
+            wt *= kf
+            if wt <= 0:
+                continue
+        if g is None:
+            base = base_at()
+            if base is None:
+                break
+            g = base / SCALE + (v0 - 64.0) * STEP
+        g = _shape(pad, g, wt, gx, gy)
+        touched = True
+        if wt > 0.99:
+            full = pad
+    if brushed and (base is not None or g is None):
+        bd = _brush_at(brush, gx, gy)
+        if bd:
+            if kf is None:
+                kf = _keep(keeps, gx, gy) if keeps else 1.0
+            if kf > 0:
+                if g is None:
+                    base = base_at()
+                    if base is not None:
+                        g = base / SCALE + (v0 - 64.0) * STEP
+                if g is not None:
+                    g += bd * kf
+                    touched = True
+    if best is not None:
+        if g is None:
+            base = base_at()
+            if base is not None:
+                g = base / SCALE + (v0 - 64.0) * STEP
+        if g is not None:
+            g = _shape(best, g, bw, gx, gy)
+            touched = True
+            if bw > 0.99:
+                full = best
+    return g, base, touched, full
+
+
+def _cubes_of(pads, brush, cube, sculpt=None):
+    cubes = set()
+    for (ix, iy) in sculpt or ():
+        for cx in range(math.floor((ix - 1) * SCULPT_M * SCALE / cube), math.floor((ix + 1) * SCULPT_M * SCALE / cube) + 1):
+            for cy in range(math.floor((iy - 1) * SCULPT_M * SCALE / cube), math.floor((iy + 1) * SCULPT_M * SCALE / cube) + 1):
+                cubes.add((cx, cy))
+    for pad in pads:
+        x0, x1, y0, y1 = pad["box"]
+        for cx in range(math.floor(x0 * SCALE / cube), math.floor(x1 * SCALE / cube) + 1):
+            for cy in range(math.floor(y0 * SCALE / cube), math.floor(y1 * SCALE / cube) + 1):
+                cubes.add((cx, cy))
+    for (ix, iy) in brush:
+        for cx in range(math.floor((ix - 0.5) * SCALE / cube), math.floor((ix + 1.5) * SCALE / cube) + 1):
+            for cy in range(math.floor((iy - 0.5) * SCALE / cube), math.floor((iy + 1.5) * SCALE / cube) + 1):
+                cubes.add((cx, cy))
+    return cubes
+
+
+def _near(pads, keep, brush, mx0, my0, mx1, my1, sculpt=None):
+    near = [p for p in pads if p["box"][0] <= mx1 and p["box"][1] >= mx0 and p["box"][2] <= my1 and p["box"][3] >= my0]
+    keeps = [k for k in keep if k["box"][0] <= mx1 and k["box"][1] >= mx0 and k["box"][2] <= my1 and k["box"][3] >= my0]
+    brushed = bool(brush) and any(mx0 - 1 <= ix <= mx1 and my0 - 1 <= iy <= my1 for (ix, iy) in brush)
+    sub = None
+    if sculpt:
+        i0, i1 = math.floor(mx0 / SCULPT_M) - 1, math.ceil(mx1 / SCULPT_M) + 1
+        j0, j1 = math.floor(my0 / SCULPT_M) - 1, math.ceil(my1 / SCULPT_M) + 1
+        sub = {k: v for k, v in sculpt.items() if i0 <= k[0] <= i1 and j0 <= k[1] <= j1} or None
+    return near, keeps, brushed, sub
+
+
+# How far the ground has to move before the terrain mesh itself is built again
+# there (studio/build/terrain_mesh.py) rather than only its height map: a height
+# map moves it 4 m at most, and the mesh keeps a margin under that for what it
+# cannot follow exactly (its coarse points sit on steps, the finest detail).
+MESH_FROM = 3.0
+GRID_M = 4.0                    # the terrain mesh's grid: a height every 4 m
+
+
+def mesh_changes(terrain, pads, keep=None, brush=None, sculpt=None):
+    """{(gi, gj): metres}: how far the terrain mesh's grid points have to move
+    for the shaped ground - where the change there, smoothed over the 4 m round
+    the point (a tent filter over samples 2 m apart, so a narrow brush stroke
+    stays in the height map), is more than a height map can carry. A point that
+    moves takes the level's own height map there into the mesh as well: the
+    map over a rebuilt cube is written again whole (build_patches), and then
+    has all its ±4 m for what the mesh cannot follow."""
+    keep = keep or []
+    brush = brush or {}
+    for pad in pads:
+        if pad.get("mode") == "smooth" and "grid" not in pad:
+            pad["grid"] = _smoothed(terrain, pad)
+    cube = 1 << (31 - LOD)
+    step = int(2 * SCALE)                                # 2 m between samples
+    per = cube // step                                   # 32 of them across a 64 m cube
+    gstep = int(GRID_M * SCALE)
+    out = {}
+    for (cx, cy) in sorted(_cubes_of(pads, brush, cube, sculpt)):
+        min_x, min_y = cx * cube, cy * cube
+        mx0, my0, mx1, my1 = min_x / SCALE, min_y / SCALE, (min_x + cube) / SCALE, (min_y + cube) / SCALE
+        near, keeps, brushed, sub = _near(pads, keep, brush, mx0 - 4, my0 - 4, mx1 + 4, my1 + 4, sculpt)
+        if not near and not brushed and not sub:
+            continue
+        # one sample past the cube each way, for the filter at its edge
+        n = per + 3
+        base = terrain.base_block(min_x - step, min_y - step, n - 1, step)
+        d = [0.0] * (n * n)
+        own_map = [0.0] * (n * n)                        # the level's height map, metres
+        for j in range(n):
+            ry = min_y + (j - 1) * step
+            for i in range(n):
+                rx = min_x + (i - 1) * step
+                b = base[j * n + i]
+                if b is None:
+                    continue
+                h = terrain._hmp_for(rx, ry)
+                v0 = 64.0 + (terrain._hmp_delta(h, rx, ry) / 256.0 if h is not None else 0.0)
+                own_map[j * n + i] = (v0 - 64.0) * STEP
+                g, _, touched, _ = _sample(near, keeps, brush, brushed, rx / SCALE, ry / SCALE, v0, lambda: b, sub)
+                if touched and g is not None:
+                    d[j * n + i] = g - (b / SCALE + (v0 - 64.0) * STEP)
+        # the grid points in this cube (its low edges; the high ones are the next cube's)
+        for j in range(1, n - 2, 2):
+            for i in range(1, n - 2, 2):
+                acc = 0.0
+                for dj, wj in ((-1, 0.25), (0, 0.5), (1, 0.25)):
+                    row = (j + dj) * n
+                    acc += wj * (0.25 * d[row + i - 1] + 0.5 * d[row + i] + 0.25 * d[row + i + 1])
+                if abs(acc) > MESH_FROM:
+                    out[((min_x + (i - 1) * step) // gstep, (min_y + (j - 1) * step) // gstep)] = acc + own_map[j * n + i]
+    return out
+
+
+def build_patches(terrain, pads, first_id, keep=None, brush=None, mesh=None, mesh_cubes=None, sculpt=None,
+                  folds=None):
     """One height map per terrain cube the pads (and brush strokes) touch.
 
     A cube the level already maps is rewritten IN PLACE, keeping its bitmap id,
@@ -434,30 +667,34 @@ def build_patches(terrain, pads, first_id, keep=None, brush=None):
 
     Pads apply in the order given, each on the ground the ones before it left;
     then the brush. keep: footprints (keep_for) whose ground areas and brush
-    leave alone - a building pad levels its own ground regardless."""
+    leave alone - a building pad levels its own ground regardless.
+
+    mesh: the terrain with its mesh built again where the ground moves further
+    than a height map can (terrain_mesh.py), or None. The ground is still worked
+    out on the level's own (terrain); the maps then carry what is left between
+    it and the new mesh, and every cube in mesh_cubes ((cx, cy) of 64 m cubes
+    whose mesh changed) is mapped whole, so nothing standing where the mesh
+    moved but the ground did not is left on the new mesh. folds: the grid
+    points where the level's ground hung over itself and the new mesh does
+    not (terrain_mesh._folds); in the 8 m squares round them the level's
+    ground says nothing about the new one, and their maps are left as they
+    were."""
     cube = 1 << (31 - LOD)
     keep = keep or []
     brush = brush or {}
-    cubes = {}
+    leaf = int(2 * GRID_M * SCALE)                      # a terrain leaf's square, raw
+    fold_sq = {(i0, j0) for gi, gj in (folds or ())
+               for i0 in {gi // 2 * 2, (gi - 1) // 2 * 2} for j0 in {gj // 2 * 2, (gj - 1) // 2 * 2}}
     for pad in pads:
-        x0, x1, y0, y1 = pad["box"]
-        for cx in range(math.floor(x0 * SCALE / cube), math.floor(x1 * SCALE / cube) + 1):
-            for cy in range(math.floor(y0 * SCALE / cube), math.floor(y1 * SCALE / cube) + 1):
-                cubes.setdefault((cx, cy), [])
         if pad.get("mode") == "smooth" and "grid" not in pad:
             pad["grid"] = _smoothed(terrain, pad)
-    for (ix, iy) in brush:
-        for cx in range(math.floor((ix - 0.5) * SCALE / cube), math.floor((ix + 1.5) * SCALE / cube) + 1):
-            for cy in range(math.floor((iy - 0.5) * SCALE / cube), math.floor((iy + 1.5) * SCALE / cube) + 1):
-                cubes.setdefault((cx, cy), [])
+    cubes = _cubes_of(pads, brush, cube, sculpt) | set(mesh_cubes or ())
     patches, notes, nid = [], [], first_id
-    short = {}
+    short, off_by = {}, 0.0
     for (cx, cy) in sorted(cubes):
         min_x, min_y = cx * cube, cy * cube
         mx0, my0, mx1, my1 = min_x / SCALE, min_y / SCALE, (min_x + cube) / SCALE, (min_y + cube) / SCALE
-        near = [p for p in pads if p["box"][0] <= mx1 and p["box"][1] >= mx0 and p["box"][2] <= my1 and p["box"][3] >= my0]
-        keeps = [k for k in keep if k["box"][0] <= mx1 and k["box"][1] >= mx0 and k["box"][2] <= my1 and k["box"][3] >= my0]
-        brushed = bool(brush) and any(mx0 - 1 <= ix <= mx1 and my0 - 1 <= iy <= my1 for (ix, iy) in brush)
+        near, keeps, brushed, sub = _near(pads, keep, brush, mx0, my0, mx1, my1, sculpt)
         # the level's own map for this cube, if it has one
         have = None
         for h in terrain.hmaps:
@@ -467,6 +704,10 @@ def build_patches(terrain, pads, first_id, keep=None, brush=None):
         spacing = cube // size
         data = bytearray((size + 1) ** 2)
         changed = False
+        whole = mesh is not None and (cx, cy) in (mesh_cubes or ())
+        if mesh is not None:
+            base0 = terrain.base_block(min_x, min_y, size, spacing)
+            base1 = mesh.base_block(min_x, min_y, size, spacing)
         for j in range(size + 1):
             ry = min_y + j * spacing
             for i in range(size + 1):
@@ -474,67 +715,29 @@ def build_patches(terrain, pads, first_id, keep=None, brush=None):
                 h = terrain._hmp_for(rx, ry)
                 v0 = 64.0 + (terrain._hmp_delta(h, rx, ry) / 256.0 if h is not None else 0.0)
                 v = v0
-                gx, gy = rx / SCALE, ry / SCALE
-                g = base = full = None
-                touched = False
-                kf = None
-                best, bw = None, 0.0
-                for pad in near:
-                    bx0, bx1, by0, by1 = pad["box"]
-                    if not (bx0 <= gx <= bx1 and by0 <= gy <= by1):
-                        continue
-                    wt = _weight(pad, _distance(pad, gx, gy), gx, gy)
-                    if wt <= 0:
-                        continue
-                    if not pad.get("area"):
-                        if wt > bw:              # buildings: the nearest pad wins, after the areas
-                            best, bw = pad, wt
-                        continue
-                    if keeps:
-                        if kf is None:
-                            kf = _keep(keeps, gx, gy)
-                        wt *= kf
-                        if wt <= 0:
-                            continue
-                    if g is None:
-                        base = terrain.z_raw_base(rx, ry)
-                        if base is None:
-                            break
-                        g = base / SCALE + (v0 - 64.0) * STEP
-                    g = _shape(pad, g, wt, gx, gy)
-                    touched = True
-                    if wt > 0.99:
-                        full = pad
-                if brushed and (base is not None or g is None):
-                    bd = _brush_at(brush, gx, gy)
-                    if bd:
-                        if kf is None:
-                            kf = _keep(keeps, gx, gy) if keeps else 1.0
-                        if kf > 0:
-                            if g is None:
-                                base = terrain.z_raw_base(rx, ry)
-                                if base is not None:
-                                    g = base / SCALE + (v0 - 64.0) * STEP
-                            if g is not None:
-                                g += bd * kf
-                                touched = True
-                if best is not None:
-                    if g is None:
-                        base = terrain.z_raw_base(rx, ry)
-                        if base is not None:
-                            g = base / SCALE + (v0 - 64.0) * STEP
-                    if g is not None:
-                        g = _shape(best, g, bw, gx, gy)
-                        touched = True
-                        if bw > 0.99:
-                            full = best
-                if touched and g is not None and base is not None:
-                    v = 64.0 + (g - base / SCALE) / STEP
-                    if (v < 0 or v > 127) and full is not None:
-                        miss = (v - min(127.0, max(0.0, v))) * STEP
-                        if abs(miss) > abs(short.get(full["name"], 0.0)):
-                            short[full["name"]] = miss
-                    changed = True
+                if mesh is None:
+                    g, base, touched, full = _sample(near, keeps, brush, brushed, rx / SCALE, ry / SCALE, v0,
+                                                     lambda: terrain.z_raw_base(rx, ry), sub)
+                    if touched and g is not None and base is not None:
+                        v = 64.0 + (g - base / SCALE) / STEP
+                        if (v < 0 or v > 127) and full is not None:
+                            miss = (v - min(127.0, max(0.0, v))) * STEP
+                            if abs(miss) > abs(short.get(full["name"], 0.0)):
+                                short[full["name"]] = miss
+                        changed = True
+                else:
+                    k = j * (size + 1) + i
+                    b0, b1 = base0[k], base1[k]
+                    g, _, touched, full = _sample(near, keeps, brush, brushed, rx / SCALE, ry / SCALE, v0, lambda: b0, sub)
+                    if not touched or g is None:
+                        g = None if b0 is None else b0 / SCALE + (v0 - 64.0) * STEP     # the level's own ground
+                    if fold_sq and ((int(rx // leaf) * 2, int(ry // leaf) * 2) in fold_sq):
+                        g = None        # where the level's ground hung over itself: the new mesh as it is
+                    if g is not None and b1 is not None and (touched or whole):
+                        v = 64.0 + (g - b1 / SCALE) / STEP
+                        if v < 0 or v > 127:
+                            off_by = max(off_by, abs(v - min(127.0, max(0.0, v))) * STEP)
+                        changed = True
                 data[j * (size + 1) + i] = int(round(min(127.0, max(0.0, v))))
         if not changed:
             continue
@@ -553,6 +756,9 @@ def build_patches(terrain, pads, first_id, keep=None, brush=None):
     for name, miss in short.items():
         notes.append("%s: the ground can only be moved about 4 m - it is still %.1f m %s where it was asked to be"
                      % (name, abs(miss), "above" if miss < 0 else "below"))
+    if off_by > 1.5:
+        notes.append("the terrain follows the shaped ground to within %.1f m (it is a height every 4 m, some of "
+                     "them on fixed steps; the steepest shapes are smoothed a little)" % off_by)
     return patches, notes
 
 

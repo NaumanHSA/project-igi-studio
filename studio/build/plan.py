@@ -67,6 +67,7 @@ if EMPTY:
     meta["objects"] = [o for o in meta.get("objects", []) if o.get("type") == "player"]
 
 errors, warnings = [], []
+report = []                     # what the build did, printed with the plan at the end
 
 # ---------------------------------------------------------------- id allocation
 used = set(meta.get("usedIds", []))
@@ -102,7 +103,7 @@ def alarm_ctl_id(key):
         return None
     if key in ALARM_IDS:
         return ALARM_IDS[key]
-    if key.startswith("lv:") and key[3:].isdigit():
+    if key.startswith("lv:") and key[3:].isdigit() and not EMPTY:   # an empty map has none of the level's
         return int(key[3:])
     return None
 
@@ -302,6 +303,17 @@ try:
                           src_path, WORLD, _sizes, nodes=_nodes)
 except Exception as e:                      # never let this block a build
     warnings.append("exact ground unavailable (%s) - using navmesh heights" % e)
+# The ground is worked out from the level as it ships (the reference copy),
+# never from the slot: an earlier Apply may have rebuilt the slot's terrain mesh
+# or rewritten its height maps, and shaping on top of that would shape twice.
+from studio.build.terrain import Terrain as _Terrain
+TERR0 = None
+try:
+    TERR0 = _Terrain(GAME / "missions" / "location0" / ("level%d" % LV), src_path)
+    if _surface is not None and _surface.terrain is not None:
+        _surface.terrain = TERR0
+except Exception as e:
+    warnings.append("the level's own ground could not be read (%s)" % e)
 
 
 def rest_z(x, y, near_z, model=None, skip=None):
@@ -344,15 +356,18 @@ PADS, FLAT_PATCHES, FLAT_HMP = {}, [], None
 AREAS = [a for a in (plan.get("ground") or []) if isinstance(a, dict)]
 AREA_PADS = []
 BRUSH = FL.brush_cells(plan.get("brush"))
+SCULPT = FL.sculpt_cells(plan.get("sculpt"))   # the big shapes, on the terrain's 4 m grid
 # Nothing standing on the ground has it moved from under it: buildings, walls,
 # props, crates, vehicles, pickups and the player start keep the ground they
 # stand on (eased in round them). Carrying them up or down with it left crates
 # half in the air and a button mounted on one hanging (level 3, 2026-09-18).
 # Guards are not in it - they stand on the navmesh, and the nodes on shaped
 # ground move with it. Your own building that levels its ground has its pad.
+# The player start is not in it either: it is a place, not a thing, and it is
+# set down on the shaped ground (below) rather than left in a pit of the old.
 # The editor keeps the same list (plotter.html keepsGround).
 KEEP = []
-KEEP_TYPES = ("building", "prop", "explodable", "vehicle", "pickup", "player", "fence")
+KEEP_TYPES = ("building", "prop", "explodable", "vehicle", "pickup", "fence")
 NODE_SHIFTS = []        # (graph, node id, x, y, new z): navmesh nodes on shaped ground
 NODE_ON_GROUND = 0.75
 BASE_HMP = GAME / "missions" / "location0" / ("level%d" % LV) / "terrain" / "terrain.hmp"
@@ -376,14 +391,17 @@ def wants_flat(p):
 _PATCH_CACHE = paths.cache() / "patches"
 
 
-def _patches_cached(terr, pads, first_id):
+def _patches_cached(terr, pads, first_id, mesh=None):
     import hashlib
     try:
         key = hashlib.sha1(json.dumps({
             "lv": LV, "first": first_id, "pads": pads, "keep": KEEP,
             "brush": sorted([list(k), v] for k, v in BRUSH.items()),
+            "sculpt": sorted([list(k), v] for k, v in SCULPT.items()),
             "hmp": [BASE_HMP.stat().st_size, int(BASE_HMP.stat().st_mtime)] if BASE_HMP.exists() else None,
-            "code": hashlib.sha1((ROOT / "studio" / "build" / "flatten.py").read_bytes()).hexdigest()},
+            "mesh": mesh["key"] if mesh else None,
+            "code": [hashlib.sha1((ROOT / "studio" / "build" / f).read_bytes()).hexdigest()
+                     for f in ("flatten.py", "terrain.py", "terrain_mesh.py")]},
             sort_keys=True, default=str).encode("utf-8")).hexdigest()[:20]
     except (TypeError, ValueError, OSError):
         key = None
@@ -396,7 +414,9 @@ def _patches_cached(terr, pads, first_id):
             return patches, d["notes"]
         except (OSError, ValueError, KeyError):
             pass
-    patches, notes = FL.build_patches(terr, pads, first_id, KEEP, BRUSH)
+    patches, notes = FL.build_patches(terr, pads, first_id, KEEP, BRUSH,
+                                      mesh=mesh["terrain"] if mesh else None, mesh_cubes=mesh["cubes"] if mesh else None,
+                                      sculpt=SCULPT, folds=mesh.get("folds") if mesh else None)
     if f is not None:
         try:
             _PATCH_CACHE.mkdir(parents=True, exist_ok=True)
@@ -411,10 +431,71 @@ def _patches_cached(terr, pads, first_id):
     return patches, notes
 
 
-if _surface is not None and _surface.terrain is not None and not NO_SNAP:
-    _terr = _surface.terrain
+# Where the shaped ground moves further than a height map can carry it (4 m),
+# the terrain mesh itself is built again there (studio/build/terrain_mesh.py):
+# its 4 m grid moved to the new ground, every cube over it rebuilt, the rest of
+# the level's terrain kept as it is. The height maps then carry what is left.
+# The game holds 32,767 terrain nodes; the level's own use 11,000-15,000.
+TERRAIN_MESH = None             # for the report and the editor: nodes used, grid points moved
+
+
+class _TooMuchGround(Exception):
+    pass
+
+
+def _shape_terrain(terr, pads):
+    """None, or {"terrain": the level with its mesh rebuilt (and its own height
+    maps), "cubes": the 64 m cubes whose mesh changed, "key": for the cache}."""
+    global TERRAIN_MESH
+    if LV == 14 or os.environ.get("IGISTUDIO_NO_TERRAIN_MESH"):
+        return None                     # level 14 is underground: its terrain is not a terrain
+    import hashlib
+    from studio.build import terrain_mesh as TMS
+    moves = FL.mesh_changes(terr, pads, KEEP, BRUSH, SCULPT)
+    if not moves:
+        return None
+    tree0 = TMS.Tree.load(GAME / "missions" / "location0" / ("level%d" % LV) / "terrain")
+    gis, gjs = [p[0] for p in moves], [p[1] for p in moves]
+    own = TMS.Heights(tree0, (min(gis) - 2, max(gis) + 2, min(gjs) - 2, max(gjs) + 2))
+    targets = {p: own(*p) + dz * FL.SCALE * 3 for p, dz in moves.items() if own(*p) is not None}
+    moved = TMS.settle(targets, own)
+    if not moved:
+        return None
+    try:
+        tree1, rep = TMS.rebuild(tree0, own, moved)
+    except TMS.TooManyNodes as e:
+        TERRAIN_MESH = {"nodes": e.nodes, "limit": TMS.NODE_LIMIT, "was": len(tree0.nodes), "points": len(moved),
+                        "over": True}
+        raise _TooMuchGround("the shaped ground needs more new terrain than the game can hold: %d terrain nodes, "
+                             "it takes %d (the level's own use %d). Make the biggest shapes smaller or fewer"
+                             % (e.nodes, TMS.NODE_LIMIT, len(tree0.nodes)))
+    (OUT / "terrain").mkdir(parents=True, exist_ok=True)
+    tree1.save(OUT / "terrain")
+    mesh = _Terrain(OUT)
+    mesh.hmaps = list(terr.hmaps)           # the level's own height maps, over the new mesh
+    cube = 1 << (31 - FL.LOD)
+    cubes = {((a + da) * TMS.GRID // cube, (b + db) * TMS.GRID // cube)
+             for (a, b) in list(moved) + list(rep.get("folds", ())) for da in (-1, 0, 1) for db in (-1, 0, 1)}
+    TERRAIN_MESH = {"nodes": rep["nodes"], "limit": TMS.NODE_LIMIT, "was": rep["was"], "points": len(moved)}
+    report.append("terrain mesh rebuilt where the ground moves more than %.0f m: %d grid points, "
+                  "%d of %d terrain nodes (the level's own: %d)"
+                  % (FL.MESH_FROM, len(moved), rep["nodes"], TMS.NODE_LIMIT, rep["was"]))
+    key = hashlib.sha1(json.dumps(sorted([list(k), v] for k, v in moved.items())).encode()).hexdigest()[:16]
+    mg = 64 * FL.SCALE                      # the light round a change moves a little way past it
+    box = (min(a for a, _ in moved) * TMS.GRID - mg, max(a for a, _ in moved) * TMS.GRID + mg,
+           min(b for _, b in moved) * TMS.GRID - mg, max(b for _, b in moved) * TMS.GRID + mg)
+    changed = (min(a for a, _ in moved) * TMS.GRID, max(a for a, _ in moved) * TMS.GRID,
+               min(b for _, b in moved) * TMS.GRID, max(b for _, b in moved) * TMS.GRID)
+    tallest = max(abs(z - own(*p)) for p, z in moved.items() if own(*p) is not None) / (3 * FL.SCALE)
+    return {"terrain": mesh, "cubes": cubes, "key": key, "box": box, "changed": changed, "tallest": tallest,
+            "folds": rep.get("folds", [])}
+
+
+MESH = None
+if TERR0 is not None and _surface is not None and _surface.terrain is not None and not NO_SNAP:
+    _terr = TERR0
     _pads = []
-    if AREAS or BRUSH:
+    if AREAS or BRUSH or SCULPT:
         for o in WORLD + [p for p in PLACE if not wants_flat(p)]:
             if o.get("type") not in KEEP_TYPES or o.get("cutscene") or o.get("x") is None:
                 continue
@@ -436,22 +517,26 @@ if _surface is not None and _surface.terrain is not None and not NO_SNAP:
             AREA_PADS.append(_apad)
             _pads.append(_apad)
     # a building placed on shaped ground is levelled for the ground as shaped
-    _shaped = FL.Shaped(_terr, AREA_PADS, KEEP, BRUSH) if (AREA_PADS or BRUSH) else _terr
+    _shaped = FL.Shaped(_terr, AREA_PADS, KEEP, BRUSH, SCULPT) if (AREA_PADS or BRUSH or SCULPT) else _terr
     for p in PLACE:
         if wants_flat(p):
             pad = FL.pad_for(p, _sizes, _shaped)
             if pad and pad["high"] - pad["low"] > 0.25:
                 _pads.append(pad)
                 PADS[id(p)] = pad
-    if _pads or BRUSH:
+    if _pads or BRUSH or SCULPT:
         try:
             # levels 2, 4, 5, 7 and 11-14 ship without height maps: start an empty file
             FLAT_HMP = FL.read_hmp(BASE_HMP) if BASE_HMP.exists() else FL.empty_hmp()
-            FLAT_PATCHES, _notes = _patches_cached(_terr, _pads, FL.first_free_id(FLAT_HMP))
+            MESH = _shape_terrain(_terr, _pads)
+            FLAT_PATCHES, _notes = _patches_cached(_terr, _pads, FL.first_free_id(FLAT_HMP), MESH)
             warnings.extend(_notes)
+        except _TooMuchGround as e:
+            errors.append(str(e))
+            PADS, FLAT_PATCHES, MESH = {}, [], None
         except (OSError, ValueError) as e:
             warnings.append("ground not flattened: %s" % e)
-            PADS, FLAT_PATCHES = {}, []
+            PADS, FLAT_PATCHES, MESH = {}, [], None
     if FLAT_PATCHES:
         # what stands on ground that moves goes with it: before and after
         _boxes = [pd["box"] for pd in _pads]
@@ -459,6 +544,10 @@ if _surface is not None and _surface.terrain is not None and not NO_SNAP:
             _bx = [ix for ix, _ in BRUSH]
             _by = [iy for _, iy in BRUSH]
             _boxes.append((min(_bx) - 1, max(_bx) + 2, min(_by) - 1, max(_by) + 2))
+        if SCULPT:
+            _sx = [ix * FL.SCULPT_M for ix, _ in SCULPT]
+            _sy = [iy * FL.SCULPT_M for _, iy in SCULPT]
+            _boxes.append((min(_sx) - 4, max(_sx) + 4, min(_sy) - 4, max(_sy) + 4))
 
         def _in_shaped(x, y):
             return any(b[0] <= x <= b[1] and b[2] <= y <= b[3] for b in _boxes)
@@ -472,11 +561,58 @@ if _surface is not None and _surface.terrain is not None and not NO_SNAP:
                         g0 = _terr.z(_n["x"], _n["y"])
                         if g0 is not None and abs(_n["z"] - g0) <= NODE_ON_GROUND:
                             _nodes_on.append((_gid, _n, g0))
-        FL.register(_terr, FLAT_PATCHES)
+        # from here on every height is the new ground's: the rebuilt mesh (if
+        # any) with the height maps over it
+        _after = MESH["terrain"] if MESH else _terr
+        FL.register(_after, FLAT_PATCHES)
+        _surface.terrain = _after
+        # the terrain's baked light over the rebuilt ground (lightmaps.py)
+        if MESH:
+            try:
+                from studio.build import lightmaps as LMP
+                _lmp = GAME / "missions" / "location0" / ("level%d" % LV) / "terrain" / "terrain.lmp"
+                if _lmp.exists():
+                    _fit = LMP.fit_sun(LV, _terr, src, _lmp)
+                    _items = LMP.read_lmp(_lmp)
+                    _lit = LMP.relight(_items, LMP.tasks_of(src), _terr, _after, MESH["box"],
+                                       dict(_fit, tallest=MESH["tallest"]), MESH["changed"])
+                    if _lit:
+                        (OUT / "terrain").mkdir(parents=True, exist_ok=True)
+                        LMP.write_lmp(OUT / "terrain" / "terrain.lmp", _items)
+                        MESH["lit"] = _lit
+                        report.append("terrain light redone over the rebuilt ground: %d light map pixels" % _lit)
+                    elif _fit.get("r", 0) < LMP.MIN_FIT:
+                        report.append("terrain light kept as the level has it (its light does not follow the "
+                                      "lie of the land closely enough to redo)")
+            except (OSError, ValueError) as e:
+                warnings.append("the terrain light over the rebuilt ground was left as it was: %s" % e)
         for _gid, _n, g0 in _nodes_on:
-            g1 = _terr.z(_n["x"], _n["y"])
+            g1 = _after.z(_n["x"], _n["y"])
             if g1 is not None and abs(g1 - g0) >= 0.03:
                 NODE_SHIFTS.append((str(_gid), int(_n["id"]), _n["x"], _n["y"], round(_n["z"] + g1 - g0, 3)))
+        # A player start that stood on the level's ground stands on the shaped
+        # ground: set down on it again (_snap_edit, "settle"), whether or not the
+        # plan moved it - so a start under a mountain is on its slope, and one
+        # whose mountain was taken away again is back on the ground.
+        for _o in WORLD:
+            if _o.get("type") != "player" or not _o.get("ref") or _o.get("cutscene"):
+                continue
+            _own = _by_ref.get(_o["ref"]) or _o
+            _g0 = _terr.z(_own["x"], _own["y"])
+            if _g0 is None or abs(_own["z"] - PLAYER_LIFT - _g0) > 1.5:
+                continue                        # on a roof or up a tower: not the ground's
+            _e = _edit_by_ref.get(_o["ref"])
+            _x, _y = (_e["x"], _e["y"]) if _e and _e.get("x") is not None else (_o["x"], _o["y"])
+            _g1 = _after.z(_x, _y)
+            if _g1 is None or abs((_e["z"] if _e else _o["z"]) - PLAYER_LIFT - _g1) < 0.05:
+                continue
+            if _e is None:
+                _e = {"ref": _o["ref"], "type": "player", "qtype": _o.get("qtype") or "HumanPlayer",
+                      "id": _o.get("id", -1), "name": _o.get("name") or "Player spawn",
+                      "x": _o["x"], "y": _o["y"], "z": _o["z"], "gamma": _o.get("gamma") or 0}
+                EDITS.append(_e)
+                _edit_by_ref[_o["ref"]] = _e
+            _e["settle"] = True
 
 
 def _snap_place(p):
@@ -578,7 +714,6 @@ for e in EDITS:
     _snap_edit(e, ("prop", "building"))
 
 # 2. it is solid from here on, and the interiors it brings have floors
-report = []
 
 
 def _base_counts():
@@ -795,7 +930,8 @@ try:
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "heights.json").write_text(json.dumps({
         "placements": {p["uid"]: round(float(p["z"]), 3) for p in PLACE if p.get("uid") and p.get("z") is not None},
-        "edits": {e["ref"]: round(float(e["z"]), 3) for e in EDITS if e.get("z") is not None}}), encoding="utf-8")
+        "edits": {e["ref"]: round(float(e["z"]), 3) for e in EDITS if e.get("z") is not None},
+        "terrain": TERRAIN_MESH}), encoding="utf-8")
 except (OSError, TypeError, ValueError):
     pass
 
@@ -2185,6 +2321,13 @@ if OBJECTIVES:
     exprs, slots_txt, own_n = [], [], 0
     for i, ob in enumerate(OBJECTIVES, 1):
         if ob["kind"] == "level":
+            if EMPTY:
+                # its complete and failed expressions name the level's own tasks,
+                # and the empty map has none of them
+                errors.append("objective %d (%s) is one of the level's own, and the empty map has none of "
+                              "the level's mission logic, so it could never be completed - remove it"
+                              % (i, (ob.get("text") or ob.get("key") or "")[:60]))
+                continue
             # the level's own: its text is already in the language files, unless
             # the mission words it anew (retext: the AI designer's write_texts)
             key, link = _qstr(ob.get("key"), 31), int(ob.get("link") or -1)
@@ -2672,7 +2815,9 @@ for o in WORLD:
 for _term in MOVED_PARTS:
     out_src = re.sub(re.escape(_term) + r"\b", "0", out_src)
 
-out_src = out_src.replace(MARKER, "".join(blocks), 1)
+# The marker stays behind our blocks until the objectives are in: a level with
+# no list of its own gets ours there, inside the task tree with the rest.
+out_src = out_src.replace(MARKER, "".join(blocks) + MARKER, 1)
 
 # The AIGraph task records node count, capacity and edge count. If those stop
 # matching the graph file the engine is loading, it reads the file wrong.
@@ -2747,13 +2892,15 @@ if OBJ_TASK_IDS.get("slots"):
                 body = '%s, "0", %s' % (name, EMPTY_SLOTS)
             out_src = out_src[:m.end()] + body + ")" + out_src[end:]
     else:
-        # no list of its own: add one (an empty "Objectives Valid" means always)
+        # no list of its own (an empty map): add one where our blocks went. Not
+        # beside LevelFlow - every level has it as a statement of its own, after
+        # the task tree, where a second task is a syntax error.
+        # (An empty "Objectives Valid" means always.)
         did = take_id()
         blocks_late = 'Task_New(%d, "DefineComputerObjective", "Mission Studio", "", %s)' % (did, ", ".join(OBJ_TASK_IDS["slots"]))
-        lf0 = re.search(r'Task_New\(-?\d+, "LevelFlow"', out_src)
-        at = task_end(out_src, lf0.start()) if lf0 else len(out_src.rstrip().rstrip(")"))
-        out_src = out_src[:at] + ", " + EOL + blocks_late + out_src[at:]
+        out_src = out_src.replace(MARKER, blocks_late + ", " + EOL, 1)
         report.append("the mission's objectives go in a new list (this level ships none)")
+out_src = out_src.replace(MARKER, "", 1)
 if OBJ_TASK_IDS.get("done") or EVENT_FAILS:
     lf = re.search(r'Task_New\(-?\d+, "LevelFlow"', out_src)
     if lf:
@@ -3063,9 +3210,15 @@ if LABEL_TASKS or MARK_TASKS:
 
 if FLAT_PATCHES:
     _targets = [pd["target"] for pd in list(PADS.values()) + AREA_PADS if pd.get("target") is not None]
-    _targets = _targets or [pd["low"] for pd in list(PADS.values()) + AREA_PADS] or [_surface.terrain.z(
-        (min(ix for ix, _ in BRUSH) + max(ix for ix, _ in BRUSH)) / 2.0,
-        (min(iy for _, iy in BRUSH) + max(iy for _, iy in BRUSH)) / 2.0) or 0.0]
+    _targets = _targets or [pd["low"] for pd in list(PADS.values()) + AREA_PADS]
+    if not _targets:
+        # no pad to take it from: the ground in the middle of what the brush (1 m
+        # cells) and the big shapes (4 m cells) moved. Ground shaped with big
+        # shapes alone took min() of an empty brush here (level 7, 2026-09-21).
+        _pts = list(BRUSH) + [(ix * FL.SCULPT_M, iy * FL.SCULPT_M) for ix, iy in SCULPT]
+        _mid = _surface.terrain.z((min(x for x, _ in _pts) + max(x for x, _ in _pts)) / 2.0,
+                                  (min(y for _, y in _pts) + max(y for _, y in _pts)) / 2.0) if _pts else None
+        _targets = [_mid or 0.0]
     _task_z = min(_targets) * SCALE
     out_src = FL.add_tasks(out_src, FLAT_PATCHES, _task_z, task_end, EOL)
 out_src = _settings(out_src)
@@ -3076,6 +3229,11 @@ out_src, _bit = _paint(out_src)
 # the slot's terrain.hmp: the base level's, plus this plan's pads (so a pad the
 # plan no longer has is gone again)
 (OUT / "terrain").mkdir(exist_ok=True)
+# the terrain mesh, where this plan rebuilt it (_shape_terrain saved it); none
+# staged means the slot gets its base level's own mesh back
+for _f in ("terrain.ctr", "terrain.cmd", "terrain.lmp"):
+    if (OUT / "terrain" / _f).exists() and not (MESH and (_f != "terrain.lmp" or MESH.get("lit"))):
+        (OUT / "terrain" / _f).unlink()
 _hmp_out = OUT / "terrain" / "terrain.hmp"
 _hmp_gone = OUT / "terrain" / "terrain.hmp.remove"
 for _f in (_hmp_out, _hmp_gone):
@@ -3272,11 +3430,16 @@ if FLAT_PATCHES:
             return "%+.1f m" % pd["delta"]
         if m == "smooth":
             return "smooth %.0f m" % pd["radius"]
+        if m == "remove":
+            return "taken down to its surroundings"
         return "ramp %.1f -> %.1f m" % (pd["z0"], pd["z1"])
     _what = ["%s %.1f m" % (pd["name"], pd["high"] - pd["low"]) for pd in PADS.values()]
     _what += ["%s: %s" % (pd["name"], _area_text(pd)) for pd in AREA_PADS]
     if BRUSH:
         _what.append("brush strokes over %d m2" % len(BRUSH))
+    if SCULPT:
+        _what.append("big shapes over %d m2 (%.0f m at the most)"
+                     % (len(SCULPT) * int(FL.SCULPT_M ** 2), max(abs(v) for v in SCULPT.values())))
     print("  shaped the ground under %d building(s) and %d area(s): %s (%d height map%s)" % (
         len(PADS), len(AREA_PADS), ", ".join(_what),
         len(FLAT_PATCHES), "" if len(FLAT_PATCHES) == 1 else "s"))
