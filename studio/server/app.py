@@ -949,6 +949,15 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"ok": False, "error": "no such model"}, 404)
         return self._json({"ok": True, "model": m})
 
+    def _modeltextures(self):
+        """GET /api/modeltextures?name=X&level=N: the textures a model is drawn
+        with, in the order its render groups use them (the mission's own
+        textures go in the place of these)."""
+        q = self._query()
+        lib = self._assets()
+        names = lib.textures_of(q.get("name", ""), int(q.get("level") or 0))
+        return self._json({"ok": True, "textures": list(names)})
+
     def _groundtex(self):
         """GET /api/groundtex?level=N&mat=M: a ground material's own texture, as the
         level's terrain.tex has it (the first of the set the material is drawn with
@@ -993,6 +1002,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._guard(lambda: self._json({"ok": True, "runs": MS.list_runs(rm)}))
         if self.path.startswith("/api/model3d"):
             return self._guard(self._model3d)
+        if self.path.startswith("/api/modeltextures"):
+            return self._guard(self._modeltextures)
         if self.path.startswith("/api/texture"):
             return self._texture()
         if self.path.startswith("/api/groundtex"):

@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 STORE = paths.missions() / "custom"
 TRASH = STORE / ".trash"
 PLAN_KEYS = ("placements", "nodes", "nodeEdits", "edits", "removeRefs", "removals", "objectives",
-              "ground", "brush", "sculpt", "events", "paint")
+              "ground", "brush", "sculpt", "events", "paint", "textures")
 LAYERS = ("brush", "sculpt")    # cells, not changes: a layer counts once
 KEEP_HISTORY = 30
 HISTORY_EVERY = 120          # seconds: saves closer together than this share a snapshot

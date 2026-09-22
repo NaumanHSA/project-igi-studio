@@ -12,6 +12,7 @@ import json, pathlib, re, shutil
 from studio import protect
 from studio.build import lang
 from studio.build import models as MI
+from studio.build import textures as TEX
 from studio.qvm.compile import compile_qsc, CompileError
 from studio import paths
 
@@ -35,6 +36,11 @@ def install_level(stage_dir, game_path, level, log=print):
     needed = stage / "models_needed.json"
     if needed.exists():
         MI.import_models(dest, json.load(needed.open()), game / "missions" / "location0", log=log)
+    # the mission's own textures, over the level's; one the plan no longer has
+    # is put back as the base level's (the slot keeps a note of what was changed)
+    dat = next(iter(sorted(dest.glob("level*.dat"))), None)
+    base_dir = game / "missions" / "location0" / dat.stem if dat else None
+    TEX.install(stage, dest, base_dir, log=log)
     # height maps: the base level's plus the plan's flattened ground
     hmp = stage / "terrain" / "terrain.hmp"
     if (dest / "terrain").is_dir():

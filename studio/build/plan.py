@@ -13,7 +13,7 @@
 #   * a patrol may only walk to nodes some shipped patrol walks to
 #   * consecutive walk targets must be a route the shipped data proves resolves
 #   * every HumanAI needs a matching MISSION:AI/<id>.qsc
-import base64, collections, heapq, json, math, os, pathlib, re, struct, sys
+import base64, binascii, collections, heapq, json, math, os, pathlib, re, struct, sys
 from studio import paths
 from studio.qvm import source as qvm_source
 # This module is a script: it does its work as it is read, the way it always
@@ -163,6 +163,7 @@ _have_models = set(_by_level.get(str(LV)) or _by_level.get("1") or [])
 # What the target slot really packs right now (earlier imports included), read
 # from its own model list rather than from what the editor was told.
 from studio.build import models as MI
+from studio.build import textures as TEX
 SLOT_DIR = pathlib.Path(arg("--slot-dir")) if arg("--slot-dir") else     (pathlib.Path(arg("--game-ai")).parent if arg("--game-ai") else None)
 if SLOT_DIR is not None and MI.level_files(SLOT_DIR):
     try:
@@ -3255,6 +3256,30 @@ elif BASE_BIT.exists():
     _bit_out.write_bytes(BASE_BIT.read_bytes())
 elif _bit_out.exists():
     _bit_out.unlink()
+# The mission's own textures: pictures the plan carries (PNG, base64) that go in
+# the place of the level's. They are written as the game's own format here, and
+# laid into the slot by studio/build/install.py; one the plan no longer has is
+# the level's own again.
+_tex = plan.get("textures") or []
+if _tex or (OUT / "textures" / TEX.STAGE_LIST).exists():
+    _entries = []
+    for _t in _tex[:64]:
+        _png = (_t.get("png") or "")
+        _png = _png.split(",", 1)[1] if _png.startswith("data:") else _png
+        try:
+            _raw = base64.b64decode(_png, validate=True)
+        except (ValueError, binascii.Error):
+            errors.append("texture %s: its picture is not readable" % _t.get("name"))
+            continue
+        _entries.append({"name": _t.get("name") or "", "png": _raw,
+                         "bpp": 4 if str(_t.get("format") or "") in ("bgra", "argb8888", "4") else 2})
+    try:
+        _names = TEX.stage(OUT, _entries, log=lambda m: report.append(m))
+        if _names:
+            report.append("the mission's own textures: %s" % ", ".join(_names))
+    except ValueError as e:
+        errors.append("textures: %s" % e)
+
 # models the slot must receive from other levels before this script can show them
 _needed = OUT / "models_needed.json"
 if IMPORTS:

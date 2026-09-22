@@ -168,6 +168,16 @@ canvas{display:block}
 .tgm-row .tg{flex:none}
 .tgm-row .tg.wide{width:30px;padding:0}.tgm-row .tg.wide .tg-txt{display:none}
 .tgm-sep{height:1px;background:var(--line);margin:3px 4px}
+/* ---- a mission's own textures ---- */
+.tex-sec .sec-b{display:none}
+.tex-sec.open .sec-b{display:block}
+.tex-row{display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;padding:4px 2px;border-top:1px solid var(--line)}
+.tex-row:first-child{border-top:none}
+.tex-row img{width:44px;height:44px;object-fit:cover;border:1px solid var(--line);border-radius:4px;background:var(--sunken);image-rendering:pixelated}
+.tex-row b{display:block;font:11.5px "IBM Plex Mono",monospace;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+.tex-own{font:600 10px "Barlow Condensed",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.tex-acts{display:flex;gap:4px}
+.tex-acts .btn{padding:2px 8px;font-size:11.5px}
 .tg{position:relative;width:30px;height:30px;display:grid;place-items:center;border:none;border-radius:4px;
   background:transparent;color:var(--ink);cursor:pointer;padding:0;font:inherit}
 .tg svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -4469,6 +4479,11 @@ function renderSide(){
 // object's reference and applied to that very task when the mission is built,
 // so its id - and everything in the level that names it - stays the same.
 var edits={}, removeRefs=[];
+// The mission's own textures: a picture of yours in the place of one of the
+// level's, kept with the plan as PNG and written into the slot on Apply
+// (studio/build/textures.py). Name is the texture's, as the model names it.
+var MTEX=[];
+function texOwn(name){return MTEX.filter(function(x){return x.name===name})[0]||null}
 var EDIT_KEYS=["x","y","z","gamma","model","weapon","ai","patrol","patrolCmds","settle","interior","cam","alarmId","exact","lock","pick","openOn","sees","fov"];
 function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v))}
 function objByRef(ref){
@@ -4698,6 +4713,93 @@ function openBigPreview(model,pal,title){
   if(PREVIEW&&PREVIEW.view){var v=PREVIEW.view();if(!v.spin)BIGPV.viewer.turn(v.yaw,v.pitch)}
   BIGPV.el.querySelector(".btn").focus();
 }
+// A model's textures, and a picture of yours in the place of one. The list
+// comes from the level's own palette (api/modeltextures); each is shown as the
+// game has it (api/texture), or as yours where the mission carries one. The
+// picture is kept with the plan and written into the slot on Apply; taking it
+// off puts the level's own back.
+var TEXLIST={};                      // model -> [names], once asked for
+function textureSection(o){
+  var mine=MTEX.length?MTEX:null,known=TEXLIST[o.model];
+  return '<div class="sec tex-sec" data-model="'+esc(o.model)+'">'+
+    '<div class="sec-h" role="button" tabindex="0" aria-expanded="'+(known?"true":"false")+'">'+IC.caret+
+    '<span class="lbl">Textures</span><span class="sec-n">'+(known?known.length:"")+'</span></div>'+
+    '<div class="sec-b tex-body">'+(known?texRows(o,known):'<p class="hint">Open to see the pictures this model is drawn with.</p>')+'</div></div>';
+}
+function texRows(o,names){
+  if(!names.length)return '<p class="hint">This model is drawn without a texture.</p>';
+  return names.map(function(n){
+    var mine=texOwn(n),lv=(M&&M.base&&M.base.level)||LV;
+    return '<div class="tex-row" data-tex="'+esc(n)+'">'+
+      '<img alt="" src="'+(mine?esc(mine.png):'api/texture?name='+encodeURIComponent(n)+'&level='+lv+'&size=96')+'">'+
+      '<div><b>'+esc(n)+'</b>'+(mine?'<span class="tex-own">yours</span>':'')+'</div>'+
+      (canEditQuiet()?'<div class="tex-acts"><button type="button" class="btn" data-a="pick">'+(mine?'Change':'Replace')+'</button>'+
+        (mine?'<button type="button" class="btn" data-a="drop" title="Back to the picture the level has">Back</button>':'')+'</div>':'')+
+      '</div>';
+  }).join("");
+}
+// a PNG of yours in the place of a texture: read here, kept with the plan
+function pickTexture(name,row){
+  var inp=document.createElement("input");
+  inp.type="file";inp.accept="image/png";inp.style.display="none";inp.className="tex-file";
+  document.body.appendChild(inp);
+  inp.addEventListener("change",function(){
+    var f=inp.files&&inp.files[0];if(!f)return;
+    if(f.size>8*1024*1024){toast("That picture is over 8 MB; make it smaller");return}
+    var fr=new FileReader();
+    fr.onload=function(){
+      var url=String(fr.result||"");
+      if(!/^data:image\/png/.test(url)){toast("The studio takes PNG pictures");return}
+      var img=new Image();
+      img.onload=function(){
+        if(img.width>2048||img.height>2048){toast("Up to 2048 x 2048; that one is "+img.width+" x "+img.height);return}
+        var was=texOwn(name);
+        if(was)was.png=url;else MTEX.push({name:name,png:url,format:null});
+        touch();renderSide();
+        toast("“"+name+"” is the mission's own now, "+img.width+" x "+img.height+". Apply writes it into the game.");
+      };
+      img.onerror=function(){toast("That PNG could not be read")};
+      img.src=url;
+    };
+    fr.readAsDataURL(f);
+    setTimeout(function(){inp.remove()},0);
+  });
+  inp.click();
+}
+function bindTextureSection(el,o){
+  var sec=el.querySelector(".tex-sec");if(!sec)return;
+  var head=sec.querySelector(".sec-h"),body=sec.querySelector(".tex-body");
+  function fill(names){
+    TEXLIST[o.model]=names;
+    sec.querySelector(".sec-n").textContent=names.length;
+    body.innerHTML=texRows(o,names);
+    bindRows();
+  }
+  function bindRows(){
+    body.querySelectorAll(".tex-row [data-a]").forEach(function(b){
+      b.addEventListener("click",function(){
+        var name=b.closest(".tex-row").getAttribute("data-tex");
+        if(b.getAttribute("data-a")==="pick"){pickTexture(name);return}
+        MTEX=MTEX.filter(function(x){return x.name!==name});
+        touch();renderSide();toast("“"+name+"” is the level's own again");
+      });
+    });
+  }
+  function open(on){
+    head.setAttribute("aria-expanded",String(on));
+    sec.classList.toggle("open",on);
+    if(!on)return;
+    if(TEXLIST[o.model]){fill(TEXLIST[o.model]);return}
+    body.innerHTML='<p class="hint">Looking…</p>';
+    fetch("api/modeltextures?name="+encodeURIComponent(o.model)+"&level="+((M&&M.base&&M.base.level)||LV))
+      .then(function(r){return r.json()})
+      .then(function(d){fill((d&&d.textures)||[])})
+      .catch(function(){body.innerHTML='<p class="hint">The studio server did not answer.</p>'});
+  }
+  head.addEventListener("click",function(){open(head.getAttribute("aria-expanded")!=="true")});
+  head.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();open(head.getAttribute("aria-expanded")!=="true")}});
+  if(head.getAttribute("aria-expanded")==="true")open(true);
+}
 function objectInspector(el){
   var o=sel,own=!!o.own,isSoldier=o.type==="soldier",isPickup=o.type==="pickup",move=canMove(o);
   var h=inspHead(o)+previewHtml(o)+'<dl class="kv">'+
@@ -4722,6 +4824,7 @@ function objectInspector(el){
   if(own)h+='<div class="field" style="margin-top:7px"><span class="lbl">Label</span><input id="inm" value="'+esc(o.name)+'"></div>';
   if(own&&o.type==="building"&&!segInfo(o.model))h+=mapLabelSection(o);
   if(own&&o.type==="building"&&!segInfo(o.model))h+=flattenSection(o);
+  if(o.model&&!isSoldier&&!isPickup)h+=textureSection(o);
   if(hasLayout(o))h+=interiorSection(o);
   if(isSoldier)h+=patrolSection(o);
   if(o.type==="camera")h+=cameraSection(o);
@@ -4758,6 +4861,7 @@ function objectInspector(el){
     });
   });
   bindFloorButtons(el);
+  bindTextureSection(el,o);
   if(o.type==="camera")bindCameraSection(o);
   bindAlarmSection(o);
   bindDoorSection(o);
@@ -9760,6 +9864,7 @@ function planOf(){
     brush:brushPlan(),sculpt:sculptPlan(),paint:paintPlan(),
     nodes:navNodes.map(function(n){return {uid:n.uid,graph:n.graph,x:n.x,y:n.y,z:n.z}}),
     nodeEdits:Object.keys(nodeEdits).map(function(k){return nodeEdits[k]}),
+    textures:MTEX.map(function(x){return {name:x.name,png:x.png.replace(/^data:[^,]*,/,""),format:x.format||undefined}}),
     edits:Object.keys(edits).map(function(k){return edits[k]}),removeRefs:removeRefs.slice()};
 }
 function payload(){
@@ -10253,6 +10358,8 @@ function openMission(id){
     nodeEdits={};(p.nodeEdits||[]).forEach(function(e){nodeEdits[editKey(e.graph,e.id)]=e});
     edits={};(p.edits||[]).forEach(function(e){if(e.ref)edits[e.ref]=e});
     removeRefs=(p.removeRefs||[]).slice();
+    MTEX=(p.textures||[]).filter(function(x){return x&&x.name&&x.png}).map(function(x){
+      return {name:x.name,format:x.format||null,png:/^data:/.test(x.png)?x.png:"data:image/png;base64,"+x.png}});
     objectives=(p.objectives||[]).map(function(o){o=JSON.parse(JSON.stringify(o));if(!o.uid)o.uid=uid();return o});
     failOnAlarm=!!p.failOnAlarm;OBJPICK=null;objBase=!!p.objBase;MSET=JSON.parse(JSON.stringify(p.settings||{}));
     events=(p.events||[]).map(function(v){v=JSON.parse(JSON.stringify(v));if(!v.uid)v.uid=uid();v.do=v.do||[];v.when=v.when||{kind:"area"};return v});EVPICK=null;EVOPEN=null;
@@ -11219,7 +11326,7 @@ function onKey(e){
 // apart (a drag, a run of arrow presses) collapse into one step.
 var undoStack=[],redoStack=[],lastState=null,lastChangeAt=0,restoring=false;
 function planState(){
-  return JSON.stringify({placements:placements,navNodes:navNodes,nodeEdits:nodeEdits,
+  return JSON.stringify({placements:placements,navNodes:navNodes,nodeEdits:nodeEdits,textures:MTEX,
     edits:edits,removeRefs:removeRefs,removals:removals,objectives:objectives,failOnAlarm:failOnAlarm,settings:MSET,events:events,
     ground:groundEdits.map(function(a){var c=Object.assign({},a);delete c._seed;return c}),brush:groundBrush,paint:groundPaint});
 }
@@ -11242,7 +11349,7 @@ function restoreState(json){
   try{
     (LEVEL?LEVEL.objects:[]).forEach(function(o){if(o._orig)resetShipped(o)});
     placements=d.placements||[];navNodes=d.navNodes||[];nodeEdits=d.nodeEdits||{};
-    edits=d.edits||{};removeRefs=d.removeRefs||[];removals=d.removals||[];
+    edits=d.edits||{};removeRefs=d.removeRefs||[];removals=d.removals||[];MTEX=d.textures||[];
     groundEdits=d.ground||[];groundBrush=d.brush||{};GBRUSH_CV=null;groundPaint=d.paint||{};GPAINT_CV=null;applyGround();renderGround();buildGroundBar();
     objectives=d.objectives||[];failOnAlarm=!!d.failOnAlarm;objBase=!!d.objBase;MSET=d.settings||{};events=d.events||[];EVPICK=null;renderObjectives();renderEvents();
     applyEditsToLevel();

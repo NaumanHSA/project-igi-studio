@@ -482,6 +482,28 @@ pickups, shipped guards, cutscene actors, map labels (**L**), all navigation
 nodes (**N**), and shipped patrol routes. They also control the patrol
 animation: play/pause, speed, and back to start positions.
 
+## The mission's own textures
+
+Select anything with a model and open **Textures** in its panel: the pictures
+that model is drawn with, as the game has them. **Replace** takes a PNG of
+yours (up to 2048 × 2048, 8 bits a channel) and that texture becomes the
+mission's own; **Back** returns the level's.
+
+- The picture is kept with the mission, like every other change: undo works,
+  and nothing is written to the game until you Apply.
+- Apply writes it into the mission's own slot in the game's format (16 bits a
+  pixel as most of the game's own are, or 32 where the one it replaces is,
+  with its mipmaps). The name, order and place of every texture in the level's
+  archive stay as they were, so the model palette, the `.dat` and the `.mtp`
+  are untouched.
+- Because Apply always builds from the untouched base, a picture you take off
+  again comes back as the level's own, byte for byte, on the next Apply.
+- It changes that texture wherever the level uses it, not only on the thing you
+  had selected: the level's models share their textures.
+- The format is written down in `studio/build/textures.py`, which can also
+  convert either way from the command line and check itself against every
+  texture in the game (`python -m studio.build.textures check`).
+
 ## Placing things
 
 When you pick an item, a see-through preview of it follows the cursor at true
