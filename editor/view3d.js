@@ -140,6 +140,7 @@ function build(host) {
     <input type="range" class="v3d-cut" min="0" max="100" value="100"><span class="v3d-cutv">off</span></label>
   <label title="Other buildings see-through"><input type="checkbox" class="v3d-xray">X-ray</label>
   <label title="Guard walkways: the navmesh's points and links, and the selected guard's patrol in gold"><input type="checkbox" class="v3d-nav">Walkways</label>
+  <button class="btn v3d-edit" title="Edit mode\nThe mouse is free: click to select, drag to move, Delete removes, Ctrl+C and Ctrl+V copy. Click again (or Esc) to take the camera back. Holding Alt does the same for as long as you hold it">Edit</button>
   <button class="btn v3d-addnode" title="Add a walkway point: click a floor or the ground. It links to the walkway points on its floor within 15 m" hidden>Add walkway point</button>
   <button class="btn v3d-test" title="Test from here\nBuild the mission with the player starting where you stand, facing where you look, and start the game" hidden>Test from here</button>
   <label title="The game's own textures (off: plain colours - the level's grey-green, yours gold)"><input type="checkbox" class="v3d-tex" checked>Textures</label>
@@ -223,6 +224,7 @@ function build(host) {
     setFolded(f);
     try { localStorage.setItem("plotter:v3dhelp", f ? "folded" : "open"); } catch (err) { /* private window */ }
   });
+  el.querySelector(".v3d-edit").addEventListener("click", () => setEditMode(!S.editMode));
   el.querySelector(".v3d-addnode").addEventListener("click", () => setAddingNode(!S.addingNode));
   el.querySelector(".v3d-test").addEventListener("click", () => {
     const p = S.camera.position, o = O.origin;
@@ -1134,9 +1136,35 @@ function onLockChange() {
 }
 function hint() {
   if (!S) return;
-  S.el.querySelector(".v3d-hint").hidden = S.locked || S.alt || !!S.placing || !!S.addingNode || S.el.hidden || !!S.dead;
+  S.el.querySelector(".v3d-hint").hidden = S.locked || editOn() || !!S.placing || !!S.addingNode || S.el.hidden || !!S.dead;
 }
-function editing() { if (S) { S.el.classList.toggle("editing", !!S.alt); hint(); } }
+// editing: the mouse free to select, drag and delete - while Alt is held, or
+// for as long as the Edit button is on
+function editOn() { return !!(S && (S.alt || S.editMode)); }
+function editing() {
+  if (!S) return;
+  S.el.classList.toggle("editing", editOn());
+  const b = S.el.querySelector(".v3d-edit");
+  if (b) { b.classList.toggle("on", !!S.editMode); b.textContent = S.editMode ? "Camera" : "Edit"; }
+  hint();
+}
+// the Edit button: the mouse stays free until it is clicked again
+function setEditMode(on) {
+  if (!S || S.dead) return;
+  S.editMode = !!on;
+  S.relock = false;
+  if (S.editMode) unlock(); else if (!S.alt) lock();
+  editing();
+}
+// Where the view is aimed, in game metres: what the crosshair is on (the ground,
+// a floor, anything solid), else a few metres in front of the camera. Copies are
+// pasted here.
+function aimPoint() {
+  const r = S.canvas.getBoundingClientRect(), e = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+  const h = cast(e, false)[0];
+  const p = h ? h.point.clone() : S.camera.position.clone().addScaledVector(dirOf(S.yaw, S.pitch), 8);
+  return { x: +(p.x + O.origin[0]).toFixed(2), y: +(p.y + O.origin[1]).toFixed(2), z: +(p.z + O.origin[2]).toFixed(2) };
+}
 // in the middle of the view, while looking: what the crosshair is on
 function centreTip() {
   const r = S.canvas.getBoundingClientRect(), e = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
@@ -1148,14 +1176,14 @@ function onDown(e) {
   // looking: the mouse turns the view, and a click does nothing
   if (S.locked) { e.preventDefault(); return; }
   // not editing: a click takes the mouse back to looking
-  if (e.button === 0 && !e.altKey && lockable()) { lock(); return; }
+  if (e.button === 0 && !e.altKey && !S.editMode && lockable()) { lock(); return; }
   try { S.canvas.setPointerCapture(e.pointerId); } catch (err) { /* a synthetic pointer */ }
   const hs = cast(e, false);
   const h = hs[0];
   S.down = { x: e.clientX, y: e.clientY, hit: h || null, moved: false };
   // Alt: whatever is under the pointer is taken, the item being edited or any
   // other one (it becomes the one being edited, the view kept), and moved
-  if (e.button === 0 && e.altKey && h) {
+  if (e.button === 0 && (e.altKey || S.editMode) && h) {
     if (h.item.key !== O.target.key && pickable(h.item) && O.onPick) O.onPick(h.item.key);
     const t = O.target;
     if (h.item.key === t.key && t.editable && t.kind !== "fixed") {
@@ -1224,7 +1252,7 @@ function onUp(e) {
   S.look = null;
   try { S.canvas.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
   // Alt was let go during the drag: the view is taken back now it is done
-  if (S.relockAfterUp && !S.alt) { S.relockAfterUp = false; setTimeout(lock, 0); }
+  if (S.relockAfterUp && !editOn()) { S.relockAfterUp = false; setTimeout(lock, 0); }
   if (S.drag) {
     const pose = S.drag.pose;
     S.drag = null;
@@ -1346,8 +1374,14 @@ function onKey(e) {
   if (k === "Escape") {
     // the Esc that freed the mouse is not the one that closes the view
     if (document.pointerLockElement === S.canvas || performance.now() - (S.lockLostAt || 0) < 300) { e.preventDefault(); return; }
-    if (S.placing && O.onCancelPlace) O.onCancelPlace(); else close();
+    if (S.placing && O.onCancelPlace) O.onCancelPlace();
+    else if (S.editMode) { setEditMode(false); e.preventDefault(); }
+    else close();
   }
+  else if ((k === "Delete" || k === "Backspace") && O.onRemove) O.onRemove(O.target.key);
+  else if (ctrl && (k === "c" || k === "C") && O.onCopy) O.onCopy(O.target.key);
+  else if (ctrl && (k === "v" || k === "V") && O.onPaste) O.onPaste(aimPoint());
+  else if (ctrl && (k === "d" || k === "D") && O.onDuplicate) O.onDuplicate(O.target.key, aimPoint());
   else if (ctrl && k === "ArrowLeft") nudge(-st, 0, 0);
   else if (ctrl && k === "ArrowRight") nudge(st, 0, 0);
   else if (ctrl && k === "ArrowUp") nudge(0, st, 0);
@@ -1637,6 +1671,7 @@ function close() {
   S.el.hidden = true;
   S.drag = null;
   S.alt = false;
+  S.editMode = false;
   editing();
   const cb = O && O.onClose;
   if (cb) cb();

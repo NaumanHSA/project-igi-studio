@@ -178,6 +178,8 @@ canvas{display:block}
 .tex-own{font:600 10px "Barlow Condensed",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
 .tex-acts{display:flex;gap:4px}
 .tex-acts .btn{padding:2px 8px;font-size:11.5px}
+.trash-foot{display:flex;justify-content:flex-end;margin-top:10px}
+.btn.danger.sure{background:var(--danger);color:#fff;border-color:var(--danger)}
 .tg{position:relative;width:30px;height:30px;display:grid;place-items:center;border:none;border-radius:4px;
   background:transparent;color:var(--ink);cursor:pointer;padding:0;font:inherit}
 .tg svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -1422,10 +1424,18 @@ function contentBounds(all){
 // Where the mission is played: the level's things, or on an empty map (which
 // has next to none) its walkways, with what the mission has placed.
 function playBounds(){
+  // An empty map has next to nothing on it, so what bounds it is where its
+  // ground is: the height grid the studio extracted round where the level is
+  // played. (Its walkways are no good for this: some graphs hold offsets from
+  // a graph origin, so their raw coordinates run off the map.)
+  if(MODE==="empty"&&TERR&&TERR.meta){
+    var m=TERR.meta;
+    return {minX:m.x0,maxX:m.x0+(m.w-1)*m.cell,minY:m.y0,maxY:m.y0+(m.h-1)*m.cell};
+  }
   var b=contentBounds(false);
   if(LEVEL&&LEVEL.objects.length+placements.length<4&&GRAPHS){
     var xs=[],ys=[];
-    for(var g in GRAPHS)(GRAPHS[g].nodes||[]).forEach(function(n){xs.push(n.x);ys.push(n.y)});
+    for(var g in GRAPHS)nodesOf(g).forEach(function(n){xs.push(n.x);ys.push(n.y)});
     placements.forEach(function(p){xs.push(p.x);ys.push(p.y)});
     if(xs.length)b={minX:Math.min.apply(null,xs),maxX:Math.max.apply(null,xs),minY:Math.min.apply(null,ys),maxY:Math.max.apply(null,ys)};
   }
@@ -1863,6 +1873,22 @@ function nodeUsers(gid,id){
   });
   return who;
 }
+var GRAPH_MAX=999;              // studio/build/graphs.py grow(): 1000 slots, id 0 unused
+// The nearest walkway point of a guard's graph: the level's own, the mission's
+// new ones, and the ones Apply lays inside a building whose interior joins that
+// graph. {d (metres away), dz (height difference), n} or null.
+function guardWalkway(p,gid){
+  var best=null;
+  function look(n){
+    if(n==null||n.x==null)return;
+    var d=Math.hypot(n.x-p.x,n.y-p.y),dz=Math.abs(n.z-p.z);
+    if(!best||d<best.d)best={d:d,dz:dz,n:n};
+  }
+  nodesOf(gid).forEach(look);
+  navNodes.forEach(function(n){if(String(n.graph)===gid)look(n)});
+  interiors().forEach(function(it){if(String(it.gid)===gid)it.nodes.forEach(look)});
+  return best;
+}
 function graphCapacity(gid){
   var g=GRAPHS&&GRAPHS[gid];if(!g)return null;
   var added=navNodes.filter(function(p){return String(p.graph)===String(gid)}).length;
@@ -1941,10 +1967,36 @@ function hasInterior(o){
 function graphNear(x,y,z){
   var best=null,bd=40;
   for(var gid in (GRAPHS||{}))nodesOf(gid).forEach(function(n){
+    if(Math.abs(n.z-z)>SAME_FLOOR)return;      // another floor, or a building that is gone
     var d=Math.hypot(n.x-x,n.y-y)+3*Math.abs(n.z-z);
     if(d<bd){bd=d;best=gid}
   });
   return best;
+}
+// The game's own doors, read out of its levels (studio/extract/doors.py):
+// what each door model does when it opens, and which doors a building has. A
+// door of yours is written as a Door task with these numbers, so it opens in
+// the game like the game's own.
+var DOORS=null;
+function doorInfo(model){return (DOORS&&DOORS.models&&DOORS.models[model])||null}
+function buildingKit(model){
+  var e=DOORS&&DOORS.buildings&&DOORS.buildings[model];
+  if(!e)return {doors:[],lifts:[]};
+  return Array.isArray(e)?{doors:e,lifts:[],props:[]}                                 // v1 was a list of doors
+    :{doors:e.doors||[],lifts:e.lifts||[],props:e.props||[]};
+}
+function doorSlots(model){return buildingKit(model).doors}
+function liftSlots(model){return buildingKit(model).lifts}
+function propSlots(model){return buildingKit(model).props||[]}
+// a placement of a door model becomes a door that works: the model's own slide,
+// angles, times and sounds travel with it
+function asDoor(o,kind){
+  var d=o&&doorInfo(o.model);
+  if(!d||(o.door&&o.door.kind))return o;
+  o.door={kind:kind||"door",stop:d.stop.slice(),slider:d.slider,head:d.head,fixed:(d.fixed||[0,0]).slice(),
+    openTime:d.openTime,maxAngle:d.maxAngle,pickTime:d.pickTime,close:d.close||"",sounds:(d.sounds||[]).slice()};
+  o.flatten=false;
+  return o;
 }
 var intCache={v:"",src:null,list:[]};
 function interiors(){
@@ -2137,6 +2189,7 @@ function setZ(o,z){
   var dz=z-o.z,riders=Math.abs(dz)>0.005?ridersOf(o,true):[];
   if(o.own)o.z=z;else editShipped(o,{x:o.x,y:o.y,z:z});
   carry(riders,0,0,dz);
+  syncDoorsOf(o);                       // its doors stay in its doorways
   touch();if(sel===o)renderSide();draw();
 }
 // What rests on something, or hangs on it, goes with it when it moves: a rifle
@@ -2176,6 +2229,9 @@ function carry(list,dx,dy,dz){
 // build sets down on the ground is not left half in it here. Not an undo step -
 // it is the game's answer, not a change of yours.
 var HSYNC={t:0,busy:false,again:false,lastSave:null};
+// The same dry run's verdict: what Apply would refuse (errors), change or leave
+// out on its own (warnings, notes), for the plan version it was run on.
+var BUILDV=null;
 function heightsSoon(){
   if(!SRV||!M||READONLY||!Store||Store.local)return;
   clearTimeout(HSYNC.t);HSYNC.t=setTimeout(syncHeights,1800);
@@ -2191,6 +2247,7 @@ function syncHeights(){
       HSYNC.busy=false;
       if(!j.ok||!M||M.id!==id)return;
       if(planVer!==ver){heightsSoon();return}  // changed meanwhile: ask again
+      if(j.build)BUILDV={ver:ver,id:id,ok:j.build.ok,errors:j.build.errors||[],warnings:j.build.warnings||[],notes:j.build.notes||[]};
       applyHeights(j);
       if(HSYNC.again){HSYNC.again=false;heightsSoon()}
     }).catch(function(){HSYNC.busy=false});
@@ -2231,6 +2288,7 @@ function applyHeights(j){
       var dz=mv.z-mv.o.z;
       if(mv.o.own)mv.o.z=mv.z;else editShipped(mv.o,{x:mv.o.x,y:mv.o.y,z:mv.z});
       carry(mv.riders.filter(function(r){return !moves.some(function(m2){return m2.o===r})}),0,0,dz);
+      syncDoorsOf(mv.o);                 // a building's own doors stay in its doorways
     });
   }finally{restoring=false}
   planVer++;lastState=planState();            // the undo baseline has the game's heights
@@ -2307,6 +2365,46 @@ function planNode(ref){
 // it links itself, and asking that afresh down a long chain grew as 2^n (the
 // AI designer's climbing walkways, 2026-09-19, froze the page at 35 nodes).
 var LINKC={v:"",map:null};
+// Links Apply would cut: a new walkway point is joined only to points a guard can
+// walk to without passing through a wall or fence (graphs.py add_node, link_ok).
+// The server tests pairs (api/links) on the level as the mission leaves it; the
+// answers are kept for the buildings as they stand, and a pair not asked yet
+// counts as open.
+var LINKCUT={sig:"",map:{}};
+function buildingSig(){
+  return placements.filter(function(p){return p.type==="building"}).map(function(p){return p.model+"@"+p.x.toFixed(1)+","+p.y.toFixed(1)+","+(p.gamma||0).toFixed(2)}).join("|")+
+    "#"+removeRefs.length+"#"+Object.keys(edits).length;
+}
+function pairKey(a,b){
+  var k1=a.x.toFixed(1)+","+a.y.toFixed(1)+","+a.z.toFixed(1),k2=b.x.toFixed(1)+","+b.y.toFixed(1)+","+b.z.toFixed(1);
+  return k1<k2?k1+">"+k2:k2+">"+k1;
+}
+function linkCut(a,b){return LINKCUT.map[pairKey(a,b)]}
+// ask the server about every link these new points could have; resolves once
+// the answers are in (at once without the server)
+function checkLinks(list){
+  if(!SRV||!list.length)return Promise.resolve(false);
+  var sig=buildingSig();
+  if(LINKCUT.sig!==sig){LINKCUT={sig:sig,map:{}}}
+  var pairs=[],keys=[],seen={};
+  list.forEach(function(pn){
+    var cands=nodesOf(pn.graph).concat(navNodes.filter(function(q){return q!==pn&&String(q.graph)===String(pn.graph)}));
+    cands.forEach(function(n){
+      if(Math.abs(n.z-pn.z)>SAME_FLOOR||Math.hypot(n.x-pn.x,n.y-pn.y,n.z-pn.z)>LINK_R)return;
+      var k=pairKey(pn,n);if(seen[k]||k in LINKCUT.map)return;seen[k]=1;
+      keys.push(k);pairs.push([pn.x,pn.y,pn.z,n.x,n.y,n.z]);
+    });
+  });
+  if(!pairs.length)return Promise.resolve(true);
+  var body=planContext();body.pairs=pairs;
+  return fetch("api/links",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(function(j){
+      if(!j.ok||buildingSig()!==sig)return false;
+      keys.forEach(function(k,i){LINKCUT.map[k]=j.cut[i]||null});
+      nodeVer++;
+      return true;
+    }).catch(function(){return false});
+}
 function nodeLinks(pn){
   var ver=navNodes.length+"|"+nodeVer+"|"+planVer;
   if(LINKC.v!==ver){LINKC.v=ver;LINKC.map=new Map()}
@@ -2325,7 +2423,7 @@ function nodeLinksNow(pn){
   var near=[];
   cands.forEach(function(n){
     var dz=Math.abs(n.z-pn.z),d=Math.hypot(n.x-pn.x,n.y-pn.y,n.z-pn.z);
-    if(d<=LINK_R&&dz<=SAME_FLOOR)near.push([d,n]);
+    if(d<=LINK_R&&dz<=SAME_FLOOR&&!linkCut(pn,n))near.push([d,n]);
   });
   near.sort(function(a,b){return a[0]-b[0]});
   return near.slice(0,MAX_LINKS).map(function(p){return p[1]});
@@ -3866,8 +3964,14 @@ function addPlacement(wx,wy){
     return;
   }
   // inside a building: its ground floor, and the graph that building is on
-  var inb=(tool.group==="ai"||tool.group==="pickup")?buildingAt(wx,wy):null;
-  if(inb)z=floorsOf(inb)[0].z;
+  var inb=(tool.group==="ai"||tool.group==="pickup"||(tool.group==="obj"&&doorInfo(tool.id)))?buildingAt(wx,wy):null;
+  if(inb){
+    // on the floor the 3D view is looking at, else the lowest: a door belongs in
+    // a doorway on some floor, not always at the bottom of the building
+    var fl=floorsOf(inb),want=window.View3D&&View3D.isOpen()&&V3D.lastAt?V3D.lastAt.z:null,cur=fl[0];
+    if(want!=null)fl.forEach(function(f){if(Math.abs(f.z-want)<Math.abs(cur.z-want))cur=f});
+    z=cur.z;
+  }
   if(tool.group==="ai")
     o={uid:uid(),own:true,type:"soldier",kind:"soldier",ai:tool.id,model:tool.model,
        weapon:tool.weapon,name:tool.label,x:wx,y:wy,z:z,gamma:tool.gamma!=null?tool.gamma:3.14159,
@@ -3875,23 +3979,172 @@ function addPlacement(wx,wy){
   else if(tool.group==="pickup")
     o={uid:uid(),own:true,type:"pickup",kind:"pickup",pickupId:tool.id,
        name:tool.label,x:wx,y:wy,z:z,gamma:tool.gamma||0,count:tool.count||null};
+  else if(tool.group==="obj"&&tool.id===GATE_LEAF&&!mouse.alt){
+    var gp=placementPose(wx,wy),kit=addGateKit(gp.x,gp.y,gp.gamma);
+    if(!kit){toast("The gate model is not in this level's data");return}
+    sel=kit[0];multi=kit;tool.chain=null;
+    toast("A gateway: both leaves, the switch that opens them and a fence panel each side. Hold Alt to place a single leaf");
+    renderSide();draw();
+    return;
+  }
   else{
     var pose=placementPose(wx,wy),gz=groundAt(pose.x,pose.y);
-    var chk=placeCheck({model:tool.id,x:pose.x,y:pose.y,gamma:pose.gamma});
+    var chk=inb?null:placeCheck({model:tool.id,x:pose.x,y:pose.y,gamma:pose.gamma});
     if(chk&&chk.level==="bad"&&!mouse.alt){
       toast("Can’t place "+tool.label+" here: "+chk.why+". Hold Alt and click to place it anyway.");
       return;
     }
     o={uid:uid(),own:true,type:"building",kind:"object",model:tool.id,
-       name:tool.label,x:+pose.x.toFixed(3),y:+pose.y.toFixed(3),z:gz!=null?gz:z,gamma:pose.gamma,
+       name:tool.label,x:+pose.x.toFixed(3),y:+pose.y.toFixed(3),z:inb?z:(gz!=null?gz:z),gamma:pose.gamma,
        flatten:wantsFlat(tool.id)};
+    if(inb)o.exact=true;                    // on a floor: left where it was put
     // the next panel of a fence or wall carries on from this one
     tool.chain=pose.end||(segInfo(tool.id)?endOf(o):null);
     tool.gamma=pose.gamma;
     renderPlaceBar();
   }
+  if(o.type==="building")asDoor(o);
   placements.push(o);sel=o;touch();renderSide();draw();
   if(!(inb&&o.type!=="building"))settle(o,false);
+  if(o.type==="building"&&!o.door){
+    var kit=addBuildingDoors(o);
+    if(kit.total)toast(displayName(o)+" placed with its own "+fittingWords(kit));
+  }
+}
+// The doors and lifts a building of the game's has: placed with it, in the same
+// places, each door one that opens and each lift one that runs, with a button
+// at every floor and one inside. They are ordinary placements - take one out,
+// or move it, like anything else.
+function addBuildingDoors(b){
+  var lifts=addBuildingLifts(b),doors=addTheDoors(b),props=addBuildingProps(b);
+  return {doors:doors,lifts:lifts,props:props,total:doors+lifts+props};
+}
+// What stands inside a building of the game's - its desks, beds, crates, lamps -
+// placed with it, where that building has them in the levels. Ordinary
+// placements: move or take out any of them.
+// what the inventory calls a model, for naming the things a building brings
+function modelTitle(model){
+  var c=((CATALOG&&CATALOG.structures)||[]).filter(function(x){return x.model===model})[0];
+  return c?c.name:model;
+}
+function addBuildingProps(b){
+  var slots=propSlots(b.model);
+  if(!slots.length)return 0;
+  var c=Math.cos(b.gamma||0),sn=Math.sin(b.gamma||0),made=0;
+  slots.forEach(function(sl){
+    var o={uid:uid(),own:true,type:"building",kind:"object",model:sl.model,name:modelTitle(sl.model),
+      x:+(b.x+sl.dx*c-sl.dy*sn).toFixed(3),y:+(b.y+sl.dx*sn+sl.dy*c).toFixed(3),z:+(b.z+sl.dz).toFixed(3),
+      gamma:+(((((b.gamma||0)+sl.dh)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),exact:true,flatten:false,
+      of:b.uid,slot:{dx:sl.dx,dy:sl.dy,dz:sl.dz,dh:sl.dh}};
+    placements.push(o);made++;
+  });
+  if(made){touch();renderSide();draw()}
+  return made;
+}
+// "4 doors and a lift", for saying what came with a building
+function fittingWords(k){
+  var bits=[];
+  if(k.doors)bits.push(k.doors+" door"+(k.doors===1?"":"s"));
+  if(k.lifts)bits.push(k.lifts===1?"a lift":k.lifts+" lifts");
+  if(k.props)bits.push(k.props+" thing"+(k.props===1?"":"s")+" inside");
+  return bits.length>1?bits.slice(0,-1).join(", ")+" and "+bits[bits.length-1]:bits.join("");
+}
+// its lifts: the cabin, the floors it stops at, and its buttons
+function addBuildingLifts(b){
+  var lifts=liftSlots(b.model);
+  if(!lifts.length)return 0;
+  var c=Math.cos(b.gamma||0),sn=Math.sin(b.gamma||0),made=0;
+  lifts.forEach(function(L){
+    // everything a lift carries is in its own frame, so it can be moved as one
+    var lh=L.dh||0,lc=Math.cos(-lh),ls=Math.sin(-lh);
+    function inLift(p){
+      var dx=(p[0]-L.dx),dy=(p[1]-L.dy);
+      return [+(dx*lc-dy*ls).toFixed(2),+(dx*ls+dy*lc).toFixed(2),+(p[2]-L.dz).toFixed(2)].concat(p.length>3?[+(p[3]-lh).toFixed(4)]:[]);
+    }
+    var o={uid:uid(),own:true,type:"building",kind:"object",model:L.cabin||"200_01_1",name:"Lift",
+      x:+(b.x+L.dx*c-L.dy*sn).toFixed(3),y:+(b.y+L.dx*sn+L.dy*c).toFixed(3),z:+(b.z+L.dz).toFixed(3),
+      gamma:+(((((b.gamma||0)+lh)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),exact:true,flatten:false,
+      of:b.uid,slot:{dx:L.dx,dy:L.dy,dz:L.dz,dh:lh},
+      lift:{speed:L.speed||5,stops:(L.stops||[]).map(inLift),calls:(L.calls||[]).map(inLift),
+            inside:L.inside?inLift(L.inside):null}};
+    placements.push(o);made++;
+  });
+  if(made){b.doors=(b.doors||0)+made;touch();renderSide();draw()}
+  return made;
+}
+function addTheDoors(b){
+  var slots=doorSlots(b.model);
+  if(!slots.length)return 0;
+  var c=Math.cos(b.gamma||0),sn=Math.sin(b.gamma||0),made=0;
+  slots.forEach(function(sl){
+    var d=doorInfo(sl.model);
+    if(!d)return;
+    var o={uid:uid(),own:true,type:"building",kind:"object",model:sl.model,name:"Door",
+      x:+(b.x+sl.dx*c-sl.dy*sn).toFixed(3),y:+(b.y+sl.dx*sn+sl.dy*c).toFixed(3),z:+(b.z+sl.dz).toFixed(3),
+      gamma:+(((b.gamma||0)+sl.dh)%(2*Math.PI)).toFixed(5),exact:true,of:b.uid,
+      slot:{dx:sl.dx,dy:sl.dy,dz:sl.dz,dh:sl.dh}};
+    asDoor(o);
+    // a door of the lift's own: the lift works it, as the game has it
+    if(sl.liftFloor!=null&&o.door)o.door.liftFloor=sl.liftFloor;
+    placements.push(o);made++;
+  });
+  if(made){b.doors=(b.doors||0)+made;touch();renderSide();draw()}
+  return made;
+}
+// The doors a building brought stay in its doorways: when it is moved, turned,
+// or set down on the ground (its own height settled, or the build's), they go
+// with it. They are still ordinary placements - one can be taken out or moved
+// on its own, and then it keeps where it is put.
+function syncDoorsOf(b){
+  if(!b||!b.own||!b.uid)return 0;
+  var c=Math.cos(b.gamma||0),sn=Math.sin(b.gamma||0),n=0;
+  placements.forEach(function(p){
+    var sl=p.slot;
+    if(!sl||p.of!==b.uid||p.loose||p===b)return;
+    p.x=+(b.x+sl.dx*c-sl.dy*sn).toFixed(3);
+    p.y=+(b.y+sl.dx*sn+sl.dy*c).toFixed(3);
+    p.z=+(b.z+sl.dz).toFixed(3);
+    p.gamma=+(((((b.gamma||0)+sl.dh)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5);
+    n++;
+  });
+  return n;
+}
+// A gate of the game's is one leaf, half a gateway: placing one lays the whole
+// thing - both leaves meeting in the middle and sliding back behind their
+// posts, the switch that opens them, and a fence panel in line on each side, so
+// a run of fence carries straight on from either end. The panels are set out
+// the way a fence run is (each model's own ends, segInfo), so nothing overlaps.
+function addGateKit(wx,wy,gamma){
+  var leaf=segInfo(GATE_LEAF),fence=segInfo(GATE_FENCE);
+  if(!leaf)return null;
+  var th=gamma,ux=Math.cos(th),uy=Math.sin(th),L=leaf.len,made=[];
+  // laid the way a run of fence is: the panel's own start put on this point
+  function put(model,seg,at,name){
+    var g=th-seg.off,r=rot2(seg.a,g);
+    var x=at[0]-r[0],y=at[1]-r[1],z=groundAt(x,y);
+    var o={uid:uid(),own:true,type:"building",kind:"object",model:model,name:name,
+      x:+x.toFixed(3),y:+y.toFixed(3),z:+((z!=null?z:guessZ(x,y))||0).toFixed(3),
+      gamma:+(((g%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),flatten:false};
+    placements.push(o);made.push(o);
+    return o;
+  }
+  function along(d,side){return [wx+ux*d,wy+uy*d,side]}
+  var sw={uid:uid(),own:true,type:"switch",kind:"alarm",model:"202_01_1",gate:true,name:"Gate switch",
+    x:0,y:0,z:0,gamma:0,mount:"",alarmId:null};
+  // the leaves: each fills half the gateway and slides back behind its own post
+  [[-L,-1],[0,1]].forEach(function(w){
+    var o=put(GATE_LEAF,leaf,along(w[0]),"Gate");
+    o.door={kind:"gate",stop:[w[1]*(L-0.4),0],slider:0,head:2,fixed:[0,0],switch:sw.uid};
+  });
+  // a fence panel in line on each side, starting where the gateway ends
+  if(fence)[-(L+fence.len),L].forEach(function(d){put(GATE_FENCE,fence,along(d),"Fence")});
+  // the switch on the gate post, at hand height, as level 10 has its gate switch
+  var px=wx+ux*(L-0.25)-uy*0.35,py=wy+uy*(L-0.25)+ux*0.35,gz=groundAt(px,py);
+  sw.x=+px.toFixed(3);sw.y=+py.toFixed(3);sw.z=+(((gz!=null?gz:guessZ(px,py))||0)+1.06).toFixed(3);
+  sw.gamma=+(((th%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5);
+  placements.push(sw);made.push(sw);
+  touch();renderSide();renderList();draw();
+  return made;
 }
 // the graph a guard standing here walks: the building's, or the nearest node's on his floor
 function guardGraph(wx,wy,wz){
@@ -3903,7 +4156,9 @@ function guardGraph(wx,wy,wz){
     fl.forEach(function(f){if(Math.abs(f.z-wz)<Math.abs(cur.z-wz))cur=f});
     if(cur.missing){var gn=graphNear(b.o.x,b.o.y,b.o.z);if(gn)return String(gn)}
   }
-  return nearestGraph(wx,wy,wz)||graphOf(null);
+  // no walkways he can stand on: none, rather than whichever graph is biggest
+  // (the build says so too, and picks the nearest one it can)
+  return nearestGraph(wx,wy,wz);
 }
 /* ---------------- a draft from words ---------------- */
 // "Two snipers near the radar dome, hack the terminal, escape by the north
@@ -3911,6 +4166,7 @@ function guardGraph(wx,wy,wz){
 // guards, cameras and pickups placed where the words say, objectives, and the
 // time limit and weather. What it understood is listed before anything is
 // added; then it goes in as one undo step, selected as a group.
+var GATE_LEAF="304_01_1",GATE_FENCE="303_02_1";
 var DRAFT_NUM={a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,couple:2,pair:2,few:3,several:4};
 var DRAFT_UNITS=[
   [/^snipers?$/,"AITYPE_SNIPER","Sniper"],[/^gunners?$/,"AITYPE_GUNNER","Gunner"],[/^rpg$|^rpgs$|^rocketeers?$/,"AITYPE_RPG","RPG trooper"],
@@ -4300,6 +4556,22 @@ function removeSel(){
   sel=null;patrolMode=false;touch();renderSide();draw();
 }
 
+// take walkway points of the mission's own out, and every patrol stop on them;
+// how many stops went
+function dropNavNodes(list){
+  var refs={},stops=0;
+  list.forEach(function(n){refs["n:"+n.uid]=1});
+  navNodes=navNodes.filter(function(n){return list.indexOf(n)<0});
+  placements.forEach(function(p){
+    if(!p.patrol)return;
+    var k=p.patrol.filter(function(n){return !refs[n]});
+    stops+=p.patrol.length-k.length;p.patrol=k;
+  });
+  if(list.indexOf(sel)>=0)sel=null;
+  nodeVer++;touch();renderSide();renderNavSection();draw();
+  return stops;
+}
+
 /* ---------------- inspector ---------------- */
 // Standable heights near the selection, read from the navmesh. This is how you
 // put something inside a building or up a tower: the plan is 2D, but the
@@ -4550,6 +4822,7 @@ function setProp(o,fields){
   }
   else editShipped(o,fields);
   if(riders.length)carry(riders,d[0],d[1],d[2]);
+  syncDoorsOf(o);                       // its doors stay in its doorways
   touch();
 }
 // the player's start moves like anything else the level ships; a door does not
@@ -6381,6 +6654,7 @@ function placeMember(o,x,y,gamma){
   if(o.own){
     Object.keys(f).forEach(function(k){o[k]=f[k]});
     if(o.type==="soldier"&&!(o.patrol||[]).length)o.graph=guardGraph(o.x,o.y,o.z);
+    syncDoorsOf(o);                     // its doors and lift stay with it
   }else editShipped(o,f);
 }
 function moveGroup(dx,dy,list){
@@ -7843,7 +8117,8 @@ function sync3d(){
     var R=reach3d(V3D.radius),c=V3D.at;
     if(V3D.spot){View3D.update({objects:sceneAround(c||V3D.spot,R,true),nav:nav3d(c||V3D.spot,R)});return}
     var q=byKey3d(V3D.key);
-    if(!q){View3D.close();return}             // taken out (or undone)
+    if(!q){keep3dSpot();return}               // taken out (or undone): stay where it stood
+    V3D.lastAt={x:q.x,y:q.y,z:q.z};
     View3D.update({target:spec3d(q),objects:c?scene3d(c,q):sceneAround(q,R),nav:nav3d(c||q,R,q)});
   },0);
 }
@@ -8055,7 +8330,15 @@ function placing3d(t){
   return null;
 }
 // the close-up round a spot rather than an item: shaped ground, say
-function open3dAt(x,y,R){
+// The item the close-up was on is gone (removed here or in the panel, or an
+// undo): the view stays open, looking at the place it stood, rather than
+// dropping back to the map.
+function keep3dSpot(){
+  var at=V3D.lastAt;
+  if(!at||!window.View3D||!View3D.isOpen()){if(window.View3D&&View3D.isOpen())View3D.close();return}
+  open3dAt(at.x,at.y,V3D.radius,true);
+}
+function open3dAt(x,y,R,keep){
   if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
   if(!window.MeshSprites||!MeshSprites.ready()){toast("The models are still loading. Try again in a moment");return}
   var z=terrainZ(x,y);if(z==null)return;
@@ -8068,7 +8351,8 @@ function open3dAt(x,y,R){
     objects:sceneAround(spot,reach3d(V3D.radius),true),terrain:terrain3d(spot,V3D.radius),splines:splines3d(spot,V3D.radius),
     nav:nav3d(spot,reach3d(V3D.radius)),onAddNode:canEditQuiet()?addNode3d:null,explore:explore3d,
     onTest:Store&&!Store.local&&canEditQuiet()?function(p){testFromHere(p.x,p.y,p.z,p.gamma)}:null,
-    mesh:function(m){return MeshSprites.raw(m)},mapImage:mapPatch,radius:V3D.radius,inside:false,keepView:false,
+    onPaste:canEditQuiet()?paste3d:null,
+    mesh:function(m){return MeshSprites.raw(m)},mapImage:mapPatch,radius:V3D.radius,inside:false,keepView:!!keep,
     level:SRV?(LEVEL?LEVEL.level:LV):0,
     onMove:function(){},
     onPick:function(k){var q=byKey3d(k);if(q){sel=q;multi=[];renderSide();open3d(q,true)}},
@@ -8137,6 +8421,47 @@ function addNode3d(p){
   }
   lastChangeAt=0;touch();renderNavSection();renderList();draw();
 }
+// The close-up's own keys: Delete takes the thing away, Ctrl+C copies it,
+// Ctrl+V pastes where the view is aimed, Ctrl+D leaves a copy beside it. The
+// view stays open through all of it.
+function pick3d(k){
+  var q=byKey3d(k);
+  if(!q)return null;
+  sel=q;multi=[];renderSide();
+  return q;
+}
+function remove3d(k){
+  var q=pick3d(k);
+  if(!q)return;
+  if(!canEdit())return;
+  if(q.type==="player"){toast("The player start can't be removed");return}
+  var nm=displayName(q);
+  removeSel();
+  toast(nm+" removed  ·  Ctrl+Z undoes it");
+}
+function copy3d(k){
+  if(!pick3d(k))return;
+  copyGroup();
+}
+function paste3d(at){
+  if(!canEdit()||!at)return;
+  var d=null;try{d=JSON.parse(localStorage.getItem(CLIP_KEY)||"null")}catch(e){}
+  if(!d||!d.items){toast("Nothing copied yet: Ctrl+C copies what you have selected");return}
+  var out=pasteData(d,at.x,at.y,0);
+  if(!out.length)return;
+  toast("Pasted "+groupSummary(d)+" here");
+  sel=out[out.length-1];multi=out.length>1?out:[];renderSide();
+  if(sel&&sel.x!=null)open3d(sel,true);
+}
+function duplicate3d(k,at){
+  var q=pick3d(k);
+  if(!q||!canEdit())return;
+  if(!duplicateSel())return;
+  if(at&&sel&&sel.own){setProp(sel,{x:+at.x.toFixed(3),y:+at.y.toFixed(3)});settle(sel,false)}
+  toast("A copy, where you are looking  ·  Ctrl+Z undoes it");
+  renderSide();draw();
+  if(sel&&sel.x!=null)open3d(sel,true);
+}
 // The top bar's Map | 3D: the 3D view opens on the player start, from behind it
 function sync3dSwitch(){
   var on=!!(window.View3D&&View3D.isOpen()),a=$("vw-map"),b=$("vw-3d");
@@ -8161,11 +8486,13 @@ function open3d(o,keep,view){
   var inb=o.type!=="building"?buildingAt(o.x,o.y,o.z):null;
   var fl=inb?floorAt(o.x,o.y,o.z):groundAt(o.x,o.y);
   t.floor=fl!=null?fl:o.z;
-  V3D.key=t.key;V3D.spot=null;V3D.at=null;V3D.ver=planVer;
+  V3D.key=t.key;V3D.spot=null;V3D.at=null;V3D.ver=planVer;V3D.lastAt={x:o.x,y:o.y,z:o.z};
   View3D.open({host:document.querySelector(".stage"),target:t,objects:sceneAround(o,reach3d(R)),terrain:terrain3d(o,R),splines:splines3d(o,R),
     nav:nav3d(o,reach3d(R)),onAddNode:canEditQuiet()?addNode3d:null,explore:explore3d,
     onTest:Store&&!Store.local&&canEditQuiet()?function(p){testFromHere(p.x,p.y,p.z,p.gamma)}:null,
     mesh:function(m){return MeshSprites.raw(m)},mapImage:mapPatch,radius:R,inside:!!inb,keepView:!!keep,view:view,
+    onRemove:canEditQuiet()?remove3d:null,onCopy:copy3d,onPaste:canEditQuiet()?paste3d:null,
+    onDuplicate:canEditQuiet()?duplicate3d:null,
     level:SRV?(LEVEL?LEVEL.level:LV):0,
     onMove:function(k,p){
       var q=byKey3d(k);if(!q)return;
@@ -9851,7 +10178,8 @@ function planOf(){
         sees:p.type==="soldier"&&p.sees?p.sees:undefined,fov:p.type==="soldier"&&p.fov?p.fov:undefined,
         arriveOn:p.type==="soldier"&&p.arriveOn?p.arriveOn:undefined,arriveTimes:p.type==="soldier"&&p.arriveOn?(p.arriveTimes||1):undefined,
         reinforce:p.reinforce||undefined,
-        door:p.door||undefined,onLevel:p.onLevel||undefined,gate:p.type==="switch"&&p.gate?true:undefined}}),
+        door:p.door||undefined,lift:p.lift||undefined,of:p.of||undefined,slot:p.slot||undefined,
+        onLevel:p.onLevel||undefined,gate:p.type==="switch"&&p.gate?true:undefined}}),
     objectives:objectives.map(function(o){return JSON.parse(JSON.stringify(o))}),failOnAlarm:failOnAlarm,objBase:objBase,
     ccwLying:true,settings:settingsPlan(),events:events.map(function(v){return JSON.parse(JSON.stringify(v))}),
     ground:groundEdits.map(function(a){
@@ -9952,6 +10280,8 @@ function makeStore(serverOk){
     recover:function(ids){return api("POST","api/recover",{ids:ids})},
     trash:function(){return api("GET","api/trash").then(function(j){return j.trash})},
     restore:function(tid){return api("POST","api/trash/"+tid+"/restore",{}).then(function(j){return j.mission})},
+    trashDelete:function(tid){return api("DELETE","api/trash/"+tid)},
+    trashEmpty:function(){return api("DELETE","api/trash").then(function(j){return j.gone})},
     cleanup:function(id){return api("GET","api/missions/"+id+"/cleanup")},
     check:function(id){return api("GET","api/missions/"+id+"/check")},
     coverUrl:function(m){return m.cover?"api/missions/"+m.id+"/cover.png?v="+(m.updated||0):null}
@@ -9998,6 +10328,8 @@ function makeStore(serverOk){
     uninstall:function(){return Promise.reject(new Error("needs the local server"))},
     trash:function(){return Promise.resolve(keys(T).map(function(k){var m=read(k);return m&&{trashId:k.slice(T.length),id:m.id,name:m.name,base:m.base,deleted:+k.split("--").pop()}}).filter(Boolean))},
     restore:function(tid){var m=read(T+tid);if(!m)return Promise.reject(new Error("not in the trash"));write(K+m.id,m);ls().removeItem(T+tid);return Promise.resolve(m)},
+    trashDelete:function(tid){ls().removeItem(T+tid);return Promise.resolve({ok:true})},
+    trashEmpty:function(){var n=keys(T);n.forEach(function(k){ls().removeItem(k)});return Promise.resolve(n.length)},
     cleanup:function(){return Promise.reject(new Error("needs the local server"))},
     check:function(){return Promise.reject(new Error("needs the local server"))},
     coverUrl:function(m){return m.coverData||null}
@@ -10015,9 +10347,11 @@ function loadLevel(n,then){
     CATALOG?Promise.resolve(CATALOG)
           :fetch("data/catalog.json?v="+DATAV).then(function(r){return r.json()}).catch(function(){return null}),
     NAVT?Promise.resolve(NAVT)
-        :fetch("data/navtemplates.json?v="+DATAV).then(function(r){return r.json()}).catch(function(){return null})
+        :fetch("data/navtemplates.json?v="+DATAV).then(function(r){return r.json()}).catch(function(){return null}),
+    DOORS?Promise.resolve(DOORS)
+        :fetch("data/doors.json?v="+DATAV).then(function(r){return r.json()}).catch(function(){return null})
   ]).then(function(res){
-    LEVEL=res[0];GRAPHS=res[1];MODELS=res[2]||MODELS;CATALOG=res[3]||CATALOG;NAVT=res[4]||NAVT;
+    LEVEL=res[0];GRAPHS=res[1];MODELS=res[2]||MODELS;CATALOG=res[3]||CATALOG;NAVT=res[4]||NAVT;DOORS=res[5]||DOORS;
     // an empty map: the terrain and navmesh stay, of the level only its player -
     // none of its objectives, alarm systems or map computer markers
     if(MODE==="empty"){
@@ -10532,6 +10866,7 @@ function bind(){
         var rs2=mouse.drag.type==="navnode"?[]:ridersOf(mouse.drag,true);
         carry(rs2,w[0]-mouse.drag.x,w[1]-mouse.drag.y,0);
         mouse.drag.x=w[0];mouse.drag.y=w[1];delete mouse.drag.exact;
+        syncDoorsOf(mouse.drag);        // a building's doors and lift come along
         if(mouse.drag.type==="navnode"){settleZ(mouse.drag);rehome(mouse.drag)}
       }
       touch();renderSide();draw();return;
@@ -10903,15 +11238,40 @@ function showTrash(){
     if(!items.length){$("sheet-body").innerHTML='<p class="empty">The trash is empty.</p>';return}
     var h='<div class="savedlist">';
     items.forEach(function(t,i){
-      h+='<div class="saved"><b>'+esc(t.name)+'</b><span class="acts"><button class="btn" data-restore="'+i+'">Restore</button></span>'+
+      h+='<div class="saved"><b>'+esc(t.name)+'</b><span class="acts">'+
+        '<button class="btn" data-restore="'+i+'">Restore</button>'+
+        '<button class="btn danger" data-del="'+i+'" title="Delete for good\nThe copy the studio keeps goes. Click twice.">Delete</button></span>'+
         '<span class="meta">'+esc(baseLabel(t.base))+' · deleted '+esc(ago(t.deleted))+'</span></div>';
     });
-    $("sheet-body").innerHTML=h+'</div><p class="hint" style="margin-top:10px">A restored mission is not in the game until you apply it again.</p>';
+    h+='</div><div class="trash-foot"><button class="btn danger" id="trash-empty" title="Empty the trash\nEvery mission in here goes for good. Click twice.">Empty the trash ('+items.length+')</button></div>';
+    $("sheet-body").innerHTML=h+'<p class="hint" style="margin-top:10px">A restored mission is not in the game until you apply it again. Deleting here takes the copy the studio keeps, for good; a slot in the game was already dealt with when the mission was deleted.</p>';
+    // one click asks, the next one does it
+    function sure(b,then){
+      if(b.classList.contains("sure")){then();return}
+      b.classList.add("sure");var was=b.textContent;b.textContent="Sure?";
+      setTimeout(function(){if(b.isConnected){b.classList.remove("sure");b.textContent=was}},3000);
+    }
     $("sheet-body").querySelectorAll("[data-restore]").forEach(function(b){
       b.addEventListener("click",function(){
         var t=items[+b.getAttribute("data-restore")];
         Store.restore(t.trashId).then(function(m){toast("Restored “"+m.name+"”");$("sheet").hidden=true;showLibrary()})
           .catch(function(e){toast("Could not restore: "+e.message)});
+      });
+    });
+    $("sheet-body").querySelectorAll("[data-del]").forEach(function(b){
+      b.addEventListener("click",function(){
+        var t=items[+b.getAttribute("data-del")];
+        sure(b,function(){
+          Store.trashDelete(t.trashId).then(function(){toast("“"+t.name+"” is gone for good");showTrash();showLibrary()})
+            .catch(function(e){toast("Could not delete: "+e.message)});
+        });
+      });
+    });
+    $("trash-empty").addEventListener("click",function(){
+      var b=$("trash-empty");
+      sure(b,function(){
+        Store.trashEmpty().then(function(n){toast("The trash is empty"+(n?" ("+n+" gone for good)":""));showTrash();showLibrary()})
+          .catch(function(e){toast("Could not empty it: "+e.message)});
       });
     });
   }).catch(function(e){$("sheet-body").innerHTML='<p class="note bad">'+esc(e.message)+'</p>'});
@@ -11355,7 +11715,7 @@ function restoreState(json){
     applyEditsToLevel();
     nodeVer++;planVer++;sel=null;multi=[];patrolMode=false;
     save();renderSide();renderNavSection();draw();
-    if(window.View3D&&View3D.isOpen()&&V3D.key){var q3=byKey3d(V3D.key);if(q3){sel=q3;renderSide();open3d(q3,true)}else View3D.close()}
+    if(window.View3D&&View3D.isOpen()&&V3D.key){var q3=byKey3d(V3D.key);if(q3){sel=q3;renderSide();open3d(q3,true)}else keep3dSpot()}
   }finally{restoring=false}
   lastState=json;lastChangeAt=0;
 }
@@ -11737,9 +12097,32 @@ function showCleanup(){
 function editedSoldiers(){
   return Object.keys(edits).map(objByRef).filter(function(o){return o&&o.type==="soldier"&&edits[o.ref]&&edits[o.ref].patrol});
 }
+function buildVerdict(){return BUILDV&&M&&BUILDV.id===M.id&&BUILDV.ver===planVer?BUILDV:null}
+// a dry run of the build on the plan as it is now: from the last one if it was
+// on this version, else a new one (the plan saved first); null if it can't be had
+function freshVerdict(ms){
+  if(!SRV||!M||READONLY||!Store||Store.local)return Promise.resolve(null);
+  if(buildVerdict())return Promise.resolve(buildVerdict());
+  var t0=Date.now();
+  if(!HSYNC.busy)heightsSoon();
+  return new Promise(function(res){
+    (function wait(){
+      if(buildVerdict())return res(buildVerdict());
+      if(Date.now()-t0>(ms||150000))return res(null);
+      setTimeout(wait,500);
+    })();
+  });
+}
 function localChecks(){
   var rows=[];
   function add(level,group,text,o,fix,meta){rows.push({level:level,group:group,text:text,o:o||null,fix:fix||null,meta:meta||""})}
+  // the build's own answer, from its last dry run on this very plan
+  var bv=buildVerdict();
+  if(bv){
+    bv.errors.forEach(function(t){add("error","Build","Apply would refuse this: "+t,null,null,"a dry run of the build")});
+    bv.warnings.forEach(function(t){add("warn","Build",t,null,null,"a dry run of the build")});
+    bv.notes.forEach(function(t){add("info","Build",t,null,null,"a dry run of the build")});
+  }
   if(MSET.timeLimit>0&&MSET.timeLimit<60)add("warn","Objectives","The time limit is under a minute ("+clock(MSET.timeLimit)+")");
   // can the player get there? (an estimate: he can also climb and jump where the grid can't)
   try{
@@ -11775,19 +12158,29 @@ function localChecks(){
   });
   Object.keys(GRAPHS||{}).forEach(function(gid){
     var c=graphCapacity(gid);
-    if(c&&c.max&&c.used>c.max)
-      add("error","Navigation","Graph "+gid+" needs "+c.used+" nodes; its file holds "+c.max,null,null,
-        "remove "+(c.used-c.max)+" node"+(c.used-c.max===1?"":"s")+" from it");
+    // the build makes a graph's file bigger, 100 nodes at a time, up to 1000
+    if(c&&c.used>GRAPH_MAX)
+      add("error","Navigation","Graph "+gid+" needs "+c.used+" nodes; a walkway graph holds at most "+GRAPH_MAX,null,null,
+        "remove "+(c.used-GRAPH_MAX)+" node"+(c.used-GRAPH_MAX===1?"":"s")+" from it");
   });
   placements.filter(function(p){return p.type==="building"&&!segInfo(p.model)}).forEach(function(p){
     var c=placeCheck(p);if(!c||c.level==="ok")return;
     add(c.level==="bad"?"warn":"info","Buildings",displayName(p)+": "+c.why+(c.off?" (its ground height can't be checked)":""),
       p,null,num(p.x)+", "+num(p.y));
   });
-  placements.filter(function(p){return p.type==="soldier"&&!p.arriveOn&&(p.graph||graphOf(p))}).forEach(function(p){
-    var ns=nodesOf(String(p.graph||graphOf(p))),bd=1e18;
-    ns.forEach(function(n){var d=(n.x-p.x)*(n.x-p.x)+(n.y-p.y)*(n.y-p.y);if(d<bd)bd=d});
-    if(ns.length&&Math.sqrt(bd)>25)add("warn","Guards",displayName(p)+" stands "+Math.round(Math.sqrt(bd))+" m from his walkways: in the game he walks off to them",p,null,"graph "+(p.graph||graphOf(p)));
+  placements.filter(function(p){return p.type==="soldier"&&!p.arriveOn}).concat(editedSoldiers()).forEach(function(p){
+    var g=p.graph||graphOf(p),near=g?guardWalkway(p,String(g)):null;
+    if(!g||!near){
+      add("error","Guards",displayName(p)+" has no walkways near him: in the game he walks to his walkway graph when the mission starts, and there is none he can stand on. Lay walkways where he stands",p,null,
+        "Walkways tool, or the AI designer's add_walkways");
+      return;
+    }
+    if(near.dz>SAME_FLOOR)
+      add("error","Guards",displayName(p)+" stands "+near.dz.toFixed(1)+" m "+(near.n.z>p.z?"below":"above")+" his walkways (graph "+g+
+        "): in the game he walks to them and ends up in the air. Lay walkways where he stands, or put him where they are",p,null,
+        "the nearest walkway point is "+Math.round(near.d)+" m away");
+    else if(near.d>30)
+      add("warn","Guards",displayName(p)+" stands "+Math.round(near.d)+" m from his walkways: in the game he walks off to them",p,null,"graph "+g);
   });
   placements.filter(function(p){return p.type==="soldier"&&!p.graph&&!graphOf(p)}).forEach(function(p){
     add("error","Guards",displayName(p)+" has no navigation graph to walk",p);
@@ -12086,8 +12479,7 @@ function probeServer(){
 // desktop app) and about. Each pane is drawn the first time it is shown.
 var SET_TABS=[
   ["game","Game",'<rect x="3.5" y="7" width="17" height="10.5" rx="2"/><path d="M8 10.5v4M6 12.5h4M15.5 11.5h.01M17.5 13.5h.01"/>'],
-  ["ai","AI designer",'<path d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/>'],
-  ["light","Light model",'<path d="M13 3 5.5 13.5H11l-1 7.5 7.5-10.5H12z"/>'],
+  ["ai","AI models",'<path d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/>'],
   ["updates","Updates",'<path d="M12 4v11m0 0-4-4m4 4 4-4M5 19.5h14"/>'],
   ["about","About",'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.01"/>']
 ];
@@ -12095,6 +12487,7 @@ function showConfig(tab){
   var desktop=!!(window.studioApp&&window.studioApp.updates);
   var tabs=SET_TABS.filter(function(t){return t[0]!=="updates"||desktop});
   try{tab=tab||localStorage.getItem("plotter:settab")}catch(e){/* private window */}
+  if(tab==="light")tab="ai";          // the light model is chosen on the AI models pane now
   if(!tabs.some(function(t){return t[0]===tab}))tab="game";
   sheet("Settings",'<div class="set-wrap"><nav class="set-nav" role="tablist" aria-label="Settings">'+tabs.map(function(t){
       return '<button type="button" role="tab" data-tab="'+t[0]+'"><svg viewBox="0 0 24 24" aria-hidden="true">'+t[2]+'</svg><span>'+t[1]+'</span></button>'}).join("")+
@@ -12110,8 +12503,8 @@ function showConfig(tab){
     painted[t]=true;
     var el=$("set-"+t);
     if(t==="game")paintGamePane(el);
-    else if(t==="ai"||t==="light"){
-      if(window.AIPanel)AIPanel.renderSettings(el,t==="light"?"light":"main");
+    else if(t==="ai"){
+      if(window.AIPanel)AIPanel.renderSettings(el);
       else el.innerHTML='<p class="hint">The AI designer is still loading. Open Settings again in a moment.</p>';
     }
     else if(t==="updates")paintUpdates(el);
@@ -13279,9 +13672,15 @@ var AIB=(function(){
     return {ok:true,item:r};
   };
   H.check_mission=function(){
-    var rows=localChecks();
-    return {ok:true,problems:rows.filter(function(r){return r.level==="bad"}).length,warnings:rows.filter(function(r){return r.level==="warn"}).length,
-      list:rows.slice(0,40).map(function(r){var x={level:r.level,group:r.group,text:r.text};if(r.o)x.id=idOf(r.o);return x})};
+    // with the build's own verdict: a dry run of Apply on the plan as it is now
+    return checkLinks(navNodes).then(function(){return freshVerdict()}).then(function(bv){
+      var rows=localChecks(),bad=function(r){return r.level==="bad"||r.level==="error"};
+      rows.sort(function(a,b){return (bad(b)?1:0)-(bad(a)?1:0)});
+      var out={ok:true,problems:rows.filter(bad).length,warnings:rows.filter(function(r){return r.level==="warn"}).length,
+        build:bv?(bv.ok?"a dry run of Apply goes through":"Apply would refuse this plan: fix the Build problems first"):"the dry run of Apply could not be had just now",
+        list:rows.slice(0,40).map(function(r){var x={level:bad(r)?"problem":r.level,group:r.group,text:r.text};if(r.o)x.id=idOf(r.o);return x})};
+      return out;
+    });
   };
   H.focus_map=function(a){
     var w=where(a),k=Math.max(0.6,Math.min(12,+a.zoom||Math.max(view.k,3)));
@@ -13386,17 +13785,50 @@ var AIB=(function(){
     if(!editable())return fail(RO);
     var model=String(a.model||""),s=MODELS&&MODELS.sizes&&MODELS.sizes[model];
     if(!s)return fail("No model "+model+". list_catalog with kind structures gives the models.");
-    var w=where(a),gz=groundAt(w.x,w.y);
+    var w=where(a);
+    // a gate is one leaf, half a gateway: laying one lays the whole thing
+    if(model===GATE_LEAF&&!a.one_leaf){
+      var kit=addGateKit(w.x,w.y,facingArg(a,w.x,w.y,0));
+      if(!kit)return fail("This level's data has no gate model.");
+      changed();
+      return {ok:true,placed:kit.map(brief),ids:kit.map(function(k){return k.uid}),at:{x:r1(w.x),y:r1(w.y)},
+        notes:["Both leaves, the switch that opens them, and a fence panel each side in line. Carry the fence on from either end with place_fence.",
+               "one_leaf true places a single leaf instead."]};
+    }
+    var gz=groundAt(w.x,w.y);
+    // a door goes in a doorway: inside a building it stands on a floor there
+    // (floor "top" or a height in metres picks which), and the building it is
+    // in is not something it clashes with
+    var inb=doorInfo(model)?buildingAt(w.x,w.y):null,fz=null;
+    if(inb){
+      var fl=floorsOf(inb),want=a.floor==null?null:(String(a.floor)==="top"?1e9:+a.floor);
+      var cur=fl[0];
+      if(want!=null)fl.forEach(function(f){if(Math.abs(f.z-(want>1e8?1e9:inb.o.z+want))<Math.abs(cur.z-(want>1e8?1e9:inb.o.z+want)))cur=f});
+      fz=cur.z;
+    }
     var o={uid:uid(),own:true,type:"building",kind:"object",model:model,name:a.name?String(a.name).slice(0,60):catName(model),
-      x:+w.x.toFixed(3),y:+w.y.toFixed(3),z:gz!=null?+gz.toFixed(3):(terrainZ(w.x,w.y)||0),gamma:facingArg(a,w.x,w.y,0),flatten:wantsFlat(model)};
-    var chk=placeCheck(o);
+      x:+w.x.toFixed(3),y:+w.y.toFixed(3),z:fz!=null?+fz.toFixed(3):(gz!=null?+gz.toFixed(3):(terrainZ(w.x,w.y)||0)),
+      gamma:facingArg(a,w.x,w.y,0),flatten:wantsFlat(model)};
+    if(fz!=null)o.exact=true;
+    var chk=inb?null:placeCheck(o);
     if(chk&&chk.level==="bad"&&!a.force)return fail("Can't place "+o.name+" there: "+chk.why+". Try a spot a little away (look_around shows what is there), or force it.");
     if(a.map_label)o.label={title:String(a.map_label).slice(0,30),info:String(a.map_info||"").slice(0,60)};
+    asDoor(o);                              // a door model becomes a door that opens
     placements.push(o);changed();settle(o,false);
-    var r=brief(o),notes=[];
+    var r=brief(o),notes=[],ids=[o.uid];
+    // a building of the game's brings the doors it has
+    var kit=o.door?{total:0}:addBuildingDoors(o);
+    if(kit.total){
+      notes.push("It comes with its own "+fittingWords(kit)+"."+
+        (kit.doors?" The doors open in the game.":"")+
+        (kit.lifts?" The lift runs between its floors, with a button at each and one inside.":""));
+      placements.filter(function(p){return p.of===o.uid}).forEach(function(p){ids.push(p.uid)});
+      changed();
+    }
+    if(o.door)notes.push("It opens in the game"+(o.door.kind==="gate"?" while its switch is pressed":" when the player uses it")+".");
     if(chk&&chk.level&&chk.level!=="ok"&&chk.why)notes.push(chk.why);
     if(!levelModels().has(model))notes.push("Its model comes from another level; Apply brings it in.");
-    return {ok:true,placed:[r],notes:notes,ids:[o.uid],at:{x:o.x,y:o.y}};
+    return {ok:true,placed:[r],notes:notes,ids:ids,at:{x:o.x,y:o.y}};
   };
   H.place_fence=function(a){
     if(!editable())return fail(RO);
@@ -13486,14 +13918,29 @@ var AIB=(function(){
     if(!Object.keys(f).length)return fail("Nothing to change: give x and y (or place), z, or facing.");
     setProp(o,f);
     if(o.own&&moved&&a.z==null)settle(o,false);
+    // a guard walks the walkway graph where he stands (the build puts one inside
+    // a building on that building's graph): moved onto another, his patrol on the
+    // old one can't be walked, and Apply would refuse it
+    var note=null;
+    if(o.type==="soldier"&&moved){
+      var was=String(o.graph||graphOf(o)),now=guardGraph(o.x,o.y,o.z);
+      if(now&&String(now)!==was){
+        var n0=(o.patrol||[]).length;
+        o.graph=String(now);
+        if(n0){o.patrol=[];note="He now walks graph "+now+" (was "+was+"): his "+n0+" patrol stop"+(n0>1?"s were":" was")+" on the old one and "+(n0>1?"are":"is")+" dropped. Give him a new patrol with set_patrol near where he stands."}
+      }
+    }
     changed();
-    return {ok:true,item:brief(o),ids:[idOf(o)],at:{x:o.x,y:o.y}};
+    var r={ok:true,item:brief(o),ids:[idOf(o)],at:{x:o.x,y:o.y}};
+    if(note)r.note=note;
+    return r;
   };
   H.remove_item=function(a){
     if(!editable())return fail(RO);
     var o=byId(a.id);if(!o)return fail("Nothing has the id "+a.id+".");
     if(o.type==="player")return fail("The player start can't be removed; move it with set_player_start.");
     var nm=displayName(o),at={x:o.x,y:o.y};
+    if(o.type==="navnode"){dropNavNodes([o]);return {ok:true,removed:"a walkway point",at:at}}
     if(o.own)placements=placements.filter(function(p){return p!==o});
     else if(o.ref){if(removeRefs.indexOf(o.ref)<0)removeRefs.push(o.ref)}
     else return fail(nm+" can't be removed.");
@@ -13512,7 +13959,8 @@ var AIB=(function(){
     }else if(a.kind!=="killAll"){
       var o=byId(a.target_id);
       if(!o)return fail("Give target_id: the id of the "+{kill:"guard",collect:"pickup",hack:"terminal",destroy:"vehicle, camera or explosive"}[a.kind]+".");
-      if(k[3]&&!k[3](o))return fail(displayName(o)+" can't be the target of a "+a.kind+" objective"+(o.own||o.id>=0?"":" (it has no task id the game can test)")+".");
+      if(k[3]&&!k[3](o))return fail(displayName(o)+" can't be the target of a "+a.kind+" objective"+(o.own||o.id>=0?"":" (it has no task id the game can test)")+
+        (a.kind==="destroy"?". A destroy objective needs something the game can blow up: one of the level's own vehicles, generators, radios or explosive objects, or a security camera. A vehicle or object you place is not one the game can blow up; on an empty map, place a camera (place_camera) and destroy that.":"")+".");
       ob.target=objTargetOf(o);at={x:o.x,y:o.y};
     }
     objectives.push(ob);changed();
@@ -13731,8 +14179,48 @@ var AIB=(function(){
     if(existing)notes.push(existing+" point"+(existing>1?"s were":" was")+" there already, and kept.");
     if(!made.length&&!reached)return fail("No walkway point could be added there: "+(notes.join(" ")||"nothing to link to."));
     lastChangeAt=0;touch();renderSide();renderNavSection();renderList();draw();
-    return {ok:true,added:made.length,joined_to:{x:r1(nn.n.x),y:r1(nn.n.y),graph:String(nn.g)},length_m:r1(len),reached:reached,notes:notes,
-      next:"Guards placed near "+(w.name||"there")+" now keep to these walkways.",at:{x:w.x,y:w.y}};
+    function result(){
+      return {ok:true,added:made.length,joined_to:{x:r1(nn.n.x),y:r1(nn.n.y),graph:String(nn.g)},length_m:r1(len),reached:reached,notes:notes,
+        next:made.length?"Guards placed near "+(w.name||"there")+" now keep to these walkways.":"Nothing was added.",at:{x:w.x,y:w.y}};
+    }
+    // Apply joins a new point only where a guard can walk to it without going
+    // through a wall or fence: the same test, now, and the points it would cut
+    // (and any that hung on them) come out again
+    return checkLinks(made).then(function(asked){
+      if(!asked)return result();
+      var cut=[],walls={};
+      for(var guard=0;guard<4;guard++){
+        var lone=made.filter(function(o){return !nodeLinks(o).length});
+        if(!lone.length)break;
+        lone.forEach(function(o){
+          var i=navNodes.indexOf(o);if(i>=0)navNodes.splice(i,1);
+          cut.push(o);
+          nodesOf(o.graph).concat(navNodes).forEach(function(n){var c=linkCut(o,n);if(c)walls[c]=1});
+        });
+        made=made.filter(function(o){return cut.indexOf(o)<0});
+        nodeVer++;
+      }
+      if(cut.length){
+        reached=reached&&made.length>0;
+        notes.push(cut.length+" point"+(cut.length>1?"s":"")+" left out: a guard could only reach "+(cut.length>1?"them":"it")+" through "+
+          (Object.keys(walls).slice(0,3).join(", ")||"a wall")+", and Apply would refuse "+(cut.length>1?"them":"it")+
+          ". Lay the walkway round the walls or through a gap or gate in them.");
+        touch();renderSide();renderNavSection();renderList();draw();
+      }
+      if(!made.length)return fail("No walkway point could be added there: "+notes.join(" "));
+      return result();
+    });
+  };
+  // walkway points of the mission's own round a place taken out again, and the
+  // patrol stops on them (a stop at a point that is gone would fail the build)
+  H.remove_walkways=function(a){
+    if(!editable())return fail(RO);
+    var w=where(a),R=Math.max(2,Math.min(300,+a.radius||20));
+    var gone=navNodes.filter(function(n){return Math.hypot(n.x-w.x,n.y-w.y)<=R});
+    if(!gone.length)return fail("None of the walkway points you added are within "+R+" m of there (the level's own can't be removed this way).");
+    var stops=dropNavNodes(gone);
+    return {ok:true,removed:gone.length,patrol_stops_dropped:stops||undefined,at:{x:r1(w.x),y:r1(w.y)},
+      next:"Lay them again (add_walkways) where they should run: new points join what is already there."};
   };
   H.shape_ground=function(a){
     if(!editable())return fail(RO);
@@ -13891,6 +14379,47 @@ var AIB=(function(){
     return {ok:true,player_start:brief(p),ids:[idOf(p)],at:{x:p.x,y:p.y}};
   };
 
+  // How the ground lies, as numbers a model can reason with: a profile along a
+  // line (what a guard walking it climbs), or a coarse grid of heights round a
+  // point. The mission's own shaping included (TERR is the shaped ground).
+  var CLIMB=0.33;                  // walkways climb about 1 in 3; steeper wants a ramp
+  H.ground_heights=function(a){
+    if(!TERR)return fail("The level is still loading.");
+    if(Array.isArray(a.from)&&Array.isArray(a.to)){
+      var A={x:+a.from[0],y:+a.from[1]},B={x:+a.to[0],y:+a.to[1]},L=Math.hypot(B.x-A.x,B.y-A.y);
+      if(!(L>0))return fail("from and to are the same point.");
+      var n=Math.max(2,Math.min(60,Math.ceil(L/Math.max(3,+a.step||Math.max(5,L/30))))),seg=L/n,hs=[],worst=null,prev=null,off=0,steep=0;
+      for(var i=0;i<=n;i++){
+        var x=A.x+(B.x-A.x)*i/n,y=A.y+(B.y-A.y)*i/n,z=terrainZ(x,y);
+        hs.push(z==null?null:r1(z));
+        if(z==null){off++;prev=null;continue}
+        if(prev!=null){var g=Math.abs(z-prev)/seg;if(g>CLIMB)steep+=seg;if(!worst||g>worst.g)worst={g:g,x:x,y:y}}
+        prev=z;
+      }
+      var zs=hs.filter(function(v){return v!=null});
+      if(!zs.length)return fail("There is no ground along that line.");
+      var rise=zs[zs.length-1]-zs[0];
+      return {ok:true,from:[r1(A.x),r1(A.y)],to:[r1(B.x),r1(B.y)],length_m:r1(L),every_m:r1(seg),heights:hs,
+        lowest:r1(Math.min.apply(null,zs)),highest:r1(Math.max.apply(null,zs)),rise_m:r1(rise),
+        steepest:worst?{slope_pct:Math.round(worst.g*100),at:[r1(worst.x),r1(worst.y)]}:null,
+        off_map_points:off||undefined,
+        walkable:!steep?"yes: walkways and guards can follow this line as the ground lies":
+          "not as it lies: "+Math.round(steep)+" m of it is steeper than 1 in 3. A ramp along it (shape_ground, mode ramp, from and to) evens it out"+
+          (Math.abs(rise)/L>CLIMB?", but the whole line rises "+Math.round(Math.abs(rise)/L*100)+"%: too steep even as one even ramp, so go round (a longer, winding way) or lower the top":"")};
+    }
+    var w=where(a),R=Math.max(10,Math.min(800,+a.radius||150)),n=Math.max(3,Math.min(13,parseInt(a.cells,10)||9)),st=2*R/(n-1),grid=[],lo=Infinity,hi=-Infinity;
+    for(var j=n-1;j>=0;j--){
+      var row=[];
+      for(var k=0;k<n;k++){var z2=terrainZ(w.x-R+k*st,w.y-R+j*st);row.push(z2);if(z2!=null){lo=Math.min(lo,z2);hi=Math.max(hi,z2)}}
+      grid.push(row);
+    }
+    if(!isFinite(lo))return fail("There is no ground there.");
+    return {ok:true,centre:[r1(w.x),r1(w.y)],spacing_m:r1(st),lowest:r1(lo),highest:r1(hi),
+      rows:"north to south, west to east: metres above the lowest point (null: off the map)",
+      grid:grid.map(function(r){return r.map(function(z){return z==null?null:Math.round(z-lo)})}),
+      here:r1(terrainZ(w.x,w.y))};
+  };
+
   // ---------------------------------------------------------------- the tools as the model sees them
   var XY={x:{type:"number",description:"metres east"},y:{type:"number",description:"metres north"},
     place:{type:"string",description:"a place name from find_places, instead of x and y"},
@@ -13902,6 +14431,7 @@ var AIB=(function(){
   var T=[
     {name:"get_overview",look:true,description:"The mission and level at a glance: name, level, the map's extent, the player start, what the level has, your things, objectives, events, time and weather, alarm systems, named places and what the user has selected. Call this first.",parameters:P({})},
     {name:"find_places",look:true,description:"Named places on the map (map labels, buildings, gates, terminals, and the sides of the map), best matches first, with positions and ids.",parameters:P({query:{type:"string",description:"words to match, e.g. 'radar dome', 'north gate'. Empty lists them all."},limit:{type:"integer"}})},
+    {name:"ground_heights",look:true,description:"How the ground lies. With from and to: the heights along that line, how much it rises and its steepest stretch; walkways (and so guards) climb about 1 in 3 at most, steeper needs a ramp (shape_ground, mode ramp) or a way round. Without them: a grid of heights round a point (rows north to south, metres above the lowest point), to see hills, hollows, and flat ground for a camp. Look before placing an area, and before laying walkways up a slope.",parameters:P(withXY({radius:{type:"number",description:"the grid: half its width, 10 to 800 m, default 150"},cells:{type:"integer",description:"the grid: points a side, 3 to 13, default 9"},from:{type:"array",items:{type:"number"},description:"[x, y]: a profile from here"},to:{type:"array",items:{type:"number"},description:"[x, y]: to here"},step:{type:"number",description:"the profile: metres between heights"}}))},
     {name:"look_around",look:true,description:"Everything within a radius of a point, nearest first (the level's and yours, with ids), the ground heights there, how far the nearest guard walkway is, and the building the point is in with its floors.",parameters:P(withXY({radius:{type:"number",description:"metres, 3 to 150, default 40"},limit:{type:"integer"}}))},
     {name:"list_catalog",look:true,description:"What can be placed: guard types (with their weapons and models), weapons and items, structures (model ids, sizes; in_this_level false means Apply brings the model in), alarm parts, camera kinds, structure categories, and designs kept in the user's inventory.",parameters:P({kind:{type:"string",enum:["guards","weapons","structures","alarm_parts","cameras","categories","designs"]},search:{type:"string"},limit:{type:"integer"}},["kind"])},
     {name:"get_item",look:true,description:"One thing in full: what it is, where, its settings, patrol, and the objectives and events that refer to it.",parameters:P({id:{type:"string"}},["id"])},
@@ -13915,7 +14445,7 @@ var AIB=(function(){
       sees_m:{type:"number",description:"how far they see, 10 to 200"},view_deg:{type:"number",description:"how wide they look, 20 to 360"}}),FACE))},
     {name:"edit_guard",description:"Change a guard (yours or the level's): type, weapon, sight, name, facing.",parameters:P(Object.assign({id:{type:"string"},type:{type:"string"},weapon:{type:"string"},sees_m:{type:"number"},view_deg:{type:"number"},name:{type:"string"}},FACE),["id"])},
     {name:"set_patrol",description:"A guard's patrol: he walks through these points in order and around again, each snapped to the nearest point of his walkway graph. No points: he stands still.",parameters:P({guard_id:{type:"string"},points:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]"},places:{type:"array",items:{type:"string"},description:"place names, instead of points"}},["guard_id"])},
-    {name:"place_object",description:"Place a structure or prop by its model id (list_catalog kind structures), checked the way a placement by hand is. Buildings get level ground under them. map_label names it on the map computer.",parameters:P(Object.assign(withXY({model:{type:"string"},name:{type:"string"},force:{type:"boolean",description:"place it even where the check says no"},map_label:{type:"string"},map_info:{type:"string"}}),FACE),["model"])},
+    {name:"place_object",description:"Placing a gate (304_01_1) lays a whole gateway: both leaves, the switch that opens them and a fence panel each side (one_leaf true for a single leaf). A building of the game's brings the doors it has, and a door model becomes a door that opens. Place a structure or prop by its model id (list_catalog kind structures), checked the way a placement by hand is. Buildings get level ground under them. map_label names it on the map computer.",parameters:P(Object.assign(withXY({model:{type:"string"},name:{type:"string"},force:{type:"boolean",description:"place it even where the check says no"},one_leaf:{type:"boolean",description:"a gate: one leaf only, not the whole gateway"},floor:{type:"string",description:"a door inside a building: which floor (\"top\", or metres above its base)"},map_label:{type:"string"},map_info:{type:"string"}}),FACE),["model"])},
     {name:"place_fence",description:"A straight run of fence (chain link) or wall panels from one point to another.",parameters:P({from:{type:"array",items:{type:"number"}},to:{type:"array",items:{type:"number"}},kind:{type:"string",enum:["fence","wall"]},model:{type:"string",description:"a panel model instead"}},["from","to"])},
     {name:"build_compound",description:"A ready fenced compound centred on a point: fence or wall round a rectangle, a sliding gate with a switch on the side facing the player's start, a floodlight, watchtowers, guards at the gate (only where walkways are near), and levelled ground.",parameters:P(withXY({width:{type:"number",description:"16 to 100 m"},depth:{type:"number",description:"16 to 100 m"},wall:{type:"string",enum:["fence","wall"]},towers:{type:"integer",enum:[0,2,4]},guards:{type:"integer",description:"0 to 4"},gate:{type:"boolean"},light:{type:"boolean"},level_ground:{type:"boolean"}}))},
     {name:"place_pickup",description:"A weapon, ammo or item to pick up (list_catalog kind weapons).",parameters:P(Object.assign(withXY({item:{type:"string"},count:{type:"integer"},floor:{type:"string"}}),FACE),["item"])},
@@ -13941,6 +14471,7 @@ var AIB=(function(){
       sees_m:{type:"number"},view_deg:{type:"number"}}),["name","type"])},
     {name:"place_design",description:"Place a design (from design_structure, design_character, or list_catalog designs) on the map, centred on a point.",parameters:P(Object.assign(withXY({id:{type:"string"}}),FACE),["id"])},
     {name:"add_walkways",description:"Lay walkway points (the guards' navmesh) from the nearest walkway to a place, along a way on foot, every spacing metres; with area_radius, rings of them round the place too. Guards keep to walkways, so this makes a place usable for guards and patrols. Points must stay on one floor level (steps of 2.5 m at most).",parameters:P(withXY({spacing:{type:"number",description:"4 to 12 m, default 9"},area_radius:{type:"number",description:"0 to 36 m: rings of points round the place"}}))},
+    {name:"remove_walkways",description:"Take out the walkway points you added (add_walkways) within a radius of a place, and any patrol stops on them: to lay a tangled or cut walkway again, after buildings moved onto it.",parameters:P(withXY({radius:{type:"number",description:"metres, 2 to 300, default 20"}}))},
     {name:"shape_ground",description:"Shape the ground in a rectangle (or round) at a point: level (to a height, or its middle height), raise or lower (by_m, as far as you like: past 4 m the build rebuilds the terrain), smooth, remove (a hill or mountain taken away: the ground round it drawn in across it); or a ramp from one point to another.",parameters:P(withXY({
       mode:{type:"string",enum:["level","raise","lower","smooth","ramp","remove"]},width:{type:"number"},depth:{type:"number"},turn_deg:{type:"number",description:"how far the rectangle is turned, anticlockwise"},
       round:{type:"boolean"},height:{type:"number",description:"for level: the height (z) to level to"},by_m:{type:"number",description:"for raise and lower"},strength:{type:"number",description:"for smooth, 1 to 10"},
@@ -13962,7 +14493,7 @@ var AIB=(function(){
   // Each tool has a kind, and each agent of the AI designer (editor/ai.js) the
   // kinds it may use: look and design change nothing in the mission; build,
   // ground and texts do; library makes or gathers missions in the library.
-  var KIND={add_walkways:"ground",shape_ground:"ground",remove_ground_area:"ground",sculpt_terrain:"ground",
+  var KIND={add_walkways:"ground",remove_walkways:"ground",shape_ground:"ground",remove_ground_area:"ground",sculpt_terrain:"ground",
     write_texts:"texts",make_versions:"library",make_campaign:"library"};
   var BY={};T.forEach(function(t){BY[t.name]=t;t.kind=KIND[t.name]||(t.look?"look":t.design?"design":"build")});
   // what an agent may use: a list of kinds, or the old modes ("build" is all)
@@ -13993,6 +14524,8 @@ window.StudioAI={
     var bi=builtin(LV)||{};
     return {mission:MISSION,level:LV,levelName:bi.name||("Level "+LV),editable:!!(M&&!READONLY),
       empty:MODE==="empty",hasEmpty:!!bi.emptyMap,
+      // the level's own sky: the time of day and the land come with the level
+      setting:bi.environment?{land:bi.environment.label,when:bi.environment.when}:null,
       selected:sel&&sel.x!=null?AIB.brief(sel):null,group:multi.length>1?multi.length:0,
       counts:{yours:placements.length,objectives:objectives.length,events:events.length}};
   },
@@ -14017,6 +14550,8 @@ window.StudioAI={
   pickArea:function(cb){if(LEVEL)aiPickStart(cb)},
   cancelPick:function(){if(AIPICK)aiPickEnd(null)},
   setTags:function(list){AITAGS=(list||[]).slice();present()},
+  // is there ground there at all (an area off the map has none)
+  hasGround:function(x,y){return groundAt(x,y)!=null},
   setPlanAreas:function(list){AIPLAN=(list||[]).filter(function(a){return a&&isFinite(a.x)&&isFinite(a.y)});present()},
   // where things may go: the map's extent in metres
   extent:function(){var b=playBounds();return {x0:b.minX,x1:b.maxX,y0:b.minY,y1:b.maxY}},

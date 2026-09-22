@@ -61,11 +61,13 @@ var AGENTS = {
     },
     prompt: [
       "Your job: a whole mission, planned first and then built one area at a time. Most often the map is an empty map: the level's terrain, sky, weather, walkways and player start, with no buildings, guards, pickups, objectives or mission logic of its own. Everything the mission needs, you build.",
-      "1. Survey: get_overview, then look_around across the map (send the scout on broad sweeps): where the ground is flat, where it rises, where the walkways run, where the player starts.",
+      "1. Survey: get_overview, then ground_heights (a grid over the map, then round likely places) and look_around (send the scout on broad sweeps): where the ground is flat, where it rises, where the walkways run, where the player starts. Put areas where the ground suits them; a way between two areas that climbs more than 1 in 3 needs a long ramp or a winding way, so check it (ground_heights with from and to) before you plan it.",
       "2. Plan: call propose_plan with the whole mission: 3 to 6 areas in the order they will be built (each with its centre and size in metres, its role, and what goes there: ground work, structures, guards with their posts or patrols, cameras and alarms, pickups), at most 6 objectives (each in an area, with its target), the events, the settings, the player start and a briefing. The studio checks it; fix what it says and propose again. The user sees the plan as a card with the areas outlined on the map. Then stop: one line saying the plan is ready. Build nothing until they agree. When they ask for changes, call update_plan.",
       "3. Building: the studio asks for one area at a time (\"Build area C now\"). Build that area only, inside its bounds: level the ground where a compound or building goes, lay walkways (add_walkways) before placing guards, then the structures, guards, security and pickups. Look at what you made (look_around), then call plan_progress for the area: built, or problem with what went wrong. Keep your reply to a line.",
-      "4. Finishing: when asked to finish, add the objectives with their targets, the events, move the player start if the plan says so, set the time and weather, write the texts (write_texts), run check_mission and stealth_check, fix what they find, and end with a short summary.",
-      "Keep a way on foot from the player start to every objective, and more than one way in where you can. On an empty map there are none of the level's terminals, so no hack objectives: use reach, collect, kill or destroy."
+      "4. Finishing: when asked to finish, add the objectives with their targets, the events, move the player start if the plan says so, set the time and weather, write the texts (write_texts), run check_mission and stealth_check, fix what they find, and end with a short summary. check_mission includes a dry run of Apply: its Build problems are what Apply would refuse, so the mission is not finished while any is left.",
+      "Keep a way on foot from the player start to every objective, and more than one way in where you can.",
+      "What the map allows: build only where there is ground (get_overview's map is that ground, and the studio refuses an area off it); guards need walkways within 25 m, so lay them (add_walkways) from the level's own before placing guards, and if the ground is too steep for a step, ramp it (shape_ground, mode ramp) and lay them again. On an empty map there are none of the level's terminals, so no hack objectives; and a destroy objective needs something the game can blow up: on an empty map that is a security camera you place (a vehicle, mast or building you place can't be destroyed). The other objectives work anywhere: kill an officer, collect a weapon or item you place, reach a place.",
+      "Make it its own place, not the level it came from: the game's missions differ by their ground, their buildings and their light, so reshape the ground for yours (sculpt_terrain: a valley, a plateau, a crater, a ridge; shape_ground to level pads and ramp steps), lay the buildings out your own way, and give it its own weather (set_settings: snow or rain, how heavy, haze). The time of day is the level's own and can't be changed, so plan with the sky the map has. Nobody who played the original should recognise it."
     ]
   },
   edit: {
@@ -242,6 +244,19 @@ var CSS = [
 ".ai-model.light{border-color:var(--ok);color:var(--ok)}",
 ".ai-threads{position:absolute;left:8px;right:8px;top:44px;z-index:9;background:var(--surface);border:1px solid var(--line);border-radius:7px;box-shadow:var(--shadow);max-height:60%;overflow-y:auto;padding:5px}",
 ".ai-threads[hidden]{display:none}",
+".ai-mm-h{font:600 10.5px 'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:7px 6px 3px}",
+".ai-mm-i{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:5px;padding:4px 6px;cursor:pointer;color:var(--ink)}",
+".ai-mm-i:hover{background:var(--sunken)}.ai-mm-i.on{background:var(--accent-soft);border-color:var(--accent)}",
+".ai-mm-i b{display:block;font-weight:500;font-size:12.5px}.ai-mm-i small{display:block;font:10.5px 'IBM Plex Mono',monospace;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+".ai-mm-cfg{margin-top:5px;border-top:1px dashed var(--grid);border-radius:0 0 5px 5px}",
+".aim-head{display:flex;align-items:center;justify-content:space-between;margin:16px 0 6px}.aim-head b{font:600 15px 'Barlow Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}",
+".aim-list{display:flex;flex-direction:column;gap:5px}",
+".aim-row{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:var(--sunken)}",
+".aim-row.on{border-color:var(--accent)}.aim-row .btn{padding:2px 9px;font-size:12px}.aim-row .btn.sure{color:var(--danger);border-color:var(--danger)}",
+".aim-t{min-width:0}.aim-t b{font-weight:500;font-size:13.5px}.aim-t small{display:block;font:11px 'IBM Plex Mono',monospace;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+".aim-tag{margin-left:7px;font:600 10px 'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:0 6px;vertical-align:2px}",
+".aim-form{margin-top:12px;border:1px solid var(--accent);border-radius:7px;padding:10px 12px}.aim-form h4{margin:0 0 8px;font:600 15px 'Barlow Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase}",
+".aim-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}",
 ".ai-th{display:grid;grid-template-columns:1fr auto auto;gap:4px;align-items:center;border-radius:5px;padding:5px 6px;cursor:pointer}",
 ".ai-th:hover{background:var(--sunken)}.ai-th.on{background:var(--accent-soft)}",
 ".ai-th b{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}",
@@ -341,6 +356,7 @@ function build() {
     '<button class="ai-ib" id="ai-new" title="New chat\nStart a new conversation. The others stay in the chat list." aria-label="New chat">' + IC.plus + '</button>' +
     '<button class="ai-ib" id="ai-cfg" title="Settings\nAPI keys, models and how it works" aria-label="AI settings">' + IC.gear + '</button></div>' +
     '<div class="ai-threads" id="ai-threads" hidden></div>' +
+    '<div class="ai-threads ai-mmenu" id="ai-mmenu" role="menu" hidden></div>' +
     '<div class="ai-modes"><div class="seg" role="radiogroup" aria-label="Agent">' +
     ORDER.map(function (k) { var a = AGENTS[k]; return '<button class="btn" data-agent="' + k + '" role="radio" title="' + esc(a.label + "\n" + a.hint) + '">' + esc(a.label) + '</button>'; }).join("") +
     '</div><p class="hint" id="ai-mode-hint"></p></div>' +
@@ -371,7 +387,7 @@ function build() {
   panel.parentNode.insertBefore(tabs, panel.nextSibling);
   el = { panel: panel, rail: rail, log: $("ai-log"), input: $("ai-in"), send: $("ai-send"), status: $("ai-status"),
     statusT: $("ai-status-t"), chip: $("ai-model-chip"), usage: $("ai-usage"), hint: $("ai-mode-hint"), tags: $("ai-tags"), tagBtn: $("ai-tag"),
-    atts: $("ai-atts"), threads: $("ai-threads"), threadBtn: $("ai-thread"), threadT: $("ai-thread-t"), tbarT: $("ai-tbar-t") };
+    atts: $("ai-atts"), threads: $("ai-threads"), mmenu: $("ai-mmenu"), threadBtn: $("ai-thread"), threadT: $("ai-thread-t"), tbarT: $("ai-tbar-t") };
   el.tagBtn.addEventListener("click", pickTag);
   $("ai-sketch").addEventListener("click", sketch);
   $("ai-snap").addEventListener("click", snapMap);
@@ -387,9 +403,11 @@ function build() {
     if (files.length) { e.preventDefault(); files.forEach(addImageFile); }
   });
   el.threadBtn.addEventListener("click", function () { toggleThreads(); });
-  el.chip.addEventListener("click", switchModel);
+  el.chip.addEventListener("click", function () { toggleModelMenu(); });
+  el.chip.setAttribute("aria-haspopup", "true");
   document.addEventListener("mousedown", function (e) {
     if (!el.threads.hidden && !e.target.closest("#ai-threads") && !e.target.closest("#ai-thread")) toggleThreads(false);
+    if (!el.mmenu.hidden && !e.target.closest("#ai-mmenu") && !e.target.closest("#ai-model-chip")) toggleModelMenu(false);
   });
   if (window.StudioUI) StudioUI.resizable(panel, "l", "--aw", 300, 760);
   $("tab-sel").addEventListener("click", function () { showTab("sel"); });
@@ -765,6 +783,9 @@ function planProblems(p) {
     else if (b.w < 6 || b.d < 6 || b.w > 900 || b.d > 900) bad.push("Area " + L + " is " + Math.round(b.w) + " x " + Math.round(b.d) + " m; keep areas between 6 and 900 m across.");
     if (ext && (a.x < ext.x0 - 30 || a.x > ext.x1 + 30 || a.y < ext.y0 - 30 || a.y > ext.y1 + 30))
       bad.push("Area " + L + " at " + r1(a.x) + ", " + r1(a.y) + " is off the map (x " + Math.round(ext.x0) + " to " + Math.round(ext.x1) + ", y " + Math.round(ext.y0) + " to " + Math.round(ext.y1) + ").");
+    else if (A.hasGround && !A.hasGround(a.x, a.y))
+      bad.push("Area " + L + " at " + r1(a.x) + ", " + r1(a.y) + " has no ground under it: nothing can be built or walked there. Keep to x " +
+        Math.round(ext ? ext.x0 : 0) + " to " + Math.round(ext ? ext.x1 : 0) + ", y " + Math.round(ext ? ext.y0 : 0) + " to " + Math.round(ext ? ext.y1 : 0) + ".");
   });
   for (var i = 0; i < p.areas.length; i++) for (var j = i + 1; j < p.areas.length; j++) {
     var a = areaBox(p.areas[i]), b = areaBox(p.areas[j]);
@@ -996,160 +1017,258 @@ function paintChip() {
   var light = CHAT.model === "light" && lightOn();
   el.chip.hidden = !S;
   el.chip.classList.toggle("light", light);
-  el.chip.textContent = !S ? "" : light ? S.light.model.replace(/^.*\//, "") + " · light" : S.model + (S.effort && S.effort !== "none" ? " · " + S.effort : "");
+  var mm = S && savedModel(light ? (S.use || {}).light : (S.use || {}).main);
+  el.chip.textContent = !S ? "" : (mm ? mm.name : (light ? S.light.model : S.model).replace(/^.*\//, "")) +
+    (light ? " · light" : S.effort && S.effort !== "none" ? " · " + S.effort : "");
   el.chip.title = !S ? "" : (light ? "This chat runs on the light model\n" + S.light.model + " at " + S.light.baseUrl :
     "This chat runs on the main model\n" + S.model + ", thinking " + (S.effort || "default") + ", " + S.protocolInUse + " protocol") +
-    (lightOn() ? ". Click to switch to the " + (light ? "main" : "light") + " model." : "");
+    ". Click to switch models.";
 }
-// the chat on the other model: the light one is quicker and costs nothing, the
-// main one plans better
-function switchModel() {
-  if (RUN || !lightOn()) { if (!lightOn() && api()) api().toast("The light model is off. Turn it on in Settings, Light model"); return; }
-  CHAT.model = CHAT.model === "light" ? "main" : "light";
-  paintChip(); saveSoon();
-  api().toast(CHAT.model === "light" ? "This chat now runs on " + S.light.model + " (light)" : "This chat now runs on " + S.model);
+// The AI models pane of the Settings sheet: your saved models, as many as you
+// like, and which of them the designer and the light model use. Each saved model
+// has a provider (OpenAI: an API key and a model; or a server that speaks
+// OpenAI's API - LM Studio, vLLM, Ollama, OpenRouter, Unsloth: a model, its
+// address, its context window, and a key if it asks for one), how much it
+// thinks, whether it reads pictures, and a key of its own.
+var PROVIDERS = [["openai", "OpenAI"], ["compatible", "OpenAI-compatible: LM Studio, vLLM, Ollama, OpenRouter, Unsloth"]];
+var EFFORTS = [["none", "Off"], ["low", "Low"], ["medium", "Medium"], ["high", "High"]];
+function postSettings(b) {
+  return fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) })
+    .then(function (r) { return r.json(); }).then(function (n) {
+      if (!n.ok) throw new Error(n.error || "It was not saved.");
+      S = n; paintChip(); return n;
+    });
 }
-// The AI panes of the Settings sheet: the main model (role "main") or the light
-// one. Each model has a provider: OpenAI (an API key and a model) or a server
-// that speaks OpenAI's API (LM Studio, vLLM, Ollama, OpenRouter: a model, its
-// address, its context window, and a key if it asks for one).
-var PROVIDERS = [["openai", "OpenAI"], ["compatible", "OpenAI-compatible: LM Studio, vLLM, Ollama, OpenRouter"]];
-function renderSettings(host, role) {
+function savedModel(mid) { return ((S && S.models) || []).filter(function (m) { return m.id === mid; })[0] || null; }
+// a saved model in a line: where it runs, which model, how it thinks, its key
+function modelLine(m) {
+  var parts = [m.provider === "openai" ? "OpenAI" : String(m.baseUrl || "").replace(/^https?:\/\//, "").replace(/\/v1\/?$/, ""), m.model];
+  if (m.effort && m.effort !== "none") parts.push("thinking " + m.effort);
+  if (m.provider === "compatible" && m.contextWindow) parts.push((m.contextWindow % 1024 ? Math.round(m.contextWindow / 1000) : m.contextWindow / 1024) + "k window");
+  parts.push(m.keySaved ? "key saved" : m.provider === "openai" ? (m.keyFrom ? "key from " + m.keyFrom : "no key yet") : "no key");
+  return parts.join(" · ");
+}
+function renderSettings(host) {
   if (!host) return;
-  role = role === "light" ? "light" : "main";
   if (!hasServer()) { host.innerHTML = '<p class="hint">The AI designer needs the studio server.</p>'; return; }
   host.innerHTML = '<p class="hint">Loading…</p>';
+  var edit = null;             // the model on the form: a copy of a saved one, or a new one
+  var sure = null;             // the model whose Delete was clicked once
   loadSettings(true).then(function (s) {
     if (!s) { host.innerHTML = '<p class="hint">The AI settings did not load.</p>'; return; }
-    var light = role === "light", m = light ? (s.light || {}) : s, P = light ? "ail-" : "ais-";
-    // what is on the form, kept while the provider changes under it
-    var st = { provider: m.provider || "openai", model: m.model || "", base: m.provider === "compatible" ? (m.baseUrl || "") : "",
-      ctx: m.contextWindow || s.defaultContext || 16384, effort: m.effort || "none", on: light ? m.enabled !== false : true };
-    function id(x) { return P + x; }
-    function val(x) { var e = $(id(x)); return e ? e.value.trim() : ""; }
-    function keep() {
-      if ($(id("prov"))) st.provider = $(id("prov")).value;
-      if ($(id("model"))) st.model = val("model");
-      if ($(id("base"))) st.base = val("base");
-      if ($(id("ctx"))) st.ctx = +val("ctx") || st.ctx;
-      if ($(id("on"))) st.on = $(id("on")).checked;
-    }
-    function keyField(optional) {
-      var saved = m.keySaved, hint = saved ? "Saved (" + esc(m.keyHint || "…") + "). Type a new one to replace it" :
-        !light && m.hasKey && m.keyFrom ? "From " + esc(m.keyFrom) + " (" + esc(m.keyHint) + "). Type one to use instead" :
-        light && st.provider === "openai" ? "Empty: it uses the main model's key" : optional ? "Only if the server asks for one" : "sk-...";
-      return '<div class="field"><span class="lbl">API key' + (optional ? ", if it needs one" : "") + '</span><div class="ai-keyrow">' +
-        '<input id="' + id("key") + '" type="password" autocomplete="off" placeholder="' + hint + '">' +
-        (saved ? '<button class="btn" id="' + id("clear") + '" title="Forget the key\nThe studio no longer keeps it">Forget</button>' : '') + '</div></div>';
-    }
-    function paint() {
-      var h = '<h3 class="set-h">' + (light ? "Light model" : "AI designer") + '</h3>' +
-        '<p class="set-lead">' + (light ?
-          "A quick model, local or cheap, for the chores: naming chats, reading pictures, and looking things up for the main model. A chat can also run on it (click the model name in the AI panel)." :
-          "The model that plans and builds missions with you in the AI panel.") + '</p>';
-      if (light) h += '<label class="set-check"><input type="checkbox" id="' + id("on") + '"' + (st.on ? " checked" : "") + '> Use a light model</label>';
-      h += '<div class="set-block"' + (light && !st.on ? ' hidden' : '') + '>' +
-        '<div class="field"><span class="lbl">Provider</span><select id="' + id("prov") + '">' + PROVIDERS.map(function (p) {
-          return '<option value="' + p[0] + '"' + (st.provider === p[0] ? " selected" : "") + '>' + p[1] + '</option>'; }).join("") + '</select></div>';
-      if (st.provider === "openai") {
-        h += keyField(false) +
-          '<p class="hint">A key typed here is encrypted for your Windows account and kept by the studio, never in its settings file. The page never sees it again.</p>' +
-          '<div class="field"><span class="lbl">Model</span><input id="' + id("model") + '" list="' + id("models") + '" value="' + esc(st.model) + '" placeholder="gpt-5-mini">' +
-          '<datalist id="' + id("models") + '"></datalist></div>' +
-          '<p class="hint" id="' + id("note") + '"></p>';
-      } else {
-        h += '<div class="set-row2"><div class="field"><span class="lbl">Model</span><input id="' + id("model") + '" list="' + id("models") + '" value="' + esc(st.model) + '" placeholder="qwen/qwen3.5-9b">' +
-          '<datalist id="' + id("models") + '"></datalist></div>' +
-          '<div class="field" title="Context window\nHow much the model reads at once, in tokens, as the server loaded it"><span class="lbl">Context window (tokens)</span>' +
-          '<input id="' + id("ctx") + '" type="number" min="1024" step="1024" value="' + (+st.ctx || 16384) + '"></div></div>' +
-          '<div class="field"><span class="lbl">Server address</span><input id="' + id("base") + '" value="' + esc(st.base) + '" placeholder="http://localhost:1234/v1" spellcheck="false"></div>' +
-          '<p class="hint">The context window is the model\'s, as the server loaded it: LM Studio calls it Context Length. Every request is fitted into it: in a long chat the oldest parts are left out first, never the newest.</p>' +
-          keyField(true);
-      }
-      if (!light) {
-        var efforts = [["none", "Off"], ["low", "Low"], ["medium", "Medium"], ["high", "High"]];
-        h += '<div class="set-row2" style="margin-top:6px"><div class="field"><span class="lbl">Thinking</span><div class="seg" id="' + id("effort") + '">' + efforts.map(function (e) {
-            return '<button class="btn' + (st.effort === e[0] ? " on" : "") + '" data-v="' + e[0] + '">' + e[1] + '</button>'; }).join("") + '</div></div>' +
-          '<div class="set-row2"><div class="field" title="Pace\nHow long each step stays before the next, to watch it build"><span class="lbl">Pace (ms a step)</span>' +
-          '<input id="' + id("pace") + '" type="number" min="0" max="3000" step="50" value="' + (s.pace != null ? s.pace : 350) + '"></div>' +
-          '<div class="field" title="Steps per run\nThe most tool calls one request may make"><span class="lbl">Steps per run</span>' +
-          '<input id="' + id("steps") + '" type="number" min="5" max="200" value="' + (s.maxSteps || 60) + '"></div></div></div>';
-      } else {
-        h += '<label class="set-check" title="Thinking\nOff answers in a couple of seconds; on, a small model can think for a minute"><input type="checkbox" id="' + id("think") + '"' +
-            (st.effort && st.effort !== "none" ? " checked" : "") + '> Let it think first (much slower)</label>' +
-          '<label class="set-check"><input type="checkbox" id="' + id("vision") + '"' + (m.vision !== false ? " checked" : "") + '> It reads pictures</label>';
-      }
-      h += '</div><div class="set-foot"><span class="ai-msg" id="' + id("msg") + '"></span>' +
-        '<button class="btn" id="' + id("test") + '" title="Test\nSaves, then sends one short request with these settings">Test</button>' +
-        '<button class="btn primary" id="' + id("save") + '">Save</button></div>';
-      host.innerHTML = h;
-      wire();
-    }
-    function msg(t, good) { var e = $(id("msg")); if (e) { e.textContent = t; e.className = "ai-msg " + (good === true ? "good" : good === false ? "bad" : ""); } }
-    function body() {
-      keep();
-      var b = { provider: st.provider, model: st.model };
-      if (st.provider === "compatible") { b.baseUrl = st.base; b.contextWindow = +st.ctx || 16384; }
-      if (val("key")) b.apiKey = val("key");
-      if (light) {
-        b.enabled = st.on;
-        b.effort = $(id("think")) && $(id("think")).checked ? "default" : "none";
-        if ($(id("vision"))) b.vision = $(id("vision")).checked;
-        return { light: b };
-      }
-      b.effort = st.effort;
-      b.pace = +val("pace") || 0;
-      b.maxSteps = +val("steps") || 60;
-      return b;
-    }
-    function problem(b) {
-      var x = light ? b.light : b;
-      if (light && !x.enabled) return null;
-      if (!x.model) return "Say which model";
-      if (x.provider === "compatible" && !/^https?:\/\/.+/.test(x.baseUrl || "")) return "The server address starts with http:// or https://";
-      if (x.provider === "compatible" && !(x.contextWindow >= 1024)) return "The context window is at least 1024 tokens";
-      return null;
-    }
-    function save() {
-      var b = body(), bad = problem(b);
-      if (bad) { msg(bad, false); return Promise.reject(new Error(bad)); }
-      return fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) })
-        .then(function (r) { return r.json(); }).then(function (n) { S = n; paintChip(); return n; });
-    }
-    function models() {
-      var note = $(id("note"));
-      fetch("api/ai/models" + (light ? "?role=light" : "")).then(function (r) { return r.json(); }).then(function (x) {
-        if (!x.ok) { if (note) note.textContent = "The model list did not come: " + (x.error || "unknown error") + ". You can type a model name."; return; }
-        if ($(id("models"))) $(id("models")).innerHTML = x.models.map(function (v) { return '<option value="' + esc(v) + '">'; }).join("");
-        if (note) note.textContent = x.models.length + " chat models on your account. Type to pick one; the newest come first.";
-      }).catch(function () { if (note) note.textContent = "The model list did not come. You can type a model name."; });
-    }
-    function wire() {
-      $(id("prov")).addEventListener("change", function () { keep(); paint(); });
-      if ($(id("on"))) $(id("on")).addEventListener("change", function () { keep(); host.querySelector(".set-block").hidden = !st.on; });
-      host.querySelectorAll("#" + id("effort") + " [data-v]").forEach(function (b) {
-        b.addEventListener("click", function () {
-          st.effort = b.getAttribute("data-v");
-          host.querySelectorAll("#" + id("effort") + " [data-v]").forEach(function (x) { x.classList.toggle("on", x === b); });
-        });
-      });
-      $(id("save")).addEventListener("click", function () {
-        save().then(function () { msg("Saved", true); m = light ? (S.light || {}) : S; if ($(id("key"))) $(id("key")).value = ""; models(); })
-          .catch(function () { /* said above */ });
-      });
-      $(id("test")).addEventListener("click", function () {
-        save().then(function () { msg("Testing…"); return fetch("api/ai/test" + (light ? "?role=light" : ""), { method: "POST" }); })
-          .then(function (r) { return r.json(); }).then(function (t) { msg(t.message, !!t.ok); })
-          .catch(function (e) { if (!/^(Say|The )/.test(e.message)) msg(String(e.message || e), false); });
-      });
-      if ($(id("clear"))) $(id("clear")).addEventListener("click", function () {
-        fetch("api/ai/settings", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(light ? { light: { clearKey: true } } : { clearKey: true }) })
-          .then(function (r) { return r.json(); }).then(function (n) { S = n; renderSettings(host, role); });
-      });
-      models();
-    }
     paint();
+  });
+  function id(x) { return "aim-" + x; }
+  function val(x) { var e = $(id(x)); return e ? e.value.trim() : ""; }
+  function msg(t, good) { var e = $(id("msg")); if (e) { e.textContent = t || ""; e.className = "ai-msg " + (good === true ? "good" : good === false ? "bad" : ""); } }
+  function paint(note, good) {
+    var L = S.models || [], use = S.use || {}, lon = !!(S.light && S.light.enabled !== false);
+    function opts(sel) {
+      return L.map(function (m) { return '<option value="' + esc(m.id) + '"' + (m.id === sel ? " selected" : "") + '>' + esc(m.name) + '</option>'; }).join("");
+    }
+    var h = '<h3 class="set-h">AI models</h3>' +
+      '<p class="set-lead">Save as many models as you like, then pick which one designs with you and which one helps it. ' +
+      'Switch any time here, or from the model name at the top of the AI panel.</p>' +
+      '<div class="set-row2"><div class="field"><span class="lbl">The AI designer uses</span><select id="' + id("main") + '">' + opts(use.main) + '</select></div>' +
+      '<div class="field"><span class="lbl">The light model uses</span><select id="' + id("light") + '"' + (lon ? "" : " disabled") + '>' + opts(use.light) + '</select></div></div>' +
+      '<label class="set-check"><input type="checkbox" id="' + id("lon") + '"' + (lon ? " checked" : "") + '> Use a light model: a quick one that names chats, reads pictures and looks things up for the designer; a chat can run on it too</label>' +
+      '<div class="set-row2"><div class="field" title="Pace\nHow long each step stays before the next, to watch it build"><span class="lbl">Pace (ms a step)</span>' +
+      '<input id="' + id("pace") + '" type="number" min="0" max="3000" step="50" value="' + (S.pace != null ? S.pace : 350) + '"></div>' +
+      '<div class="field" title="Steps per run\nThe most tool calls one request may make"><span class="lbl">Steps per run</span>' +
+      '<input id="' + id("steps") + '" type="number" min="5" max="200" value="' + (S.maxSteps || 60) + '"></div></div>' +
+      '<div class="aim-head"><b>Saved models</b><button class="btn" id="' + id("add") + '">Add a model</button></div>' +
+      '<div class="aim-list">' + (L.length ? L.map(function (m) { return row(m, use); }).join("") : '<p class="hint">No models yet: add one.</p>') + '</div>' +
+      (edit ? form() : "") +
+      '<div class="set-foot"><span class="ai-msg" id="' + id("msg") + '"></span></div>';
+    host.innerHTML = h;
+    wire();
+    if (note) msg(note, good);
+  }
+  function row(m, use) {
+    var roles = [use.main === m.id ? "Designer" : "", use.light === m.id ? "Light" : ""].filter(Boolean);
+    return '<div class="aim-row' + (edit && edit.id === m.id ? " on" : "") + '" data-id="' + esc(m.id) + '">' +
+      '<div class="aim-t"><b>' + esc(m.name) + '</b>' + roles.map(function (r) { return '<span class="aim-tag">' + r + '</span>'; }).join("") +
+      '<small>' + esc(modelLine(m)) + '</small></div>' +
+      '<button class="btn" data-act="edit">Edit</button><button class="btn" data-act="test" title="Test\nOne short request to this model">Test</button>' +
+      '<button class="btn' + (sure === m.id ? " sure" : "") + '" data-act="del"' + (roles.length ? ' disabled title="In use: pick another model for it first"' : "") + '>' +
+      (sure === m.id ? "Sure?" : "Delete") + '</button></div>';
+  }
+  function form() {
+    var e = edit, compat = e.provider === "compatible";
+    var hint = e.keySaved ? "Saved (" + esc(e.keyHint || "…") + "). Type a new one to replace it" :
+      !compat && e.keyFrom ? "Empty: it uses the key from " + esc(e.keyFrom) : compat ? "Only if the server asks for one" : "sk-...";
+    return '<div class="aim-form"><h4>' + (e.id ? "Edit " + esc(e.name) : "A new model") + '</h4>' +
+      '<div class="set-row2"><div class="field"><span class="lbl">Name</span><input id="' + id("name") + '" value="' + esc(e.name || "") + '" placeholder="What to call it"></div>' +
+      '<div class="field"><span class="lbl">Provider</span><select id="' + id("prov") + '">' + PROVIDERS.map(function (p) {
+        return '<option value="' + p[0] + '"' + (e.provider === p[0] ? " selected" : "") + '>' + p[1] + '</option>'; }).join("") + '</select></div></div>' +
+      (compat ? '<div class="field"><span class="lbl">Server address</span><input id="' + id("base") + '" value="' + esc(e.baseUrl || "") + '" placeholder="http://localhost:1234/v1" spellcheck="false"></div>' : "") +
+      '<div class="set-row2"><div class="field"><span class="lbl">Model</span><input id="' + id("model") + '" list="' + id("models") + '" value="' + esc(e.model || "") + '" placeholder="' + (compat ? "qwen/qwen3.5-9b" : "gpt-5-mini") + '">' +
+      '<datalist id="' + id("models") + '"></datalist></div>' +
+      (compat ? '<div class="field" title="Context window\nHow much the model reads at once, in tokens, as the server loaded it"><span class="lbl">Context window (tokens)</span>' +
+        '<input id="' + id("ctx") + '" type="number" min="1024" step="1024" value="' + (+e.contextWindow || S.defaultContext || 16384) + '"></div>' :
+        '<div class="field"></div>') + '</div>' +
+      '<div class="field"><span class="lbl">API key' + (compat ? ", if it needs one" : "") + '</span><div class="ai-keyrow">' +
+      '<input id="' + id("key") + '" type="password" autocomplete="off" placeholder="' + hint + '">' +
+      (e.keySaved ? '<button class="btn" id="' + id("clear") + '" title="Forget the key\nThe studio no longer keeps it">Forget</button>' : '') + '</div></div>' +
+      '<div class="set-row2"><div class="field"><span class="lbl">Thinking</span><div class="seg" id="' + id("effort") + '">' + EFFORTS.map(function (x) {
+        return '<button class="btn' + ((e.effort || "none") === x[0] ? " on" : "") + '" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</div></div>' +
+      '<div class="field" title="Longest answer\nA cap on one answer, in tokens; empty for the model\'s own. A small local model can run on without end"><span class="lbl">Longest answer (tokens)</span>' +
+      '<input id="' + id("maxt") + '" type="number" min="256" step="256" value="' + (e.maxTokens || "") + '" placeholder="the model\'s own"></div></div>' +
+      '<label class="set-check"><input type="checkbox" id="' + id("vision") + '"' + (e.vision !== false ? " checked" : "") + '> It reads pictures</label>' +
+      (compat ? '<p class="hint">The context window is the model\'s, as the server loaded it (LM Studio calls it Context Length). Every request is fitted into it: in a long chat the oldest parts are left out first.</p>' :
+        '<p class="hint">A key typed here is encrypted for your Windows account and kept by the studio, never in its settings file. The page never sees it again.</p>') +
+      '<p class="hint" id="' + id("note") + '"></p>' +
+      '<div class="aim-btns"><button class="btn" id="' + id("cancel") + '">Cancel</button>' +
+      '<button class="btn" id="' + id("ftest") + '" title="Test\nSaves, then sends one short request to it">Test</button>' +
+      '<button class="btn primary" id="' + id("save") + '">Save</button></div></div>';
+  }
+  // what is on the form, kept while the provider changes under it
+  function keep() {
+    if (!edit || !$(id("name"))) return;
+    edit.name = val("name");
+    edit.provider = $(id("prov")).value;
+    edit.model = val("model");
+    if ($(id("base"))) edit.baseUrl = val("base");
+    if ($(id("ctx"))) edit.contextWindow = +val("ctx") || edit.contextWindow;
+    edit.maxTokens = +val("maxt") || null;
+    edit.vision = $(id("vision")).checked;
+    var k = val("key"); if (k) edit.apiKey = k;
+  }
+  function problem(e) {
+    if (!e.model) return "Say which model";
+    if (e.provider === "compatible" && !/^https?:\/\/.+/.test(e.baseUrl || "")) return "The server address starts with http:// or https://";
+    if (e.provider === "compatible" && !(e.contextWindow >= 1024)) return "The context window is at least 1024 tokens";
+    return null;
+  }
+  function saveForm() {
+    keep();
+    var e = edit, bad = problem(e);
+    if (bad) { msg(bad, false); return Promise.reject(new Error(bad)); }
+    var b = { name: e.name, provider: e.provider, model: e.model, effort: e.effort || "none", vision: e.vision !== false, maxTokens: e.maxTokens || "" };
+    if (e.id) b.id = e.id;
+    if (e.provider === "compatible") { b.baseUrl = e.baseUrl; b.contextWindow = +e.contextWindow || 16384; }
+    if (e.apiKey) b.apiKey = e.apiKey;
+    return postSettings({ saveModel: b }).then(function (n) { return n.savedId; })
+      .catch(function (x) { msg(x.message, false); throw x; });
+  }
+  function test(mid) {
+    msg("Testing " + (savedModel(mid) || {}).name + "…");
+    return fetch("api/ai/test?id=" + encodeURIComponent(mid), { method: "POST" }).then(function (r) { return r.json(); })
+      .then(function (t) { msg(t.message, !!t.ok); }).catch(function (x) { msg(String(x.message || x), false); });
+  }
+  function listModels() {
+    var note = $(id("note"));
+    if (!edit || !edit.id) { if (note) note.textContent = "Save it to see the models its server offers; or type one."; return; }
+    fetch("api/ai/models?id=" + encodeURIComponent(edit.id)).then(function (r) { return r.json(); }).then(function (x) {
+      if (!edit) return;
+      if (!x.ok) { if (note) note.textContent = "The model list did not come: " + (x.error || "unknown error") + ". You can type a model name."; return; }
+      if ($(id("models"))) $(id("models")).innerHTML = x.models.map(function (v) { return '<option value="' + esc(v) + '">'; }).join("");
+      if (note) note.textContent = x.models.length + " chat models there. Type to pick one.";
+    }).catch(function () { if (note) note.textContent = "The model list did not come. You can type a model name."; });
+  }
+  function wire() {
+    $(id("main")).addEventListener("change", function () {
+      var v = this.value;
+      postSettings({ use: { main: v } }).then(function () { paint("The AI designer now uses " + savedModel(v).name, true); }).catch(function (x) { msg(x.message, false); });
+    });
+    $(id("light")).addEventListener("change", function () {
+      var v = this.value;
+      postSettings({ use: { light: v } }).then(function () { paint("The light model now uses " + savedModel(v).name, true); }).catch(function (x) { msg(x.message, false); });
+    });
+    $(id("lon")).addEventListener("change", function () {
+      var on = this.checked;
+      postSettings({ light: { enabled: on } }).then(function () { paint(on ? "The light model is on" : "The light model is off", true); }).catch(function (x) { msg(x.message, false); });
+    });
+    [["pace", "pace"], ["steps", "maxSteps"]].forEach(function (f) {
+      $(id(f[0])).addEventListener("change", function () {
+        var b = {}; b[f[1]] = +this.value || 0;
+        postSettings(b).then(function () { msg("Saved", true); }).catch(function (x) { msg(x.message, false); });
+      });
+    });
+    $(id("add")).addEventListener("click", function () {
+      edit = { provider: "compatible", baseUrl: "http://localhost:1234/v1", contextWindow: S.defaultContext || 16384, effort: "none", vision: true };
+      sure = null; paint(); var n = $(id("name")); if (n) n.focus();
+    });
+    host.querySelectorAll(".aim-row [data-act]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var mid = b.closest(".aim-row").getAttribute("data-id"), m = savedModel(mid), act = b.getAttribute("data-act");
+        if (!m) return;
+        if (act === "edit") { edit = JSON.parse(JSON.stringify(m)); sure = null; paint(); return; }
+        if (act === "test") { test(mid); return; }
+        if (sure !== mid) { sure = mid; paint(); return; }
+        sure = null;
+        postSettings({ deleteModel: mid }).then(function () { if (edit && edit.id === mid) edit = null; paint(m.name + " is deleted", true); })
+          .catch(function (x) { paint(); msg(x.message, false); });
+      });
+    });
+    if (!edit) return;
+    $(id("prov")).addEventListener("change", function () {
+      keep();
+      if (edit.provider === "openai") delete edit.baseUrl;
+      else if (!edit.baseUrl) edit.baseUrl = "http://localhost:1234/v1";
+      paint();
+    });
+    host.querySelectorAll("#" + id("effort") + " [data-v]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        edit.effort = b.getAttribute("data-v");
+        host.querySelectorAll("#" + id("effort") + " [data-v]").forEach(function (x) { x.classList.toggle("on", x === b); });
+      });
+    });
+    $(id("cancel")).addEventListener("click", function () { edit = null; paint(); });
+    $(id("save")).addEventListener("click", function () {
+      keep();
+      var name = (edit.name || edit.model || "").trim();
+      saveForm().then(function () { edit = null; paint("Saved " + (name || "the model"), true); }).catch(function () { /* said */ });
+    });
+    $(id("ftest")).addEventListener("click", function () {
+      saveForm().then(function (mid) { edit = JSON.parse(JSON.stringify(savedModel(mid))); paint(); return test(mid); }).catch(function () { /* said */ });
+    });
+    if ($(id("clear"))) $(id("clear")).addEventListener("click", function () {
+      postSettings({ saveModel: { id: edit.id, clearKey: true } }).then(function () { edit = JSON.parse(JSON.stringify(savedModel(edit.id))); paint("The key is forgotten", true); })
+        .catch(function (x) { msg(x.message, false); });
+    });
+    listModels();
+  }
+}
+
+// The model name at the top of the panel: a menu to switch, without Settings -
+// which model this chat runs on, and which saved model the designer and the
+// light model use.
+function toggleModelMenu(on) {
+  var mm = el.mmenu;
+  if (on === undefined) on = mm.hidden;
+  el.chip.setAttribute("aria-expanded", String(!!on));
+  if (!on || !S) { mm.hidden = true; return; }
+  var L = S.models || [], use = S.use || {}, light = CHAT.model === "light" && lightOn();
+  function item(v, name, sub, cur) {
+    return '<button class="ai-mm-i' + (cur ? " on" : "") + '" data-v="' + esc(v) + '"><b>' + esc(name) + '</b><small>' + esc(sub) + '</small></button>';
+  }
+  var h = '<div class="ai-mm-h">This chat runs on</div>' +
+    item("chat:main", "The designer's model", (savedModel(use.main) || {}).name || S.model, !light) +
+    (lightOn() ? item("chat:light", "The light model", (savedModel(use.light) || {}).name || S.light.model, light) : "") +
+    '<div class="ai-mm-h">The AI designer uses</div>' + L.map(function (m) { return item("main:" + m.id, m.name, modelLine(m), use.main === m.id); }).join("") +
+    (lightOn() ? '<div class="ai-mm-h">The light model uses</div>' + L.map(function (m) { return item("light:" + m.id, m.name, modelLine(m), use.light === m.id); }).join("") : "") +
+    '<button class="ai-mm-i ai-mm-cfg" data-v="cfg"><b>Add or change models…</b></button>';
+  mm.innerHTML = h;
+  mm.hidden = false;
+  mm.querySelectorAll("[data-v]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var v = b.getAttribute("data-v"), A = api();
+      toggleModelMenu(false);
+      if (v === "cfg") { if (A) A.openSettings("ai"); return; }
+      if (RUN) { if (A) A.toast("Wait for the designer to finish, or stop it, before switching models"); return; }
+      if (v === "chat:main" || v === "chat:light") {
+        CHAT.model = v === "chat:light" ? "light" : "main";
+        paintChip(); saveSoon();
+        if (A) A.toast("This chat now runs on " + (CHAT.model === "light" ? "the light model" : "the designer's model"));
+        return;
+      }
+      var role = v.slice(0, v.indexOf(":")), mid = v.slice(v.indexOf(":") + 1), u = {};
+      u[role] = mid;
+      postSettings({ use: u }).then(function () {
+        if (A) A.toast((role === "main" ? "The AI designer" : "The light model") + " now uses " + savedModel(mid).name);
+      }).catch(function (x) { if (A) A.toast(x.message); });
+    });
   });
 }
 
@@ -1170,7 +1289,7 @@ function emptyState() {
     return d;
   }
   if (S && !S.hasKey) {
-    d.innerHTML = '<h3>AI designer</h3><div class="ai-card"><b>Connect a model.</b> In Settings, AI designer: an OpenAI API key, or a server of your own (LM Studio, vLLM, Ollama), and a model.' +
+    d.innerHTML = '<h3>AI designer</h3><div class="ai-card"><b>Connect a model.</b> In Settings, AI models: add one (an OpenAI API key and a model, or a server of your own: LM Studio, vLLM, Ollama, Unsloth) and pick it for the designer.' +
       '<br><button class="btn primary" id="ai-go-cfg">Open settings</button></div>';
     d.querySelector("#ai-go-cfg").addEventListener("click", function () { api().openSettings("ai"); });
     return d;
@@ -1403,6 +1522,8 @@ function label(name, a, r) {
   var where = a.place ? " at " + a.place : "";
   switch (name) {
     case "find_places": return "Looked for places" + (a.query ? " named “" + a.query + "”" : "");
+    case "ground_heights": return a.from && a.to ? "Looked at the ground from " + Math.round(a.from[0]) + ", " + Math.round(a.from[1]) + " to " + Math.round(a.to[0]) + ", " + Math.round(a.to[1]) +
+      (r.rise_m != null ? " (" + (r.rise_m >= 0 ? "rises " : "falls ") + Math.abs(Math.round(r.rise_m)) + " m)" : "") : "Looked at how the ground lies" + (a.x != null ? " round " + Math.round(a.x) + ", " + Math.round(a.y) : "");
     case "look_around": return "Looked around" + (a.place ? " " + a.place : r.at && r.at.name ? " " + r.at.name : a.x != null ? " " + Math.round(a.x) + ", " + Math.round(a.y) : "");
     case "list_catalog": return "Looked through the " + (a.kind || "catalogue");
     case "get_item": return "Looked at " + ((r.item && r.item.name) || a.id || "a thing");
@@ -1492,7 +1613,8 @@ function instructions() {
     "");
   P.push.apply(P, ag.prompt);
   P.push("",
-    "Now: the mission \"" + c.mission + "\" on " + c.levelName + " (level " + c.level + ")" + (c.empty ? ", made from the level's empty map" : "") + ", " +
+    "Now: the mission \"" + c.mission + "\" on " + c.levelName + " (level " + c.level + ")" + (c.empty ? ", made from the level's empty map" : "") +
+      (c.setting ? " (" + c.setting.land + "; its sky: " + c.setting.when + ", which a mission can't change: weather, haze and snow or rain can)" : "") + ", " +
       (c.editable ? "which can be changed" : "a built-in mission, read only") +
       ". Yours so far: " + c.counts.yours + " things, " + c.counts.objectives + " objectives, " + c.counts.events + " events." +
       (c.selected ? " The user has selected " + c.selected.name + " (" + c.selected.id + ") at " + c.selected.x + ", " + c.selected.y + "." : "") +
@@ -1653,7 +1775,17 @@ function ask() {
       }
     }
     var tm = limited(ctrl, body, turn);
-    streamChat(body, ev, ctrl.signal)
+    // a connection dropped before anything came (the network, a server busy
+    // with a build) is tried again once, so a long build doesn't stop on it
+    function attempt(again) {
+      return streamChat(body, ev, ctrl.signal).then(function (err) {
+        var dropped = err && /^The request failed: /.test(err) && !turn.text && !turn.calls.length && !turn.error;
+        if (!dropped || !again) return err;
+        status("The connection dropped; trying again…");
+        return sleep(1500).then(function () { return attempt(false); });
+      });
+    }
+    attempt(true)
       .then(function (err) {
         clearTimeout(tm);
         if (turn.timedOut) turn.error = "The light model took more than 3 minutes on one answer, so it was stopped. Try the main model for this.";

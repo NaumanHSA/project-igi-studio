@@ -924,6 +924,29 @@ if lifted:
     report.append("%d guard(s) already in the level now stand on the floor of the building they are in" % lifted)
 floors_to_surface()     # floors added for guards just now
 
+# What came with a building - its doors, its lift, the things inside it - keeps
+# its place: the building may have been set down on the ground or lifted onto
+# levelled ground since, and its own things go with it rather than staying where
+# the plan first put them.
+_by_uid = {p.get("uid"): p for p in PLACE if p.get("uid")}
+_moved_doors = 0
+for _d in PLACE:
+    _sl, _of = _d.get("slot"), _d.get("of")
+    if not (isinstance(_sl, dict) and _of and _of in _by_uid):
+        continue
+    _b = _by_uid[_of]
+    _g = float(_b.get("gamma") or 0)
+    _c, _s2 = math.cos(_g), math.sin(_g)
+    _x = round(float(_b["x"]) + _sl.get("dx", 0) * _c - _sl.get("dy", 0) * _s2, 3)
+    _y = round(float(_b["y"]) + _sl.get("dx", 0) * _s2 + _sl.get("dy", 0) * _c, 3)
+    _z = round(float(_b["z"]) + _sl.get("dz", 0), 3)
+    if abs(_x - float(_d["x"])) > 0.01 or abs(_y - float(_d["y"])) > 0.01 or abs(_z - float(_d["z"])) > 0.01:
+        _moved_doors += 1
+    _d["x"], _d["y"], _d["z"] = _x, _y, _z
+    _d["gamma"] = round((_g + _sl.get("dh", 0)) % (2 * math.pi), 5)
+if _moved_doors:
+    report.append("%d thing(s) of a building's own moved with it" % _moved_doors)
+
 # Every height is settled now: the editor takes them from here, so its map and
 # its 3D close-up show things where the game will have them (serve.py
 # mission_heights). Written before anything can stop the build.
@@ -1518,6 +1541,60 @@ for s in soldiers + EDIT_SOLDIERS:
             errors.append("%s walks %d -> %d on graph %s: the graph's routing table "
                           "has no path between them" % (s.get("name"), a, c, gid))
 
+# When the mission starts, a guard walks to his walkway graph. With no node near
+# him at his own height he walks off to the nearest one there is - across the map,
+# or up into the air where a building's floor used to be (an empty map keeps the
+# graphs of the buildings it takes away). So every guard needs one where he stands.
+GUARD_REACH = 30.0                  # metres he may walk to his walkways
+GUARD_STEP = 2.5                    # the height difference a floor allows (SAME_FLOOR)
+
+
+def nearest_node(gid, here):
+    """(metres away, height difference, node) of the node of graph gid nearest this
+    point on the ground, or None when the graph has none."""
+    g = peek_graph(str(gid))
+    if g is None or not g.nodes:
+        return None
+    best = None
+    for n in g.nodes:
+        w = node_world(str(gid), n)
+        d = math.dist(here[:2], w[:2])
+        if best is None or d < best[0]:
+            best = (d, abs(w[2] - here[2]), n)
+    return best
+
+
+for s in soldiers + EDIT_SOLDIERS:
+    if s.get("arriveOn") or s.get("x") is None:
+        continue                    # one that arrives on an event is put there by the event
+    here = (float(s["x"]), float(s["y"]), float(s["z"]))
+    who = s.get("name") or "a guard"
+    gid = str(s.get("graph") or "")
+    near = nearest_node(gid, here) if gid else None
+    if not gid or near is None:
+        # no graph of its own (or an empty one): the nearest graph with a node on
+        # his floor, rather than whichever the level lists first
+        best = None
+        for other in origins:
+            n = nearest_node(other, here)
+            if n and n[1] <= GUARD_STEP and (best is None or n[0] < best[1][0]):
+                best = (other, n)
+        if best is None:
+            errors.append("%s has no walkways near him: the game walks him to his graph when the "
+                          "mission starts, and there is none he can stand on. Lay walkways where he "
+                          "stands (the studio's Walkways tool, or add_walkways)." % who)
+            continue
+        gid, near = best[0], best[1]
+        s["graph"] = gid
+        warnings.append("%s had no walkways of his own - given graph %s, %.0f m away" % (who, gid, near[0]))
+    if near[1] > GUARD_STEP:
+        errors.append("%s stands %.1f m below or above his walkways (graph %s, the nearest point is "
+                      "%.0f m away): in the game he walks to them and ends up in the air. Lay walkways "
+                      "where he stands, or put him where they are." % (who, near[1], gid, near[0]))
+    elif near[0] > GUARD_REACH:
+        warnings.append("%s stands %.0f m from his walkways (graph %s): in the game he walks off to "
+                        "them when the mission starts" % (who, near[0], gid))
+
 if errors:
     print("PLAN REJECTED - %d problem(s):" % len(errors))
     for e in errors:
@@ -1772,11 +1849,19 @@ for p in pickups:
                       % (pk_id, p.get("name", "Pickup"), q(p["x"]), q(p["y"]), q(p["z"]),
                          pa, pb, pg, pid_, EOL))
 
-OWN_GATES = []                  # gate leaves of yours: Door tasks, written with their switch
+OWN_GATES = []                  # gate leaves and doors of yours: Door tasks
+OWN_LIFTS = []                  # lifts of yours: an Elevator, its path and its switches
 for o in objects:
     if isinstance(o.get("door"), dict):
         o["_tid"] = take_id()
         OWN_GATES.append(o)
+        continue
+    if isinstance(o.get("lift"), dict):
+        _d0 = o["lift"]
+        o["_spline"], o["_tid"] = take_id(), take_id()
+        o["_cabin_sw"] = take_id() if _d0.get("inside") else -1
+        o["_calls"] = [take_id() for _ in (_d0.get("calls") or [])[:len(_d0.get("stops") or [])]]
+        OWN_LIFTS.append(o)
         continue
     # a building with a map computer label needs a task id for the label to point at
     ob_id = take_id() if isinstance(o.get("label"), dict) and (o["label"].get("title") or "").strip() else -1
@@ -1886,7 +1971,7 @@ for kit in alarm_kit:
         # a gate's switch: the gate panel, as level 10 opens its gate with one
         sid = take_id()
         kit["_tid"] = sid
-        blocks.append('Task_New(%d, "Switch", "%s", %s, %s, %s, 0, 0, %s, "1", FALSE, '
+        blocks.append('Task_New(%d, "Switch", "%s", %s, %s, %s, 0, 0, %s, "1", TRUE, '
                       '"202_01_1", "202_01_1", "202_01_1", "202_01_1", "202_01_1", FALSE), %s'
                       % (sid, _qstr_early(kit.get("name") or "Gate switch", 40), q(kit["x"]), q(kit["y"]), q(kit["z"]), g, EOL))
         continue
@@ -1909,24 +1994,245 @@ for kit in alarm_kit:
     if key and alarm_ctl_id(key) is None:
         warnings.append("%s is on an alarm system that is no longer in the mission" % (kit.get("name") or kit["type"]))
 
-# ---------------------------------------------------------------- gates of yours
-# A sliding gate leaf (304) as the levels write theirs (level 10: two leaves
-# sliding 3 m apart, "Switch_200.isPressed" opening them): Position start, stop
-# X and Y (it slides along its own x), slider, orientation, model, max angle,
-# open time, not pickable, locked, open while its switch is pressed on.
+# ---------------------------------------------------------------- doors of yours
+# A door of yours is written the way the game writes its own (studio/extract/
+# doors.py reads them out of the levels): position, the stop it slides to in its
+# own frame, the slider, its three angles, its model, max angle, open time,
+# whether it can be picked and for how long, then the locked, open and close
+# expressions and its three sounds. A plain door has no locked expression and
+# the game's own close expression, so the player opens it by walking up to it
+# and the "open" prompt comes; a gate leaf (304, as level 10 writes its two
+# leaves sliding apart) is locked and opens while its switch is pressed.
+DOOR_DEFAULTS = {}
+try:
+    DOOR_DEFAULTS = json.loads((paths.data() / "doors.json").read_text(encoding="utf-8")).get("models") or {}
+except (OSError, ValueError):
+    pass
+GATE_OPEN_S = 12                # a gate of yours stands open this long after its switch
+GATE_SOUNDS = ["gate_loop_e", "gate_loop_e", "gate_loop"]
+DOOR_SOUNDS = ["door_open_1", "door_close_1", "door_slide_1"]
+# a door of ours never carries another level's wiring: an expression naming a
+# task by id ("Switch_211.isLastPressed") is dropped for the plain timed close
+NAMES_TASK = re.compile(r"(?:Switch|Door|Generator|Elevator|EditVariable|CutScene|Terminal)_\d+\.")
+TIMED_CLOSE = "this.nDoorOpenTicks > 6*GAME_FREQUENCY"
+
+
+CABIN_FLOOR = {}                # cabin model -> how far its floor is below its origin
+
+
+def _cabin_drop(model):
+    """A lift cabin's origin stands this far above its floor (models.json z0)."""
+    if model not in CABIN_FLOOR:
+        try:
+            z0 = (json.loads((paths.data() / "models.json").read_text(encoding="utf-8"))["sizes"]
+                  .get(model) or {}).get("z0") or 0.0
+        except (OSError, ValueError, KeyError):
+            z0 = 0.0
+        CABIN_FLOOR[model] = -float(z0)
+    return CABIN_FLOOR[model]
+
+
+def _lift_of_door(o):
+    """(the lift this door is part of, which floor of it) - only a door the game
+    itself wires to a lift ("liftFloor": it opens when the cabin is at that
+    floor, and is locked otherwise). An ordinary door beside a shaft stays the
+    player's to open."""
+    floor = (o.get("door") or {}).get("liftFloor")
+    if floor is None:
+        return None, None
+    near = None
+    for L in OWN_LIFTS:
+        d = math.dist((float(o["x"]), float(o["y"])), (float(L["x"]), float(L["y"])))
+        if d <= 12.0 and (near is None or d < near[1]):
+            near = (L, d)
+    if near is None:
+        return None, None
+    stops = near[0]["lift"].get("stops") or []
+    return near[0], min(int(floor), max(0, len(stops) - 1))
+
+
+def _door_angles(head, fixed, heading):
+    """The three angles of a door of this model, turned to face `heading`."""
+    f = list(fixed or [0, 0])
+    while len(f) < 2:
+        f.append(0)
+    if head == 0:                       # it lies on its side: alpha carries the heading
+        return (-heading, f[0], f[1])
+    return (f[0], f[1], heading)
+
+
 for _g in OWN_GATES:
     _d = _g["door"]
+    _dm = DOOR_DEFAULTS.get(_g.get("model") or "") or {}
+    _kind = _d.get("kind") or "gate"
     _sw = next((k for k in alarm_kit if k.get("uid") == _d.get("switch") and "_tid" in k), None)
-    _open = "Switch_%d.isPressed" % _sw["_tid"] if _sw else "0"
-    if not _sw:
-        warnings.append("%s has no switch to open it - it stays shut" % (_g.get("name") or "a gate"))
-    blocks.append('Task_New(%d, "Door", "%s", %s, %s, %s, %s, %s, 0, 0, 0, %s, "%s", 0, 2.0, FALSE, 4.0, "1", "%s", "", '
-                  '"gate_loop_e", "gate_loop_e", "gate_loop"), %s'
-                  % (_g["_tid"], _qstr_early(_g.get("name") or "Gate", 40), q(_g["x"]), q(_g["y"]), q(_g["z"]),
-                     repr(round(float(_d.get("stop", [0, 0])[0]), 3)), repr(round(float(_d.get("stop", [0, 0])[1]), 3)),
-                     repr(round(float(_g.get("gamma") or 0), 5)), _g.get("model") or "304_01_1", _open, EOL))
-if OWN_GATES:
-    report.append("%d gate leaf(s) of yours, opened by their switch" % len(OWN_GATES))
+    if _kind == "gate":
+        # the switch stays pressed while the gate is open, and pressing it again
+        # lets it go: the leaves follow it both ways
+        _open = "Switch_%d.isPressed" % _sw["_tid"] if _sw else "0"
+        _close = "this.nDoorOpenTicks > %d*GAME_FREQUENCY" % GATE_OPEN_S
+        _locked = ""
+        _sounds = _d.get("sounds") or _dm.get("sounds") or GATE_SOUNDS
+        if not _sw:
+            warnings.append("%s has no switch to open it - it stays shut" % (_g.get("name") or "a gate"))
+    else:
+        _lift, _floor = _lift_of_door(_g)
+        if _lift is not None:
+            # a lift's own door: the lift works it, as the game's lift doors are
+            _locked = "1"
+            _open = "Elevator_%d.vFloor == %d" % (_lift["_tid"], _floor)
+            _buttons = list(_lift["_calls"]) + ([_lift["_cabin_sw"]] if _lift["_cabin_sw"] >= 0 else [])
+            _close = " || ".join("Switch_%d.isLastPressed" % b for b in _buttons)
+            _sounds = _d.get("sounds") or _dm.get("sounds") or DOOR_SOUNDS
+            _stop = _d.get("stop") or _dm.get("stop") or [0, 0]
+            _slider = _d.get("slider", _dm.get("slider", 0))
+            _a, _b, _c = _door_angles(_d.get("head", _dm.get("head", 2)), _d.get("fixed", _dm.get("fixed")),
+                                      float(_g.get("gamma") or 0))
+            _open_t = _d.get("openTime", _dm.get("openTime", 2.0))
+            _pick_t = _d.get("pickTime", _dm.get("pickTime", 4.0))
+            _max_a = _d.get("maxAngle", _dm.get("maxAngle", 0))
+            _snd = (list(_sounds) + ["", "", ""])[:3]
+            _lift_doors = _lift.setdefault("_doors", [])
+            _lift_doors.append(_g["_tid"])
+            blocks.append('Task_New(%d, "Door", "%s", %s, %s, %s, %s, %s, %s, %s, %s, %s, "%s", %s, %s, FALSE, %s, "%s", "%s", "%s", '
+                          '"%s", "%s", "%s"), %s'
+                          % (_g["_tid"], _qstr_early(_g.get("name") or "Lift door", 40),
+                             q(_g["x"]), q(_g["y"]), q(_g["z"]),
+                             repr(round(float(_stop[0]), 3)), repr(round(float(_stop[1]), 3)), repr(round(float(_slider), 3)),
+                             repr(round(_a, 5)), repr(round(_b, 5)), repr(round(_c, 5)),
+                             _g.get("model") or "505_01_1", repr(round(float(_max_a), 3)), repr(round(float(_open_t), 3)),
+                             repr(round(float(_pick_t), 3)), _locked, _open, _close,
+                             _snd[0], _snd[1], _snd[2], EOL))
+            continue
+        # a door: the player opens it, unless a switch of yours does
+        _open = "Switch_%d.isLastPressed" % _sw["_tid"] if _sw else ""
+        _locked = "1" if (_sw or _d.get("locked")) else ""
+        if _d.get("locked") and _d["locked"] != "1":
+            _locked = str(_d["locked"])
+        _close = "" if _sw else (_d.get("close") or _dm.get("close") or TIMED_CLOSE)
+        if NAMES_TASK.search(_close):
+            _close = TIMED_CLOSE            # a plan made before this was noticed
+        _sounds = _d.get("sounds") or _dm.get("sounds") or DOOR_SOUNDS
+    _stop = _d.get("stop") or _dm.get("stop") or [0, 0]
+    _slider = _d.get("slider", _dm.get("slider", 0))
+    _a, _b, _c = _door_angles(_d.get("head", _dm.get("head", 2)), _d.get("fixed", _dm.get("fixed")),
+                              float(_g.get("gamma") or 0))
+    _open_t = _d.get("openTime", _dm.get("openTime", 2.0))
+    _pick_t = _d.get("pickTime", _dm.get("pickTime", 4.0))
+    _max_a = _d.get("maxAngle", _dm.get("maxAngle", 0))
+    _snd = (list(_sounds) + ["", "", ""])[:3]
+    blocks.append('Task_New(%d, "Door", "%s", %s, %s, %s, %s, %s, %s, %s, %s, %s, "%s", %s, %s, FALSE, %s, "%s", "%s", "%s", '
+                  '"%s", "%s", "%s"), %s'
+                  % (_g["_tid"], _qstr_early(_g.get("name") or ("Gate" if _kind == "gate" else "Door"), 40),
+                     q(_g["x"]), q(_g["y"]), q(_g["z"]),
+                     repr(round(float(_stop[0]), 3)), repr(round(float(_stop[1]), 3)), repr(round(float(_slider), 3)),
+                     repr(round(_a, 5)), repr(round(_b, 5)), repr(round(_c, 5)),
+                     _g.get("model") or "304_01_1", repr(round(float(_max_a), 3)), repr(round(float(_open_t), 3)),
+                     repr(round(float(_pick_t), 3)), _locked, _open, _close.replace('"', "'"),
+                     _snd[0], _snd[1], _snd[2], EOL))
+_n_gates = sum(1 for _g in OWN_GATES if (_g["door"].get("kind") or "gate") == "gate")
+if _n_gates:
+    report.append("%d gate leaf(s) of yours, opened by their switch" % _n_gates)
+if len(OWN_GATES) - _n_gates:
+    report.append("%d door(s) of yours that open in the game" % (len(OWN_GATES) - _n_gates))
+
+# ---------------------------------------------------------------- lifts of yours
+# A lift as the game writes its own (level 12's Guard HQ, level 13, level 5):
+# a SplineObj whose waypoints are the floors it stops at, an "Elevator" task on
+# it with the cabin's model and its speed, a call switch at each floor, and one
+# more inside the cabin, written into the Elevator itself. "Go to floor k"
+# happens when that floor's call switch is pressed, or when the cabin is at
+# another floor and the button inside it is pressed.
+SPLINE_WP = 'Task_New(-1, "SplineObjWaypoint", "", 0, 0, 6.283181190490723, %s, %s, %s, "", "", 20, FALSE, FALSE, FALSE)'
+LIFT_SWITCH = 'Task_New(%d, "Switch", "%s", %s, %s, %s, 0, 0, %s, "1", FALSE, "%s", "%s", "%s", "%s", "%s", FALSE)'
+LIFT_BUTTON = "202_01_1"
+
+
+def _lift_at(o, p):
+    """A point of a lift, given in the lift's own frame, in game units."""
+    g = float(o.get("gamma") or 0)
+    c, sn = math.cos(g), math.sin(g)
+    return (q(float(o["x"]) + p[0] * c - p[1] * sn), q(float(o["y"]) + p[0] * sn + p[1] * c),
+            q(float(o["z"]) + p[2]))
+
+
+for _L in OWN_LIFTS:
+    _d = _L["lift"]
+    _stops = [list(map(float, st))[:3] for st in (_d.get("stops") or [])]
+    if len(_stops) < 2:
+        warnings.append("%s has fewer than two floors - left out" % (_L.get("name") or "a lift"))
+        continue
+    _calls = [c for c in (_d.get("calls") or [])][:len(_stops)]
+    _sp_id, _lift_id = _L["_spline"], _L["_tid"]
+    _cab_id = _L["_cabin_sw"]
+    _call_ids = list(_L["_calls"])[:len(_calls)]
+    _g = repr(round(float(_L.get("gamma") or 0), 5))
+    # the path the cabin runs on
+    _wps = ", ".join(SPLINE_WP % _lift_at(_L, st) for st in _stops)
+    blocks.append('Task_New(%d, "SplineObj", "", FALSE, FALSE, FALSE, FALSE, 20, 0, 0, 0, 0, %s, 1, 1, 1, 0, 0, 0, %s), %s'
+                  % (_sp_id, _g, _wps, EOL))
+    # a call button at each floor
+    for _i, (_c, _cid) in enumerate(zip(_calls, _call_ids)):
+        _x, _y, _z = _lift_at(_L, _c)
+        blocks.append(LIFT_SWITCH % ((_cid, _qstr_early("Lift button", 40), _x, _y, _z,
+                                      repr(round(float(_L.get("gamma") or 0) + float(_c[3] if len(_c) > 3 else 0), 5)))
+                                     + (LIFT_BUTTON,) * 5) + ", %s" % EOL)
+    # which floor each call button belongs to: the one it stands nearest
+    _floor_of = {}
+    for _i, _c in enumerate(_calls):
+        _k = min(range(len(_stops)), key=lambda k: abs(_stops[k][2] - _c[2]))
+        _floor_of.setdefault(_k, _call_ids[_i])
+    _go = []
+    for _k in range(len(_stops)):
+        _parts = []
+        if _floor_of.get(_k) is not None:
+            _parts.append("Switch_%d.isLastPressed" % _floor_of[_k])
+        if _cab_id >= 0:
+            _other = (_k + 1) % len(_stops) if len(_stops) == 2 else (_k - 1) % len(_stops)
+            _parts.append("(Elevator_%d.vFloor == %d && Switch_%d.isLastPressed)" % (_lift_id, _other, _cab_id))
+        _go.append(" || ".join(_parts))
+    _go += [""] * max(0, 10 - len(_go))
+    _inside = ""
+    if _cab_id >= 0:
+        _ix, _iy, _iz = _lift_at(_L, _d["inside"])
+        _inside = ", " + LIFT_SWITCH % ((_cab_id, _qstr_early("Lift button", 40), _ix, _iy, _iz,
+                                         repr(round(float(_L.get("gamma") or 0) + float(_d["inside"][3] if len(_d["inside"]) > 3 else 0), 5)))
+                                        + (LIFT_BUTTON,) * 5)
+    blocks.append('Task_New(%d, "Elevator", "%s", %s, %s, %s, 0, 0, %s, "%s", %d, TRUE, FALSE, 0, %s, 1, "", "", "1", '
+                  '"%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", '
+                  '"elv_start_1", "elv_stop_1", "elv_move_1"%s), %s'
+                  % ((_lift_id, _qstr_early(_L.get("name") or "Lift", 40), q(_L["x"]), q(_L["y"]), q(_L["z"]), _g,
+                      _L.get("model") or "200_01_1", _sp_id, repr(round(float(_d.get("speed") or 5.0), 3)))
+                     + tuple(x.replace('"', "'") for x in _go[:10]) + (_inside, EOL)))
+# A shaft that runs below the ground needs the ground opened over it, or the
+# cabin stops against it: the game does the same where its own lifts go down
+# (DiscardTerrain, one 16 m square of terrain per point, named after the
+# building it belongs to).
+DISCARD_LOD = 15                # 15: a 16 m square; 14: 32 m
+_holes = 0
+for _L in OWN_LIFTS:
+    _stops = [list(map(float, st))[:3] for st in (_L["lift"].get("stops") or [])]
+    if len(_stops) < 2:
+        continue
+    _low = min(float(_L["z"]) + st[2] for st in _stops)
+    # Where the ground is over the shaft: the building the lift came with, which
+    # the build has already set down on the ground (the terrain's own height is
+    # the height before this mission shaped it, so it is no use here).
+    _home = _by_uid.get(_L.get("of"))
+    _ground = float(_home["z"]) if _home else float(_L["z"])
+    if _low > _ground - 2.0:
+        continue                # it stays above the ground: nothing to open
+    for _dx, _dy in ((0, 0), (5, 0), (-5, 0), (0, 5), (0, -5)):
+        blocks.append('Task_New(-1, "DiscardTerrain", "%s", %s, %s, %s, %d), %s'
+                      % (_qstr_early(_L.get("name") or "Lift", 30), q(float(_L["x"]) + _dx),
+                         q(float(_L["y"]) + _dy), q(float(_L["z"])), DISCARD_LOD, EOL))
+    _holes += 1
+    warnings.append("%s runs %.0f m below the ground: the ground over its shaft is opened, "
+                    "so the cabin can go down" % (_L.get("name") or "a lift", _ground - _low))
+if _holes:
+    report.append("ground opened over %d lift shaft(s)" % _holes)
+if OWN_LIFTS:
+    report.append("%d lift(s) of yours, with a button at each floor and one inside" % len(OWN_LIFTS))
 
 # ---------------------------------------------------------------- events: conditions and actions
 _slot_m = re.search(r"level(\d+)$", str(SLOT_DIR)) if SLOT_DIR is not None else None

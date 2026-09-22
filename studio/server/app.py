@@ -27,11 +27,14 @@
 #   POST   /api/slots/<n>/remove             take out a slot the studio made that no mission here holds
 #   GET    /api/recoverable, POST /api/recover   missions in the game that this studio can take back in
 #   GET    /api/missions/<id>/cover.png
-#   GET    /api/trash, POST /api/trash/<tid>/restore
+#   GET    /api/trash, POST /api/trash/<tid>/restore,
+#          DELETE /api/trash/<tid> (for good), DELETE /api/trash (empty it)
 # The AI designer (studio/server/ai.py):
-#   GET/POST /api/ai/settings    model, thinking, pace... (the key only as "there is one")
-#   GET    /api/ai/models        the account's chat models
-#   POST   /api/ai/test          a one-line request with the settings as they are
+#   GET/POST /api/ai/settings    the saved models, which one each role uses, pace...
+#                                (a key only as "there is one")
+#   GET    /api/ai/models        the chat models a server offers (?id=<saved model>)
+#   POST   /api/ai/test          a one-line request (?id=<saved model>, else the designer's)
+#   POST   /api/links            which walkway links a wall or fence cuts, as Apply tests them
 #   POST   /api/ai/chat          one model turn, streamed back as JSON lines
 #   GET    /api/missions/<id>/ai            the mission's chat threads
 #   GET/PUT/DELETE /api/missions/<id>/ai/<thread>   one thread
@@ -156,7 +159,7 @@ class SetupProgress(object):
         self.say = say
         self.steps = []
         weights = {"levels": 3, "graphs": 2, "models": 2, "catalog": 1, "terrain": 40,
-                   "ground": 5, "meshes": 5, "navtemplates": 2, "library": 1}
+                   "ground": 5, "meshes": 5, "navtemplates": 2, "doors": 2, "library": 1}
         if reference:
             self.steps += [{"key": "copy", "label": "Copying the game's own levels", "w": self.COPY},
                            {"key": "check", "label": "Checking the copy, file by file", "w": self.CHECK}]
@@ -596,12 +599,36 @@ def mission_heights(cfg, mid):
         hf = out / "heights.json"
         if hf.exists():
             hf.unlink()
-        subprocess.run(args, capture_output=True, text=True, cwd=str(ROOT), timeout=180,
-                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            gen = subprocess.run(args, capture_output=True, text=True, cwd=str(ROOT), timeout=180,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            verdict = build_verdict(gen.returncode, gen.stdout, gen.stderr)
+        except subprocess.TimeoutExpired:
+            verdict = {"ok": None, "errors": [], "warnings": ["the dry run of the build took too long"], "notes": []}
         res = json.loads(hf.read_text(encoding="utf-8")) if hf.exists() else {"placements": {}, "edits": {}}
         res["hash"] = key
+        res["build"] = verdict
         _HEIGHTS[mid] = (key, res)
         return res
+
+
+# What Apply would say, from the same dry run: the build's own verdict, so the
+# check list (and the AI designer's check_mission) reports what Apply refuses,
+# not a guess at it. errors: why the plan would be rejected; warnings: what the
+# build changes or leaves out on its own; notes: what it did that the plan did
+# not say (a guard moved onto another walkway graph, a node with no links).
+NOTE = re.compile(r"now on that graph|linked to \[\]|left out|removed node")
+
+
+def build_verdict(code, out, err):
+    lines = (out or "").splitlines()
+    errors = [l.strip()[2:].strip() for l in lines if l.startswith("   x ")]
+    warnings = [l.strip()[2:].strip() for l in lines if l.startswith("  ! ")]
+    notes = [l.strip() for l in lines if NOTE.search(l) and not l.startswith(("   x ", "  ! "))]
+    if code and not errors:
+        tail = [l for l in (err or "").splitlines() if l.strip()][-3:] or [l for l in lines if l.strip()][-2:]
+        errors = [" / ".join(tail)[:400] or "the build stopped (exit %s)" % code]
+    return {"ok": not code, "errors": errors[:30], "warnings": warnings[:30], "notes": notes[:30]}
 
 
 GROUPS = paths.missions() / "groups"
@@ -720,6 +747,20 @@ class _PlanWorld:
     def __exit__(self, *exc):
         self.s.objects = self.keep
         _surf_lock.release()
+
+
+def links_cut(cfg, body):
+    """For each pair [a, b] of walkway points (world metres, feet), the solid thing
+    a guard walking from one to the other would pass through, or None: the test
+    Apply puts every new walkway link to (graphs.add_node's link_ok), on the
+    level as the mission leaves it."""
+    out = []
+    with _PlanWorld(cfg, body) as s:
+        for pr in (body.get("pairs") or [])[:4000]:
+            a, b = tuple(float(v) for v in pr[:3]), tuple(float(v) for v in pr[3:6])
+            o = s.blocked(a, b)
+            out.append(None if o is None else str(o.get("name") or o.get("model") or "something solid"))
+    return out
 
 
 def ground_at(cfg, body):
@@ -915,6 +956,12 @@ class Handler(SimpleHTTPRequestHandler):
         gm = re.match(r"^/api/groups/([a-z0-9-]+)$", self.path)
         if gm:
             return self._guard(lambda: (group_delete(gm.group(1)), self._json({"ok": True}))[1])
+        # the trash: one mission for good, or all of them
+        tr = re.match(r"^/api/trash/([a-z0-9-]+--\d+)$", self.path)
+        if tr:
+            return self._guard(lambda: (MS.purge(tr.group(1)), self._json({"ok": True}))[1])
+        if re.match(r"^/api/trash/?$", self.path):
+            return self._guard(lambda: self._json({"ok": True, "gone": MS.purge_all()}))
         mid, action = self._mission_route()
         if not mid or action:
             return self.send_error(404)
@@ -1033,7 +1080,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"ok": True, **AI.public(load_config())})
         if self.path.startswith("/api/ai/models"):
             role = "light" if "role=light" in self.path else "main"
-            return self._guard(lambda: self._json({"ok": True, "models": AI.models(load_config(), role)}))
+            mid = (parse_qs(urlparse(self.path).query).get("id") or [None])[0]
+            return self._guard(lambda: self._json({"ok": True, "models": AI.models(load_config(), role, mid)}))
         if mid and action == "cleanup":
             return self._guard(lambda: self._json({"ok": True, **mission_cleanup(load_config(), mid)}))
         if mid and action == "check":
@@ -1108,11 +1156,16 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path.startswith("/api/ai/chat"):
                 return self._ai_chat()
             if self.path.startswith("/api/ai/settings"):
-                cfg = AI.update(load_config(), self._body())
+                body = self._body()
+                try:
+                    cfg = AI.update(load_config(), body)
+                except ValueError as e:
+                    return self._json({"ok": False, "error": str(e)}, 400)
                 save_config(cfg)
-                return self._json({"ok": True, **AI.public(cfg)})
+                return self._json({"ok": True, **AI.public(cfg), "savedId": body.get("_savedId")})
             if self.path.startswith("/api/ai/test"):
-                ok, msg = AI.test(load_config(), "light" if "role=light" in self.path else "main")
+                mid = (parse_qs(urlparse(self.path).query).get("id") or [None])[0]
+                ok, msg = AI.test(load_config(), "light" if "role=light" in self.path else "main", mid)
                 return self._json({"ok": ok, "message": msg})
             if self.path.startswith("/api/config"):
                 cfg = load_config()
@@ -1210,6 +1263,9 @@ class Handler(SimpleHTTPRequestHandler):
 
             if self.path.startswith("/api/ground"):
                 return self._json({"ok": True, "points": ground_at(load_config(), self._body())})
+
+            if self.path.startswith("/api/links"):
+                return self._json({"ok": True, "cut": links_cut(load_config(), self._body())})
 
             if self.path.startswith("/api/surfaces"):
                 return self._json({"ok": True, "surfaces": surfaces_at(load_config(), self._body())})

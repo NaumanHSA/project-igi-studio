@@ -63,7 +63,8 @@ def dotenv():
 
 
 def migrate(cfg):
-    """Move keys an older version saved in plain text into the encrypted store.
+    """Move keys an older version saved in plain text into the encrypted store,
+    and turn settings from before saved models into saved models.
 
     Returns True when cfg changed and should be saved."""
     changed = False
@@ -73,43 +74,140 @@ def migrate(cfg):
             keystore.put(name, sec.pop("apiKey"))
             cfg[section] = sec
             changed = True
-    return changed
+    return migrate_models(cfg) or changed
 
 
-def settings(cfg):
-    """The AI settings with the key resolved: (settings, key, where the key came from).
+# ------------------------------------------------------------------ saved models
+# As many models as you like (config "ai_models"): each a name, a provider, an
+# address, a model, how much it thinks, its context window and answer length,
+# whether it reads pictures, and its own key in the encrypted store
+# ("model:<id>"). The designer and the light model each use one of them (config
+# "ai" "use" and "ai_light" "use"), so switching is a pick from the list; what
+# belongs to the role stays with the role (the designer's pace and steps, the
+# light model on or off).
+MODEL_KEYS = ("name", "provider", "baseUrl", "model", "protocol", "effort", "contextWindow", "maxTokens", "vision")
 
-    The key comes from the studio's encrypted store (what you typed in
-    Settings), then a checkout's .env, then the environment. It is never kept
-    in the settings file."""
+
+def saved_models(cfg):
+    return [m for m in cfg.get("ai_models") or [] if isinstance(m, dict) and m.get("id")]
+
+
+def saved_model(cfg, mid):
+    return next((m for m in saved_models(cfg) if m["id"] == mid), None) if mid else None
+
+
+def _new_id(name, taken):
+    base = re.sub(r"[^a-z0-9]+", "-", str(name or "model").lower()).strip("-")[:24] or "model"
+    while True:
+        mid = "%s-%s" % (base, os.urandom(3).hex())
+        if mid not in taken:
+            return mid
+
+
+def _entry(s, name=None):
+    e = {k: s[k] for k in MODEL_KEYS if s.get(k) not in (None, "")}
+    e["name"] = name or e.get("name") or (e.get("model") or "Model").split("/")[-1]
+    return e
+
+
+def migrate_models(cfg):
+    """Before saved models there was one model for the designer and one for the
+    light model: they become the first two saved models, keys and all, each
+    chosen for its role. True when cfg changed."""
+    if "ai_models" in cfg:
+        return False
+    main, _, _ = _legacy_main(cfg)
+    light = _legacy_light(cfg)
+    a = dict(_entry(main), id=_new_id(main.get("model"), ()))
+    b = dict(_entry(light), id=_new_id(light.get("model"), (a["id"],)))
+    for e, old in ((a, "openai"), (b, "light")):
+        k = keystore.get(old)
+        if k:
+            keystore.put("model:" + e["id"], k)
+    cfg["ai_models"] = [a, b]
+    ai = {k: v for k, v in (cfg.get("ai") or {}).items() if k not in MODEL_KEYS}
+    li = {k: v for k, v in (cfg.get("ai_light") or {}).items() if k not in MODEL_KEYS}
+    ai["use"], li["use"] = a["id"], b["id"]
+    cfg["ai"], cfg["ai_light"] = ai, li
+    return True
+
+
+def _openai_key():
+    """An OpenAI key from before saved models: the store's old slot, a checkout's
+    .env, the environment. (key, where) or ("", None). Only ever sent to OpenAI."""
+    env = dotenv()
+    for key, src in ((keystore.get("openai"), "encrypted store"), (env.get("OPENAI_API_KEY"), ".env"),
+                     (os.environ.get("OPENAI_API_KEY"), "environment")):
+        if key:
+            return key, src
+    return "", None
+
+
+def _legacy_main(cfg):
     s = dict(DEFAULTS)
     s.update({k: v for k, v in (cfg.get("ai") or {}).items() if v not in (None, "")})
-    env = dotenv()
     legacy = s.pop("apiKey", "")
-    key, src = keystore.get("openai"), "encrypted store"
+    key, src = _openai_key()
     if not key and legacy:
         key, src = legacy, "settings"
-    if not key and env.get("OPENAI_API_KEY"):
-        key, src = env["OPENAI_API_KEY"], ".env"
-    if not key and os.environ.get("OPENAI_API_KEY"):
-        key, src = os.environ["OPENAI_API_KEY"], "environment"
     if not s.get("model"):
-        s["model"] = env.get("MODEL_QUALITY") or "gpt-5-mini"
+        s["model"] = dotenv().get("MODEL_QUALITY") or "gpt-5-mini"
     _provider(s)
+    return s, key, src
+
+
+def _legacy_light(cfg):
+    s = dict(LIGHT)
+    s.update({k: v for k, v in (cfg.get("ai_light") or {}).items() if v not in (None, "")})
+    s.pop("apiKey", None)
+    _provider(s)
+    return s
+
+
+def _resolved(base, role_section, m):
+    """A role's settings with its saved model m laid over them."""
+    s = dict(base)
+    s.update({k: v for k, v in (role_section or {}).items() if v not in (None, "") and k not in MODEL_KEYS})
+    s.update({k: v for k, v in m.items() if k in MODEL_KEYS and v not in (None, "")})
+    s["id"] = m["id"]
+    _provider(s)
+    return s
+
+
+def _key_of(m, s):
+    """A saved model's key: its own; an OpenAI model without one falls back to the
+    OpenAI key from before (never sent to any other server)."""
+    key = keystore.get("model:" + m["id"])
+    if key:
+        return key, "encrypted store"
+    if s["provider"] == "openai":
+        return _openai_key()
+    return "", None
+
+
+def settings(cfg, mid=None):
+    """The designer's settings with the key resolved: (settings, key, where the key
+    came from). mid: another saved model in its place (a test). The key is never
+    kept in the settings file."""
+    m = saved_model(cfg, mid or (cfg.get("ai") or {}).get("use"))
+    if not m:
+        return _legacy_main(cfg)
+    s = _resolved(DEFAULTS, cfg.get("ai"), m)
+    key, src = _key_of(m, s)
     return s, key, (src if key else None)
 
 
-def light_settings(cfg):
-    """The light model's settings and key (a local server needs none; on OpenAI
-    without a key of its own, it uses the main model's)."""
-    s = dict(LIGHT)
-    s.update({k: v for k, v in (cfg.get("ai_light") or {}).items() if v not in (None, "")})
-    legacy = s.pop("apiKey", "") or ""
-    _provider(s)
-    key = keystore.get("light") or legacy
-    if not key and s["provider"] == "openai":
-        key = settings(cfg)[1]
-    return s, key
+def light_settings(cfg, mid=None):
+    """The light model's settings and key (a local server needs none)."""
+    m = saved_model(cfg, mid or (cfg.get("ai_light") or {}).get("use"))
+    if not m:
+        s = _legacy_light(cfg)
+        key = keystore.get("light")
+        if not key and s["provider"] == "openai":
+            key = settings(cfg)[1]
+        return s, key
+    s = _resolved(LIGHT, cfg.get("ai_light"), m)
+    return s, _key_of(m, s)[0]
 
 
 def _provider(s):
@@ -124,11 +222,12 @@ def _provider(s):
     return s
 
 
-def settings_for(cfg, role):
-    """(settings, key) of the main model or the light one."""
+def settings_for(cfg, role, mid=None):
+    """(settings, key) of the main model or the light one; mid: a saved model in
+    the role's place."""
     if role == "light":
-        return light_settings(cfg)
-    s, key, _ = settings(cfg)
+        return light_settings(cfg, mid)
+    s, key, _ = settings(cfg, mid)
     return s, key
 
 
@@ -141,46 +240,96 @@ def public(cfg):
     ls.setdefault("contextWindow", None)
     # a compatible server needs no key; OpenAI does
     usable = bool(key) or s["provider"] == "compatible"
+    listed = []
+    for m in saved_models(cfg):
+        e = _provider(dict(m))
+        k = keystore.get("model:" + m["id"])
+        e.update(keySaved=bool(k), keyHint=("…" + k[-4:]) if k else "", protocolInUse=protocol_of(e),
+                 keyFrom=None if k or e["provider"] != "openai" else _openai_key()[1])
+        listed.append(e)
     return dict(s, hasKey=usable, keySaved=bool(key), keyFrom=src, keyHint=("…" + key[-4:]) if key else "",
-                protocolInUse=protocol_of(s), defaultContext=CONTEXT,
-                light=dict(ls, hasKey=bool(lkey), keySaved=bool(keystore.get("light")), protocolInUse=protocol_of(ls)))
+                protocolInUse=protocol_of(s), defaultContext=CONTEXT, models=listed,
+                use={"main": (cfg.get("ai") or {}).get("use"), "light": (cfg.get("ai_light") or {}).get("use")},
+                light=dict(ls, hasKey=bool(lkey), keySaved=bool(lkey), protocolInUse=protocol_of(ls)))
 
 
 def update(cfg, body):
-    """Settings from the browser into cfg["ai"]. An apiKey of "" keeps the one
-    there; {"clearKey": true} drops it."""
+    """Changes from the browser. Saved models: {"saveModel": {id (none for a new
+    one), name, provider, baseUrl, model, effort, contextWindow, maxTokens, vision,
+    apiKey, clearKey}} (the new id comes back in body["_savedId"]),
+    {"deleteModel": id}, {"use": {"main": id, "light": id}}. The designer's own:
+    pace, maxSteps; the light model's: {"light": {"enabled": ...}}. Settings in
+    the shape from before saved models change the model the role uses."""
+    migrate_models(cfg)
     ai = dict(cfg.get("ai") or {})
-    for k in ("baseUrl", "model", "effort", "protocol", "provider"):
-        if k in body:
-            ai[k] = str(body[k] or "").strip()
-    for k, lo, hi in (("pace", 0, 3000), ("maxSteps", 5, 200), ("contextWindow", 1024, 10000000)):
+    li = dict(cfg.get("ai_light") or {})
+    for k, lo, hi in (("pace", 0, 3000), ("maxSteps", 5, 200)):
         if k in body and body[k] not in (None, ""):
             ai[k] = max(lo, min(hi, int(body[k] or 0)))
-    # keys go to the encrypted store, not into cfg (which is a plain file)
-    if body.get("apiKey"):
-        keystore.put("openai", str(body["apiKey"]))
-    if body.get("clearKey"):
-        keystore.drop("openai")
-    ai.pop("apiKey", None)
-    cfg["ai"] = ai
-    lb = body.get("light")
-    if isinstance(lb, dict):
-        li = dict(cfg.get("ai_light") or {})
-        for k in ("baseUrl", "model", "effort", "protocol", "provider"):
-            if k in lb:
-                li[k] = str(lb[k] or "").strip()
-        for k in ("enabled", "vision"):
-            if k in lb:
-                li[k] = bool(lb[k])
-        if lb.get("contextWindow") not in (None, ""):
-            li["contextWindow"] = max(1024, min(10000000, int(lb["contextWindow"])))
-        if lb.get("apiKey"):
-            keystore.put("light", str(lb["apiKey"]))
-        if lb.get("clearKey"):
-            keystore.drop("light")
-        li.pop("apiKey", None)
-        cfg["ai_light"] = li
+    lb = body.get("light") if isinstance(body.get("light"), dict) else {}
+    if "enabled" in lb:
+        li["enabled"] = bool(lb["enabled"])
+    cfg["ai"], cfg["ai_light"] = ai, li
+    # the old shape: the fields of the model a role uses
+    old = {k: body[k] for k in MODEL_KEYS + ("apiKey", "clearKey") if k in body}
+    if old and ai.get("use"):
+        _save_model(cfg, dict(old, id=ai["use"]))
+    old = {k: lb[k] for k in MODEL_KEYS + ("apiKey", "clearKey") if k in lb}
+    if old and li.get("use"):
+        _save_model(cfg, dict(old, id=li["use"]))
+    if isinstance(body.get("saveModel"), dict):
+        body["_savedId"] = _save_model(cfg, body["saveModel"])
+    if body.get("deleteModel"):
+        mid = body["deleteModel"]
+        for role, sec in (("the AI designer", "ai"), ("the light model", "ai_light")):
+            if (cfg.get(sec) or {}).get("use") == mid:
+                raise ValueError("it is %s's model: pick another for it first" % role)
+        cfg["ai_models"] = [m for m in saved_models(cfg) if m["id"] != mid]
+        keystore.drop("model:" + mid)
+    use = body.get("use")
+    if isinstance(use, dict):
+        for role, sec in (("main", "ai"), ("light", "ai_light")):
+            if use.get(role):
+                if not saved_model(cfg, use[role]):
+                    raise ValueError("there is no saved model %s" % use[role])
+                cfg[sec] = dict(cfg.get(sec) or {}, use=use[role])
     return cfg
+
+
+def _save_model(cfg, b):
+    """Add a saved model, or change one; its id."""
+    models = saved_models(cfg)
+    cur = saved_model(cfg, b.get("id"))
+    e = dict(cur or {})
+    for k in ("name", "provider", "baseUrl", "model", "protocol", "effort"):
+        if k in b:
+            e[k] = str(b[k] or "").strip()
+    for k, lo, hi in (("contextWindow", 1024, 10000000), ("maxTokens", 256, 200000)):
+        if b.get(k) not in (None, ""):
+            e[k] = max(lo, min(hi, int(b[k])))
+        elif k in b:
+            e.pop(k, None)
+    if "vision" in b:
+        e["vision"] = bool(b["vision"])
+    _provider(e)
+    if not e.get("model"):
+        raise ValueError("say which model")
+    e["name"] = (e.get("name") or e["model"].split("/")[-1])[:60]
+    if cur:
+        e["id"] = cur["id"]
+        models = [e if m["id"] == cur["id"] else m for m in models]
+    else:
+        e["id"] = _new_id(e["name"], [m["id"] for m in models])
+        models.append(e)
+    cfg["ai_models"] = models
+    if b.get("apiKey"):
+        keystore.put("model:" + e["id"], str(b["apiKey"]))
+    if b.get("clearKey"):
+        keystore.drop("model:" + e["id"])
+    # the first model there is does the designing
+    if not (cfg.get("ai") or {}).get("use"):
+        cfg["ai"] = dict(cfg.get("ai") or {}, use=e["id"])
+    return e["id"]
 
 
 def protocol_of(s):
@@ -211,9 +360,9 @@ def _http_error(e):
     return "%s (HTTP %d)" % (msg, e.code)
 
 
-def models(cfg, role="main"):
-    """The account's chat models, newest-looking first."""
-    s, key = settings_for(cfg, role)
+def models(cfg, role="main", mid=None):
+    """The account's chat models, newest-looking first (mid: a saved model's server)."""
+    s, key = settings_for(cfg, role, mid)
     if protocol_of(s) == "mock":
         return ["mock-designer"]
     try:
@@ -342,14 +491,14 @@ def chat(cfg, body, emit, alive=lambda: True):
     this turn's new items start), role ("main" or "light"), agent (which of the
     designer's agents asks: ideas, mission, edit, workshop; the mock uses it)}."""
     role = body.get("role") or "main"
-    s, key = settings_for(cfg, role)
+    s, key = settings_for(cfg, role, body.get("modelId"))
     proto = protocol_of(s)
     if proto == "mock" or body.get("mock"):          # the UI tests ask for the scripted designer
         return mock(body, emit)
-    if role == "light" and not s.get("enabled", True):
-        return emit({"t": "error", "message": "The light model is off (Settings, AI designer).", "code": "nolight"})
+    if role == "light" and not s.get("enabled", True) and not body.get("modelId"):
+        return emit({"t": "error", "message": "The light model is off (Settings, AI models).", "code": "nolight"})
     if not key and (s.get("baseUrl") or OPENAI).rstrip("/") == OPENAI:
-        return emit({"t": "error", "message": "No API key yet. Add one in Settings, AI designer.", "code": "nokey"})
+        return emit({"t": "error", "message": "No API key yet. Add one to the model in Settings, AI models.", "code": "nokey"})
     model = body.get("model") or s["model"]
     t0 = time.time()
     try:
@@ -524,8 +673,9 @@ def _chat(s, key, model, body, emit, alive):
           "usage": {"in": usage.get("prompt_tokens"), "out": usage.get("completion_tokens")}})
 
 
-def test(cfg, role="main"):
-    """A one-line request with the settings as they are: (ok, what came back)."""
+def test(cfg, role="main", mid=None):
+    """A one-line request with the settings as they are (mid: a saved model in the
+    role's place): (ok, what came back)."""
     got = {"text": "", "err": None, "model": None}
 
     def emit(e):
@@ -535,7 +685,7 @@ def test(cfg, role="main"):
             got["err"] = e["message"]
         elif e["t"] == "done":
             got["model"] = e.get("model")
-    t = chat(cfg, {"instructions": "Answer in five words or fewer.", "role": role,
+    t = chat(cfg, {"instructions": "Answer in five words or fewer.", "role": role, "modelId": mid,
                    "history": [{"k": "user", "text": "Say that you are ready to design missions."}]}, emit) or 0
     if got["err"]:
         return False, got["err"]

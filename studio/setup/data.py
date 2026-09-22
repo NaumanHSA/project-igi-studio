@@ -32,17 +32,18 @@ STEPS = [
     ("ground", "studio.extract.ground", "game", "what the ground is made of", []),
     ("meshes", "studio.extract.meshes", "game", "the buildings, seen from above", []),
     ("navtemplates", "studio.build.navtemplates", "reference", "the walkways inside buildings", []),
+    ("doors", "studio.extract.doors", "reference", "the doors the game's own buildings have", []),
     ("library", "studio.extract.library", "game", "the missions' names and covers", []),
 ]
 
 #: What must be there for the editor to work. Checked, not assumed.
 REQUIRED = (["index.json", "models.json", "catalog.json", "meshes.bin", "meshes.json",
-             "navtemplates.json", "builtins.json"]
+             "navtemplates.json", "doors.json", "builtins.json"]
             + ["level%d.json" % n for n in range(1, 15)]
             + ["graphs%d.json" % n for n in range(1, 15)])
 
 STAMP = "data.json"
-VERSION = 3          # bump when an extractor's output changes, so data is rebuilt (2: the ground's colour tiles; 3: splines)
+VERSION = 4          # bump when an extractor's output changes, so data is rebuilt (2: the ground's colour tiles; 3: splines; 4: doors)
 
 
 def _run(module, args, log):

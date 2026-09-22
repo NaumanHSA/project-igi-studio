@@ -157,7 +157,10 @@ class Library:
         dd = ch[b"D3DR"][0]
         d = struct.unpack_from("<%di" % (len(dd) // 4), dd)
         xt = ch[b"XTRV"][0]
-        if len(dd) == 56 and d[1] == 1:
+        # a model's second field is most often 1, but not always (2 for level 12's
+        # fortress ruins, 3 and 4 for a few more), and the layout is the same;
+        # a character is the one with bones
+        if len(dd) == 56 and (d[1] == 1 or (bones is None and d[4] > 0 and len(xt) == d[4] * 40)):
             nv, hdr, at_vs, at_vc = d[4], 16, 10, 11
         elif len(dd) == 56:
             nv, hdr, at_vs, at_vc = d[5], 14, 9, 10          # characters

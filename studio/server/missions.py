@@ -326,6 +326,30 @@ def summary_trash(m, tid):
             "deleted": int(tid.rsplit("--", 1)[-1]) if "--" in tid else 0}
 
 
+def purge(tid):
+    """Take one mission out of the trash for good. Only the studio's own copy:
+    a slot it once had in the game is the game's, and was dealt with when the
+    mission was deleted."""
+    if not re.fullmatch(r"[a-z0-9-]+--\d+", tid or ""):
+        raise ValueError("bad trash id")
+    d = TRASH / tid
+    if not d.is_dir():
+        raise FileNotFoundError(tid)
+    shutil.rmtree(d)
+    return True
+
+
+def purge_all():
+    """Empty the trash. Returns how many missions went."""
+    n = 0
+    if TRASH.is_dir():
+        for d in sorted(TRASH.iterdir()):
+            if d.is_dir() and "--" in d.name:
+                shutil.rmtree(d, ignore_errors=True)
+                n += 1
+    return n
+
+
 def restore(tid):
     if not re.fullmatch(r"[a-z0-9-]+--\d+", tid or ""):
         raise ValueError("bad trash id")

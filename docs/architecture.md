@@ -45,6 +45,9 @@ project-igi-studio/
 │   │   ├── terrain.py      each level's terrain as a 1 m height grid for the editor
 │   │   ├── ground.py       what the ground is made of, from the level's texture masks
 │   │   ├── catalog.py      inventory: every structure, weapon and enemy type in the game
+│   │   ├── doors.py        every Door and Elevator task in the game: how each door
+│   │   │                   model opens, and the doors and lift each building
+│   │   │                   has -> doors.json
 │   │   ├── library.py      in-game covers, names and map types of the 14 missions
 │   │   └── model3d.py      textured models for the editor's 3D close-up
 │   └── server/             what the editor talks to

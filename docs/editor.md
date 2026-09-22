@@ -792,6 +792,15 @@ view never ends at a cliff.
 - Click another item to edit it (or, if it can't be moved, to look at it).
   Every move is an ordinary edit: undo, the change log and saving all work,
   and the map shows the result.
+- **Edit mode:** holding **Alt** frees the mouse for as long as you hold it;
+  the **Edit** button at the top does the same until you press it again (it
+  reads *Camera* while it is on, and Esc leaves it). With the mouse free,
+  click to select, drag to move.
+- **Delete** takes the selected item away, **Ctrl+C** copies it and **Ctrl+V**
+  puts a copy where the view is aimed (the crosshair, on the ground or a
+  floor); **Ctrl+D** leaves a copy there too. Undo works as everywhere else.
+- **The close-up stays open** when the thing it was on is taken away - here,
+  in the side panel or by an undo. It keeps looking at the place it stood.
 - **It follows the rest of the editor:** turning or moving something in the
   side panel (the 15° and 90° buttons, or *Facing* in degrees), undo, and
   whatever rests on a moved crate all show in the open close-up straight
@@ -1066,6 +1075,62 @@ happens once.
 - The change log has an **Events** group, and the check list warns about an
   event that can never happen (nothing picked, its target gone).
 
+**Doors of your own.** A door model placed from the inventory is written as
+the game's own doors are (a `Door` task), so it opens in the game: walk up to
+it and the prompt comes. The numbers come from the game itself
+(`studio/extract/doors.py` reads every `Door` task of all fourteen levels into
+`data/doors.json`): how far that model slides and along which axis, its angles,
+how long it takes, and its sounds. A door placed inside a building goes on the
+floor there, not on the ground, so upper floors take doors too.
+
+- **A building brings its doors and its lift.** Placing one of the game's
+  buildings places the doors it has in the levels, in the same doorways, each
+  one that opens (the Office has six, the Guard HQ twelve, the lift's own
+  sliding doors on both floors included), and its lift where it has one. The
+  doors of one real copy of that building are used, exactly as it was built,
+  rather than an average of its copies, and a building's other skins (its snow
+  or desert version) count as the same building. They are ordinary placements:
+  take one out, or move it, and it stays where you put it; move, turn or settle
+  the building and its own doors and lift go with it, in the editor and in the
+  build.
+- **Nothing of another level comes with them.** A door model's numbers are the
+  game's own, but an expression naming a task by id (a lift door in level 12
+  closes on `Switch_211`) means nothing in a mission of yours, so it is left
+  out: a door of yours closes a few seconds after it opens, as the game's
+  sliding doors do. Two of the same door in one doorway is dropped too; two
+  leaves facing opposite ways are a double door, and both are kept.
+- **Lifts.** A lift of yours is written as the game writes its own: an
+  `Elevator` task on a `SplineObj` whose waypoints are the floors it stops at,
+  with a call button at every floor and one inside the cabin. Six buildings
+  bring one (both Guard HQs, the Winch House, and the lift shafts, one of which
+  drops 27 m to the tunnels); the shafts are in the inventory on their own,
+  under *Lift* and *Ekks HQLift*, to put a lift anywhere. It is free to run
+  ("1" where the game's own wait for their doors to be shut), so a lift of
+  yours is never stuck.
+- **A lift's doors belong to the lift**, as the game has them: locked to the
+  player, opening when the cabin reaches that floor (`Elevator_N.vFloor == k`)
+  and shutting when any of its buttons is pressed. Which doors those are is not
+  guessed - the game's own wiring says so, and that is kept with the door, so an
+  ordinary door beside a shaft still opens by hand.
+- **A shaft that runs below the ground opens the ground over it**
+  (`DiscardTerrain`, as the game does where its own lifts go down), so the cabin
+  is not stopped by the terrain. A lift between the floors of a building leaves
+  the ground alone.
+- **Everything inside comes too.** A building brings what stands in it in the
+  levels - desks, filing cabinets, lamps, beds, crates, barrels (the Guard HQ
+  33 things, an office 21, a warehouse 26) - taken from one real copy of it, up
+  to 40 things. They are ordinary placements: move them, take them out, or keep
+  them.
+- **A gate is a whole gateway.** A gate in the game is one leaf, half a way in.
+  Placing one (304_01_1, or `place_object` with that model) lays the whole
+  thing: both leaves meeting in the middle and sliding back behind their posts,
+  the switch that opens them, and a fence panel in line on each side, so a run
+  of fence carries straight on from either end. Hold **Alt** while placing (or
+  `one_leaf`) for a single leaf, which the player opens like a door. The switch
+  stands against the gate post at hand height and **stays pressed**, as level
+  10's gate switch does, so it opens the gate and closes it again; the leaves
+  themselves are not locked (a locked leaf never moves).
+
 **Doors** of the level (not elevator doors) have a **Lock** section in their
 panel:
 
@@ -1171,7 +1236,9 @@ the next agent reads what happened.
 What it can do (its tools, in `editor/plotter.html` *the AI designer's
 hands*): look at the mission, find named places, look around a point (what is
 there, the ground, the nearest walkway, a building's floors), the catalogue,
-one thing in full, the check list; place guards (on walkway points near a
+one thing in full, the check list (with the build's own verdict: the AI
+designer's check waits for a dry run of Apply on the plan as it is, so a plan it
+calls clean is one Apply takes); place guards (on walkway points near a
 place, or exactly, on a tower's top floor), change a guard, set a patrol,
 place structures, fence or wall runs, a fenced compound, pickups, cameras and
 alarm hardware; move and remove things (yours or the level's), objectives,
@@ -1187,7 +1254,12 @@ the level's own objectives dropped for a new mission.
   nearest walkway is on other ground (a hill), it climbs to it in steps short
   enough for a link (2 m up or down); where a step is too steep it stops
   and says where a ramp would make it walkable. Out of doors the points keep
-  off buildings. Guards and patrols can use the new points. `shape_ground` levels, raises,
+  off buildings, and each new link is tested against the walls and fences the
+  mission has (`api/links`, the test Apply makes): a point only reachable
+  through one is left out, and the answer says so. Guards and patrols can use
+  the new points. A guard moved (`move_item`) onto other walkways (into a
+  building, say) takes that graph, as Apply would, and a patrol on the old one
+  is dropped with a note to set a new one. `shape_ground` levels, raises,
   lowers, smooths or ramps the ground, as the Ground tool does.
 - **Stealth check** (`stealth_check`): the quietest way on foot from the
   player start to each objective (the Sight lines panel's routes), how many
@@ -1212,31 +1284,43 @@ the level's own objectives dropped for a new mission.
   under a name and a briefing (the AI can write it) and exports them as one
   pack; importing it adds them numbered in order and shows the briefing.
 
-**Settings** (the Settings button, *AI designer*):
+**Settings** (the Settings button, *AI models*):
 
-- **API key:** typed here, the studio keeps it encrypted for your Windows
-  account (DPAPI, `secrets.json` in the studio's folder), never in
-  `config.json`. A checkout also reads the project's `.env`
-  (`OPENAI_API_KEY`), which git ignores. The page never gets the key back,
-  only its last four characters.
-- **Model:** the chat models on your account, newest first (default
-  `MODEL_QUALITY` from `.env`); **Thinking** off to high; **Pace** (how long
-  each step stays, to watch it build) and **Steps per run** (60).
-- **Provider address:** OpenAI by default, which the studio talks to through
-  its Responses API: on the newest models it is the only way to think and use
-  tools together (Chat Completions refuses tools with reasoning on
-  `gpt-5.6-luna`). Any OpenAI-compatible server (OpenRouter, a local Ollama or
-  LM Studio) works through Chat Completions.
-- **Test** sends one short request and says what came back.
-- **Light model:** a quick model for the chores, `qwen/qwen3.5-9b` in LM
-  Studio on this machine by default (`http://localhost:1234/v1`, no key). It
-  names chats, reads pictures, and is the **scout**: a tool the main model
-  can send to look things up with the looking tools, which answers briefly and
-  saves the main model's time and tokens. **Let it think first** is off by
-  default: with it, a 9B model took 49 s to name a chat, without it 2 s
-  (2026-09-19). A chat can run on the light model entirely: click the model's
-  name in the panel (green when it is the light one). Settings keep it in
-  `config.json` (`ai_light`).
+- **Saved models:** as many as you like, each with a name, a provider, its
+  model, how much it thinks (off to high), whether it reads pictures, the
+  longest answer it may give, and a key of its own. **Add a model**, **Edit**,
+  **Test** (one short request to it) and **Delete** (click twice; the one a
+  role uses can't be deleted). Kept in `config.json` (`ai_models`), keys
+  apart.
+- **The AI designer uses** and **The light model uses:** each picks one of the
+  saved models (`ai` and `ai_light`, `use`). **Pace** (how long each step
+  stays, to watch it build) and **Steps per run** (60) belong to the designer,
+  whichever model it uses; **Use a light model** turns the light one on or off.
+- **Switching:** the model's name at the top of the AI panel opens a menu:
+  which model this chat runs on (the designer's or the light one), and which
+  saved model each of them uses, without opening Settings.
+- **Providers:** OpenAI, which the studio talks to through its Responses API
+  (on the newest models the only way to think and use tools together: Chat
+  Completions refuses tools with reasoning on `gpt-5.6-luna`), or any
+  OpenAI-compatible server (OpenRouter, a local LM Studio, Ollama, vLLM or
+  Unsloth Studio) through Chat Completions: its address, the model, its
+  context window as the server loaded it (every request is fitted into it),
+  and a key if it asks for one.
+- **Keys:** typed in a model's form, the studio keeps each encrypted for your
+  Windows account (DPAPI, `secrets.json` in the studio's folder, one per saved
+  model), never in `config.json`. The page never gets a key back, only its last
+  four characters. An OpenAI model without a key of its own uses the one from
+  before saved models, or a checkout's `.env` (`OPENAI_API_KEY`); a key is
+  never sent to any other server.
+- **From before saved models:** the designer's model and the light model
+  settings become the first two saved models, keys and all, the first time the
+  studio starts.
+- **The light model** does the chores: it names chats, reads pictures, and is
+  the **scout**: a tool the designer can send to look things up with the
+  looking tools, which answers briefly and saves the designer's time and
+  tokens. Keep its thinking off: with it, a 9B model took 49 s to name a chat,
+  without it 2 s (2026-09-19). A chat can run on it entirely (the menu above;
+  the name turns green).
 
 How it runs: the loop is in the page (`editor/ai.js`), because its tools act
 on the plan in the editor. Each model turn goes through the studio server
@@ -1383,8 +1467,14 @@ change any piece. Models the level does not pack are brought in on Apply.
 Check mission…** shows the same list at any time. It has three groups:
 
 - **Must fix** (Apply stays disabled): patrol stops that don't exist or can't be
-  routed to, new nodes with no neighbour, graphs over their file's capacity,
-  guards with no graph, models no level ships.
+  routed to, new nodes with no neighbour (a link through a wall or fence does
+  not count: the server tests each one as Apply does), graphs over 999 nodes
+  (Apply makes a graph's file bigger in steps of 100, up to 1000), guards with
+  no graph, models no level ships, and the **Build** group: what Apply itself
+  would refuse. The server runs the build on the saved plan without installing
+  anything (the dry run that also settles heights) and the list shows its
+  errors word for word; its warnings, and what it changes on its own (a guard
+  moved onto a building's walkways), go under the other two groups.
 - **Worth a look:** buildings that overlap others, stand on steep ground or
   lie outside the mapped ground; objects hovering over bare ground; objects
   placed twice.
@@ -1636,6 +1726,25 @@ does; walls meet edge to edge.
   that leave a gap, and **Close them** moves each panel after a gap back
   along its run (each run then carries on from its first panel, and its far
   end moves in a little).
+
+## A guard needs walkways where he stands
+
+When a mission starts the game walks every guard to his walkway graph. With no
+walkway point near him at his own height he walks off to the nearest one there
+is: across the map, or up into the air where a building's floor used to be (an
+empty map keeps the walkway graphs of the buildings it takes away, and some of
+them hang 12 to 18 m up). That is how guards end up standing in the sky.
+
+- The graph a guard is given is never one whose points are on another floor;
+  where there is none he can stand on, he is given none, and the check list
+  says so.
+- **The check list** (and the AI designer's check) refuses a guard whose
+  nearest walkway point on his graph is more than 2.5 m above or below him, and
+  warns when it is more than 30 m away.
+- **Apply refuses it too** (`studio/build/plan.py`), with the same words, so a
+  mission with a floating guard never reaches the game. A guard with no graph
+  at all is given the nearest one that has a point on his floor, rather than
+  whichever graph the level lists first.
 
 ## Guards reacting to gunfire
 
