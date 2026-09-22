@@ -7,4 +7,4 @@
 
 Run it with:  python -m studio serve
 """
-__version__ = "1.0.3"
+__version__ = "1.0.4"

@@ -3,6 +3,86 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## 1.0.4
+
+A team of agents in the AI designer, buildings that come with everything
+inside them, and a mission that can carry its own textures.
+
+### New
+
+- **The AI designer is a team.** *Ideas* suggests missions; the **Mission
+  builder** surveys the map, proposes the whole mission as a plan (the areas,
+  the objectives, the events) and then builds it one area at a time, each
+  undoable on its own; *Edit* changes the mission as it is; the **Workshop**
+  designs buildings, characters and objects for your inventory; **Review**
+  plays the mission on paper and lists what to fix, each finding with a *Fix*
+  button that hands it to Edit. A build left halfway goes on later.
+- **Buildings come with their doors, their lift and everything inside.** A
+  building placed from the inventory brings what the game gives it, copied
+  from a real copy of that building in the levels: 175 doorways over 164
+  buildings, 7 lifts, and for 149 of them the things that stand inside -
+  desks, filing cabinets, lamps, beds, crates, barrels (the Guard HQ brings 33
+  things, a warehouse 26). Each is an ordinary placement: move it, take it
+  out, or keep it, and it stays in place when the building moves.
+- **Doors that open and lifts that run.** A door of yours is written the way
+  the game writes its own, so it opens in the game, and can go on an upper
+  floor. A lift runs between its floors with a call button at each and one
+  inside the cabin; a lift's own doors belong to the lift, locked to the
+  player and opening when the cabin arrives; and a shaft that goes below the
+  ground opens the ground over it.
+- **A gate is a whole gateway.** Placing one lays both leaves, the switch on
+  the post that opens them, and a fence panel in line on each side, so a run
+  of fence carries straight on.
+- **A mission can carry its own textures.** Anything with a model has a
+  *Textures* section: the pictures it is drawn with, as the game has them, and
+  *Replace* takes a PNG of yours. It is kept with the mission like any other
+  change, and written into the mission's slot on Apply; taking it off again
+  gives the level its own picture back, byte for byte.
+- **Save as many models as you like** (Settings, *AI models*): each with its
+  provider, address, model, thinking, context window and its own encrypted
+  key. The designer and the light model each pick one, and the model name at
+  the top of the AI panel switches either of them without opening Settings.
+- **The map draws the level's roads and railways** - the track on its
+  embankment, the train bridge, fence runs and power lines, each as wide as
+  the model laid along it - and the 3D close-up lays them on the ground too.
+- **In the 3D close-up:** an *Edit* button holds the mouse free instead of
+  holding Alt, **Delete** takes the selected thing away, **Ctrl+C** and
+  **Ctrl+V** copy it to where the view is aimed, and the view stays open when
+  what it was on is taken away.
+- **Trash:** take one mission out of it, or empty it.
+
+### Changed
+
+- **The check list says what Apply would refuse.** The server's dry run of the
+  build keeps the build's own verdict, and the list shows its errors word for
+  word, so a mission the check calls clean is one Apply takes. New walkway
+  points are tested against the walls and fences the mission has, as Apply
+  tests them.
+- **On a narrow window** the map's tools stay on one row and fold into menus.
+- **The studio reads your game once more** when it first starts after this
+  update: the level data now holds the doors and lifts of the game's own
+  buildings, and the roads and railways the map draws.
+
+### Fixed
+
+- **Guards no longer stand in the sky.** The game walks every guard to his
+  walkway graph when the mission starts; with no walkway at his own height he
+  walked off to the nearest one there was - on an empty map, up to where a
+  building's floor used to be. A guard is never given walkways on another
+  floor now, and both the check list and Apply refuse one that is.
+- **Guards no longer end up in a tunnel.** Walkway points count only near the
+  height of the spot, and a walkway that has to climb starts from one on the
+  ground.
+- **The check list counted no problems at all**, because it looked for them
+  under a name its rows never carried.
+- **Eight models were invisible in 3D** once their textures arrived, among
+  them Eagle's Nest's fortress walls: the textured reader took a 2 in a
+  model's header to mean a character and read the rest wrong.
+- **A walkway graph may hold 999 points, not 100** - the build makes its file
+  bigger as it needs to, and the check list knew nothing of it.
+- **A guard moved onto other walkways** (into a building, say) takes that
+  graph, and a patrol that can no longer be walked is dropped with a note.
+
 ## 1.0.3
 
 Ground of any height, and the game's mission list in your hands.
