@@ -86,6 +86,18 @@ function css() {
 .v3d-help{position:absolute;right:12px;bottom:12px;background:var(--surface);border:1px solid var(--line);border-radius:6px;
   padding:7px 10px;font-size:11.5px;color:var(--muted);box-shadow:var(--shadow);max-width:360px;line-height:1.5}
 .v3d-help b{color:var(--ink);font-weight:600}
+.v3d-help-head{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+.v3d-help-title{font:600 10.5px "IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.v3d-help-fold{margin-left:auto;width:20px;height:18px;padding:0;border:1px solid var(--line);border-radius:3px;background:none;
+  color:var(--muted);font:14px/1 "IBM Plex Mono",monospace;cursor:pointer}
+.v3d-help-fold:hover,.v3d-help-fold:focus-visible{color:var(--accent);border-color:var(--accent);outline:none}
+.v3d-help-rows{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:baseline}
+.v3d-help-rows b{white-space:nowrap}
+.v3d-help.folded .v3d-help-rows{display:none}
+.v3d-help.folded .v3d-help-head{margin:0}
+.v3d .v3d-mini{position:absolute;right:12px;top:58px;width:200px;height:200px;flex:none;border:1px solid var(--line);border-radius:6px;
+  background:#07140a;box-shadow:var(--shadow);pointer-events:none}
+.v3d .v3d-mini[hidden]{display:none}
 .v3d-tip{position:absolute;pointer-events:none;background:rgba(4,18,8,.9);border:1px solid var(--line);border-radius:4px;
   padding:3px 7px;font-size:11.5px;color:var(--ink);white-space:nowrap;transform:translate(12px,12px)}
 .v3d-tip[hidden]{display:none}
@@ -134,10 +146,12 @@ function build(host) {
   <button class="btn primary v3d-done" title="Esc">Done</button>
 </div>
 <canvas tabindex="0"></canvas>
+<canvas class="v3d-mini" hidden aria-hidden="true"></canvas>
 <div class="v3d-cross"></div>
 <div class="v3d-hint" hidden><b>Click to look around</b><span>The mouse turns the view, W A S D fly · hold Alt to edit</span></div>
 <div class="v3d-read"></div>
-<div class="v3d-help"></div>
+<div class="v3d-help"><div class="v3d-help-head"><span class="v3d-help-title">Keys</span>
+  <button class="v3d-help-fold" aria-expanded="true" title="Hide the keys">−</button></div><div class="v3d-help-rows"></div></div>
 <div class="v3d-tip" hidden></div>`;
   host.appendChild(el);
   const canvas = el.querySelector("canvas");
@@ -194,6 +208,20 @@ function build(host) {
     try { localStorage.setItem("plotter:v3dnav", S.navOn ? "1" : "0"); } catch (err) { /* private window */ }
     if (!S.navOn) setAddingNode(false);
     makeNav();
+  });
+  // the keys box folds down to its title, and stays as it was left
+  const helpBox = el.querySelector(".v3d-help"), fold = el.querySelector(".v3d-help-fold");
+  const setFolded = f => {
+    helpBox.classList.toggle("folded", f);
+    fold.textContent = f ? "+" : "−";
+    fold.title = f ? "Show the keys" : "Hide the keys";
+    fold.setAttribute("aria-expanded", f ? "false" : "true");
+  };
+  try { setFolded(localStorage.getItem("plotter:v3dhelp") === "folded"); } catch (e) { /* private window */ }
+  fold.addEventListener("click", () => {
+    const f = !helpBox.classList.contains("folded");
+    setFolded(f);
+    try { localStorage.setItem("plotter:v3dhelp", f ? "folded" : "open"); } catch (err) { /* private window */ }
   });
   el.querySelector(".v3d-addnode").addEventListener("click", () => setAddingNode(!S.addingNode));
   el.querySelector(".v3d-test").addEventListener("click", () => {
@@ -427,6 +455,55 @@ function place(group, it) {
   group.userData.box = null;                   // where it stands, for walking, is asked again
 }
 
+// Roads and the railway in the close-up: each stretch of a level's splines
+// (see the map's drawSplines) laid as a ribbon that follows the ground, with
+// rails on top of a railway. Fences and wires come as thin lines.
+const SPL_COL = { rail: 0x4a4438, road: 0x3c4038, line: 0xb9b5a0 };
+function ribbon(pts, width, lift) {
+  const o = O.origin, half = width / 2, pos = [], idx = [];
+  let run = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[Math.max(0, i - 1)], r = pts[Math.min(pts.length - 1, i + 1)];
+    let dx = r[0] - q[0], dy = r[1] - q[1];
+    const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    const x = p[0] - o[0], y = p[1] - o[1], z = groundAt(x, y);
+    if (z === null) { run = 0; continue; }                 // over a hole: the ribbon breaks
+    pos.push(x - dy * half, y + dx * half, z + lift, x + dy * half, y - dx * half, z + lift);
+    run++;
+    if (run >= 2) { const n = pos.length / 3 - 4; idx.push(n, n + 1, n + 2, n + 1, n + 3, n + 2); }
+  }
+  if (idx.length < 3) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+function splineMeshes(list) {
+  const group = new THREE.Group();
+  const mats = {};
+  for (const s of list) {
+    const kind = s.kind || "road", w = Math.max(0.15, s.width || 4);
+    const g = ribbon(s.pts, kind === "line" ? 0.25 : w, 0.06);
+    if (!g) continue;
+    mats[kind] = mats[kind] || material(SPL_COL[kind], { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    group.add(new THREE.Mesh(g, mats[kind]));
+    if (kind === "rail") {                                  // two rails, standard gauge
+      mats.steel = mats.steel || material(0xa9a49a, { polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+      for (const off of [-0.72, 0.72]) {
+        const side = s.pts.map((p, i) => {
+          const q = s.pts[Math.max(0, i - 1)], r = s.pts[Math.min(s.pts.length - 1, i + 1)];
+          let dx = r[0] - q[0], dy = r[1] - q[1];
+          const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+          return [p[0] - dy * off, p[1] + dx * off];
+        });
+        const rg = ribbon(side, 0.16, 0.16);
+        if (rg) group.add(new THREE.Mesh(rg, mats.steel));
+      }
+    }
+  }
+  return group;
+}
 function terrainMesh(t) {
   const o = O.origin, w = t.w, h = t.h;
   const pos = new Float32Array(w * h * 3), col = new Float32Array(w * h * 3), uv = new Float32Array(w * h * 2);
@@ -472,6 +549,12 @@ function terrainMesh(t) {
   g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
+  if (S.textured && t.mat && t.tex) {
+    const mesh = new THREE.Mesh(g, groundMaterial(t, g, pos));
+    mesh.receiveShadow = true;
+    mesh.userData.item = { key: "terrain", name: "the ground", type: "terrain" };
+    return mesh;
+  }
   let map = null;
   if (t.tile && t.rgb) {
     // the level's own grain: its most common ground texture, in grey
@@ -494,10 +577,75 @@ function terrainMesh(t) {
   return mesh;
 }
 
+// The ground as the game textures it: each point's own material, its texture
+// laid fixed to the world, one material easing into the next between points.
+// Up to eight materials, most of the ground first; each point's material is a
+// weight on its own layer (gw0 for layers 0-3, gw1 for 4-7), so across a
+// triangle the textures blend. Lit, shadowed and fogged as the rest (Lambert).
+const GROUND_M = 8;                 // metres of ground one texture covers
+function groundMaterial(t, g, pos) {
+  const tex = t.tex, n = Math.min(8, tex.order.length), size = tex.size, o = O.origin;
+  const layer = new Map(tex.order.slice(0, n).map((m, i) => [m, i]));
+  const cnt = t.w * t.h, w0 = new Float32Array(cnt * 4), w1 = new Float32Array(cnt * 4), guv = new Float32Array(cnt * 2);
+  // texture coordinates from a corner on the texture's own grid near the origin, so
+  // they stay small (precise) and the texture stays put however the view is opened
+  const ox = Math.floor(o[0] / GROUND_M) * GROUND_M, oy = Math.floor(o[1] / GROUND_M) * GROUND_M;
+  for (let k = 0; k < cnt; k++) {
+    const l = layer.has(t.mat[k]) ? layer.get(t.mat[k]) : 0;
+    (l < 4 ? w0 : w1)[k * 4 + (l & 3)] = 1;
+    guv[k * 2] = (pos[k * 3] + o[0] - ox) / GROUND_M;
+    guv[k * 2 + 1] = (pos[k * 3 + 1] + o[1] - oy) / GROUND_M;
+  }
+  g.setAttribute("gw0", new THREE.BufferAttribute(w0, 4));
+  g.setAttribute("gw1", new THREE.BufferAttribute(w1, 4));
+  g.setAttribute("guv", new THREE.BufferAttribute(guv, 2));
+  // the textures as layers of one array texture, R G B A
+  const data = new Uint8Array(size * size * 4 * n);
+  for (let i = 0; i < n; i++) {
+    const src = tex.px[i], base = i * size * size * 4;
+    for (let q = 0; q < size * size; q++) {
+      data[base + q * 4] = src[q * 3];
+      data[base + q * 4 + 1] = src[q * 3 + 1];
+      data[base + q * 4 + 2] = src[q * 3 + 2];
+      data[base + q * 4 + 3] = 255;
+    }
+  }
+  const arr = new THREE.DataArrayTexture(data, size, size, n);
+  arr.format = THREE.RGBAFormat;
+  arr.colorSpace = THREE.SRGBColorSpace;
+  arr.wrapS = arr.wrapT = THREE.RepeatWrapping;
+  arr.magFilter = THREE.LinearFilter;
+  arr.minFilter = THREE.LinearMipmapLinearFilter;
+  arr.generateMipmaps = true;
+  arr.anisotropy = S.renderer.capabilities.getMaxAnisotropy();
+  arr.needsUpdate = true;
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  mat.userData.gTex = arr;
+  mat.customProgramCacheKey = () => "igi-ground-" + n;
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.gTex = { value: arr };
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec4 gw0;\nattribute vec4 gw1;\nattribute vec2 guv;\n" +
+        "varying vec4 vGw0;\nvarying vec4 vGw1;\nvarying vec2 vGuv;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGw0 = gw0;\nvGw1 = gw1;\nvGuv = guv;");
+    let sum = "";
+    for (let i = 0; i < n; i++) {
+      sum += "gSum += texture(gTex, vec3(vGuv, " + i + ".0)).rgb * " + (i < 4 ? "vGw0" : "vGw1") + "." + "xyzw"[i & 3] + ";\n";
+    }
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", "#include <common>\nprecision highp sampler2DArray;\nuniform sampler2DArray gTex;\n" +
+        "varying vec4 vGw0;\nvarying vec4 vGw1;\nvarying vec2 vGuv;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 gSum = vec3(0.0);\n" + sum +
+        "diffuseColor.rgb *= gSum / max(dot(vGw0, vec4(1.0)) + dot(vGw1, vec4(1.0)), 1e-4);");
+  };
+  return mat;
+}
+
 // ------------------------------------------------------------------ building the scene
 function drop(obj) {
   const cached = new Set(S.geo.values());
   obj.traverse(c => {
+    if (c.userData.item && c.userData.item.type === "terrain" && c.material && c.material.userData.gTex) c.material.userData.gTex.dispose();
     if (c.userData.item && c.userData.item.type === "terrain" && c.material && c.material.map) c.material.map.dispose();
     if (c.geometry && !cached.has(c.geometry) && !c.geometry.userData.keep) c.geometry.dispose();
     if (c.material) (Array.isArray(c.material) ? c.material : [c.material]).forEach(m => m.dispose());
@@ -511,6 +659,8 @@ function fill() {
   S.items = [];
   S.byKey = new Map();
   if (O.terrain) root.add(terrainMesh(O.terrain));
+  S.splines = O.splines && O.splines.length ? splineMeshes(O.splines) : null;
+  if (S.splines) root.add(S.splines);
   for (const it of O.objects) {
     const g = makeItem(it);
     root.add(g);
@@ -1104,6 +1254,7 @@ function commit(p) {
   // the editor's heading: the angle that carries it, less what the level added
   if (O.onMove) O.onMove(it.key, { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3),
     gamma: +headOf(it, p.rot).toFixed(5), on: p.on || "" });
+  S.miniStale = true;
   readout(p);
 }
 function turnBy(a) {
@@ -1248,25 +1399,37 @@ function ghostAt(e) {
   S.ghost.visible = true;
   return p;
 }
+// The keys box: a title for what the view is doing, then one key a line
+function helpRows(title, rows) {
+  const h = S.el.querySelector(".v3d-help");
+  h.querySelector(".v3d-help-title").textContent = title;
+  h.querySelector(".v3d-help-rows").innerHTML = rows.map(r => "<b>" + esc(r[0]) + "</b><span>" + esc(r[1]) + "</span>").join("");
+}
 function help() {
   const t = O.target, pl = S.placing;
   hint();
   if (S.addingNode) {
-    S.el.querySelector(".v3d-help").innerHTML = "<b>Click a floor</b> or the ground to add a walkway point there · drag to look around · " +
-      "<b>Add walkway point</b> again to stop";
+    helpRows("Adding walkway points", [["Click", "a floor or the ground: a walkway point there"],
+      ["Drag", "look around"], ["Add walkway point", "again to stop"]]);
     return;
   }
-  const look = "The mouse looks around, <b>W A S D</b> " + (S.walking ? "walk" : "fly") + (S.walking ? "" : ", <b>Q E</b> down and up") +
-    ", <b>Shift</b> fast · <b>Esc</b> frees the mouse, again to close";
-  if (S.walking && !pl) {
-    S.el.querySelector(".v3d-help").innerHTML = "<b>Walking</b> · " + look + "<br>Hold <b>Alt</b> to edit · <b>G</b> or another view to fly again";
+  const move = [["Mouse", "look around"], ["W A S D", S.walking ? "walk" : "fly"]]
+    .concat(S.walking ? [] : [["Q E", "down and up"]])
+    .concat([["Shift", "faster"], ["Esc", "free the mouse, again to close"]]);
+  if (pl) {
+    helpRows("Placing " + pl.label, [
+      ["Click", "put it down " + (pl.kind === "wall" ? "on a wall" : "on a floor, a desk or the ground")],
+      ["Esc", "stop placing"], ["Drag", "look around"], ["W A S D", "fly"], ["Q E", "down and up"], ["Shift", "faster"]]);
     return;
   }
-  S.el.querySelector(".v3d-help").innerHTML = pl ?
-    "<b>Click</b> to put " + esc(pl.label) + " down " + (pl.kind === "wall" ? "on a wall" : "on a floor, a desk or the ground") +
-    " · <b>Esc</b> to stop placing<br>Drag to look around, <b>WASD</b> to fly, <b>Q E</b> down and up, <b>Shift</b> fast" :
-    look + "<br>Hold <b>Alt</b> to edit: click to select, <b>Alt+drag</b> moves anything, <b>Shift+Alt+drag</b> up and down, " +
-    "<b>Alt+right-drag</b> round it" + (t.editable && t.kind !== "fixed" ? " · <b>R</b> turn · <b>Ctrl+arrows</b> nudge 5 cm" : "");
+  if (S.walking) {
+    helpRows("Walking", move.concat([["Alt", "hold to edit"], ["G", "fly again, or pick another view"]]));
+    return;
+  }
+  const edit = [["Alt", "hold to edit"], ["Alt+click", "select"], ["Alt+drag", "move anything"],
+    ["Shift+Alt+drag", "up and down"], ["Alt+right-drag", "circle round it"]];
+  if (t.editable && t.kind !== "fixed") edit.push(["R", "turn 15° (Shift+R the other way)"], ["Ctrl+arrows", "nudge 5 cm"]);
+  helpRows("Keys", move.concat(edit));
 }
 
 // ------------------------------------------------------------------ what it stands on
@@ -1337,7 +1500,79 @@ function loop() {
   fly(now);
   explore(now);
   S.renderer.render(S.scene, S.camera);
+  minimap(now);
   S.raf = requestAnimationFrame(loop);
+}
+
+// ------------------------------------------------------------------ the map in the corner
+// The map computer round where you are, north up: you as the player's own mark,
+// turned the way you look, with the view's cone. The map is drawn by the editor
+// (O.mapImage) as one patch MINI_SNAP metres across; the corner shows MINI_M of
+// it, and a new patch is drawn only when you have flown well away from the
+// middle of this one, or the mission has changed since it was drawn.
+const MINI_M = 240, MINI_SNAP = 640, MINI_PX = 800;
+function minimap(now) {
+  const cv = S.el.querySelector(".v3d-mini");
+  if (!O || !O.mapImage) { cv.hidden = true; return; }
+  const top = S.el.querySelector(".v3d-top").offsetHeight + 10;
+  if (top !== S.miniTop) { S.miniTop = top; cv.style.top = top + "px"; }
+  const p = S.camera.position, x = p.x + O.origin[0], y = p.y + O.origin[1];
+  const m0 = S.mini;
+  const far = !m0 || Math.hypot(x - m0.cx, y - m0.cy) > MINI_SNAP * 0.28;
+  if ((far || (S.miniStale && now - m0.at > 1500)) && now - (S.miniTried || 0) > 400) {
+    S.miniTried = now;
+    const img = O.mapImage(x, y, MINI_SNAP, MINI_PX);
+    if (img) { S.mini = { img, cx: x, cy: y, at: now }; S.miniStale = false; }
+  }
+  const m = S.mini;
+  if (!m) { cv.hidden = true; return; }
+  cv.hidden = false;
+  const d = S.miniDrawn;
+  if (d && d[0] === x && d[1] === y && d[2] === S.yaw && d[3] === m) return;
+  S.miniDrawn = [x, y, S.yaw, m];
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  // the part of the patch round you: the patch has MINI_PX / MINI_SNAP pixels a metre
+  const s = MINI_PX / MINI_SNAP, half = MINI_M * s / 2;
+  g.drawImage(m.img, (x - m.cx) * s + MINI_PX / 2 - half, (m.cy - y) * s + MINI_PX / 2 - half, half * 2, half * 2, 0, 0, w, h);
+  const css = n => getComputedStyle(S.el).getPropertyValue(n).trim();
+  const you = css("--accent") || "#ffd24a", k = w / MINI_M;
+  // what the camera sees: its cone out to 60 m
+  const hf = 2 * Math.atan(Math.tan(S.camera.fov * Math.PI / 360) * S.camera.aspect), r = 60 * k;
+  g.save();
+  g.translate(w / 2, h / 2);
+  g.rotate(-S.yaw);
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.arc(0, 0, r, -Math.PI / 2 - hf / 2, -Math.PI / 2 + hf / 2);
+  g.closePath();
+  g.fillStyle = "rgba(255,210,74,.16)";
+  g.strokeStyle = "rgba(255,210,74,.55)";
+  g.lineWidth = 1;
+  g.fill();
+  g.stroke();
+  g.restore();
+  // you, as the map shows the player
+  if (window.PlanIcons) {
+    g.save();
+    g.translate(w / 2, h / 2);
+    g.fillStyle = you;
+    g.strokeStyle = "#fff3c4";
+    g.shadowColor = "rgba(0,0,0,.75)";      // a dark halo, so it stands out on any ground
+    g.shadowBlur = 4;
+    window.PlanIcons.draw(g, "player", 11, S.yaw, { fillAlpha: 1, line: 1 });
+    g.restore();
+  }
+  // north, and how far across
+  g.font = '600 10px "IBM Plex Mono",monospace';
+  g.fillStyle = "rgba(141,255,154,.85)";
+  g.textAlign = "center";
+  g.fillText("N", w / 2, 12);
+  g.textAlign = "left";
+  g.fillText(MINI_M + " m", 6, h - 6);
 }
 
 // ------------------------------------------------------------------ the API
@@ -1348,6 +1583,7 @@ function open(opts) {
   O.origin = [opts.target.x, opts.target.y, opts.target.z];
   if (S) { S.centre = [O.origin[0], O.origin[1]]; S.exploredAt = 0; S.cutFreed = false; }
   if (!S) { S = build(opts.host); S.centre = [O.origin[0], O.origin[1]]; }
+  S.miniStale = true;                 // the mission may have changed: the corner's map is drawn again soon
   if (S.dead) { S.el.hidden = false; return; }
   if (S.el.parentNode !== opts.host) opts.host.appendChild(S.el);
   S.el.hidden = false;
@@ -1478,7 +1714,7 @@ window.View3D = { open, close, isOpen, follow, update, screenOf, setPlacing, tar
   },
   // for the tests: the camera at a point of the world, what is loaded round it
   goTo: (x, y, z) => { if (!S) return; const o = O.origin; S.camera.position.set(x - o[0], y - o[1], z - o[2]); S.exploredAt = -1e9; explore(performance.now()); },
-  loaded: () => S ? { items: S.items.length, centre: S.centre, terrain: O.terrain ? [O.terrain.x0, O.terrain.y0, O.terrain.w, O.terrain.h] : null,
+  loaded: () => S ? { items: S.items.length, centre: S.centre, splines: (O.splines || []).length, splineMeshes: S.splines ? S.splines.children.length : 0, terrain: O.terrain ? [O.terrain.x0, O.terrain.y0, O.terrain.w, O.terrain.h] : null,
     keys: S.items.map(g => g.userData.item.name) } : null,
   // for the tests: the camera d metres from an item, from the side at angle a
   // (0 = north of it), a little above its middle, looking at it

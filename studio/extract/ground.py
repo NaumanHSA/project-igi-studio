@@ -2,7 +2,8 @@
 # rock, snow - for the editor to draw the real ground patterns under the relief.
 #
 #   python studio/extract/ground.py [--levels 1,3] [--game <the pristine install>]
-#       -> editor/data/ground/levelN.json   {materials, tiles: [base64 64x64 grey], mean: [...]}
+#       -> editor/data/ground/levelN.json   {materials, tiles: [base64 64x64 grey], mean: [...],
+#                                             ctiles: [base64 128x128 R, G, B], for the 3D view's ground}
 #       -> editor/data/ground/levelN.bin    zlib: uint8 material per terrain cell (terrain/levelN grid)
 #
 # What the level files hold (worked out here; the game's own renderer is not ported):
@@ -142,6 +143,37 @@ def mean_rgb(b, off, w, h):
     return [round(r / n / 255.0, 4), round(g / n / 255.0, 4), round(bl / n / 255.0, 4)] if n else [0.5, 0.5, 0.5]
 
 
+CTILE = 128         # the colour tile the 3D view lays on the ground: the game's own size as it shipped
+
+
+def colour_tile(b, off, w, h):
+    """The texture at CTILE x CTILE as R, G, B, row 0 at the top: a texture pack's
+    512 x 512 averaged down, the game's own 128 x 128 as it is."""
+    if w == CTILE and h == CTILE:
+        src = b[off:off + w * h * 4]
+        out = bytearray(w * h * 3)
+        out[0::3], out[1::3], out[2::3] = src[2::4], src[1::4], src[0::4]
+        return bytes(out)
+    out = bytearray(CTILE * CTILE * 3)
+    for ty in range(CTILE):
+        y0 = ty * h // CTILE
+        y1 = max(y0 + 1, (ty + 1) * h // CTILE)
+        for tx in range(CTILE):
+            x0 = tx * w // CTILE
+            x1 = max(x0 + 1, (tx + 1) * w // CTILE)
+            r = g = bl = 0
+            for yy in range(y0, y1):
+                base = off + yy * w * 4
+                for xx in range(x0 * 4, x1 * 4, 4):
+                    bl += b[base + xx]
+                    g += b[base + xx + 1]
+                    r += b[base + xx + 2]
+            n = (x1 - x0) * (y1 - y0)
+            q = (ty * CTILE + tx) * 3
+            out[q], out[q + 1], out[q + 2] = r // n, g // n, bl // n
+    return bytes(out)
+
+
 def grey_tile(b, off, w, h):
     """The texture shrunk to TILE x TILE shades of grey, row 0 at the top."""
     out = bytearray(TILE * TILE)
@@ -210,7 +242,7 @@ def build(lv, game):
             cs = [mean_rgb(b, offs[q], tw, th) for q in range(st * 3, min(st * 3 + 3, n))]
             set_rgb[st] = [sum(c[i] for c in cs) / len(cs) for i in range(3)] if cs else None
         return set_rgb[st]
-    tiles, means, rgbs = [], [], []
+    tiles, ctiles, means, rgbs = [], [], [], []
     EARTH = [0.37, 0.33, 0.22]      # a set the file does not have (level 3 names sets 6 and 7 with 18 textures)
     for m in range(materials):
         use = {st: k for st, k in (sets.get(m) or {m: 1}).items() if st * 3 < n}
@@ -219,12 +251,14 @@ def build(lv, game):
             t = min(m * 3, n - 1)
             g = grey_tile(b, offs[t], tw, th)
             tiles.append(base64.b64encode(g).decode())
+            ctiles.append(base64.b64encode(colour_tile(b, offs[t], tw, th)).decode())
             means.append(round(sum(g) / len(g) / 255.0, 4))
             rgbs.append(EARTH)
             continue
         top = max(use, key=lambda st: use[st])
         g = grey_tile(b, offs[top * 3], tw, th)
         tiles.append(base64.b64encode(g).decode())
+        ctiles.append(base64.b64encode(colour_tile(b, offs[top * 3], tw, th)).decode())
         means.append(round(sum(g) / len(g) / 255.0, 4))
         tot = sum(use.values())
         cols = [(rgb_of_set(st), k) for st, k in use.items() if rgb_of_set(st)]
@@ -235,6 +269,7 @@ def build(lv, game):
     counts = [grid.count(m) for m in range(materials)]
     (out / ("level%d.json" % lv)).write_text(json.dumps({
         "level": lv, "w": w, "h": h, "materials": materials, "tile": TILE, "tiles": tiles, "mean": means,
+        "ctile": CTILE, "ctiles": ctiles,
         "rgb": rgbs, "names": material_names(qtext, materials),
         "cells": counts, "modifiers": len(mods)}))
     return {"modifiers": len(mods), "materials": materials,

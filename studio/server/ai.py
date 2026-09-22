@@ -339,7 +339,8 @@ def fit(s, instructions, items, tools):
 def chat(cfg, body, emit, alive=lambda: True):
     """Stream one model turn to emit(event). body: {instructions, tools:[{name,
     description, parameters}], history:[items], previousId, fresh (index where
-    this turn's new items start), role ("main" or "light")}."""
+    this turn's new items start), role ("main" or "light"), agent (which of the
+    designer's agents asks: ideas, mission, edit, workshop; the mock uses it)}."""
     role = body.get("role") or "main"
     s, key = settings_for(cfg, role)
     proto = protocol_of(s)
@@ -572,6 +573,95 @@ def mock(body, emit):
             except ValueError:
                 pass
     last_text = (items[last_user].get("text") or "").lower() if last_user >= 0 else ""
+    agent = body.get("agent") or ""
+    if agent == "workshop" and "design" not in last_text and "character" not in last_text:
+        last_text = "design " + last_text          # the Workshop only designs
+    if agent == "review":
+        # Review: the check list and the stealth check, then findings to fix
+        if step == 0:
+            call("check_mission", {})
+        elif step == 1:
+            call("stealth_check", {})
+        else:
+            say("### Finding 1: The gate is watched all the way\nAt %s the only way in is in the camera's view. "
+                "Add a way round the east side: a gap in the fence 20 m north of the gate.\n\n"
+                "### Finding 2: A guard walks off\nThe sniper by the tower stands 40 m from a walkway, so he walks off at the start. "
+                "Move him onto the walkway 10 m west.\n\n"
+                "### What works\nThe objective sits at the end of a clear, tense approach." % place)
+        emit({"t": "done", "responseId": None, "model": "mock-designer", "usage": {"in": 0, "out": 0}})
+        return
+    if agent == "mission":
+        # the Mission builder: survey, propose the plan and wait; then one area
+        # a run ("Build area C now"), then the finish
+        def res(name):
+            for c in done_calls:
+                if c["name"] == name:
+                    try:
+                        return json.loads(results.get(c["id"]) or "{}")
+                    except ValueError:
+                        return {}
+            return None
+
+        def done_turn():
+            emit({"t": "done", "responseId": None, "model": "mock-designer", "usage": {"in": 0, "out": 0}})
+        m = re.match(r"build area ([a-z]) now.*?centre (-?[\d.]+), (-?[\d.]+)", last_text)
+        if m:
+            letter, x, y = m.group(1).upper(), float(m.group(2)), float(m.group(3))
+            if step == 0:
+                call("add_walkways", {"x": x, "y": y, "area_radius": 12})
+            elif step == 1:
+                call("place_guards", {"count": 2, "type": "AITYPE_SNIPER", "x": x, "y": y})
+            elif step == 2:
+                call("plan_progress", {"area": letter, "status": "built"})
+            else:
+                say("Area %s is built." % letter)
+            return done_turn()
+        if last_text.startswith("every area is built"):
+            if step == 0:
+                call("write_texts", {"name": "Quiet Hands", "description": "Get in and out unseen",
+                                     "briefing": "Get into the camp.\nLeave unseen."})
+            elif step == 1:
+                call("check_mission", {})
+            else:
+                say("Done: every area is built, the texts are written and the check list is clean. Apply when you are ready.")
+            return done_turn()
+        if "move b" in last_text:
+            if step == 0:
+                call("get_plan", {})
+            elif step == 1:
+                b = next((a for a in (res("get_plan") or {}).get("plan", {}).get("areas", []) if a["letter"] == "B"), None)
+                call("update_plan", {"areas": [{"letter": "B", "x": (b["x"] + 40) if b else 0}], "note": "Moved area B 40 m east"})
+            else:
+                say("Area B is 40 m further east now.")
+            return done_turn()
+        if step == 0:
+            say("Surveying the map first.\n")
+            call("get_overview", {})
+        elif step == 1:
+            ov = res("get_overview") or {}
+            ps = ov.get("player_start") or {"x": 0, "y": 0}
+            mp = ov.get("map") or {}
+            cx = lambda v: max(mp.get("x_min", v - 1e9) + 40, min(mp.get("x_max", v + 1e9) - 40, v))
+            cy = lambda v: max(mp.get("y_min", v - 1e9) + 40, min(mp.get("y_max", v + 1e9) - 40, v))
+            x0, y0 = ps["x"], ps["y"]
+            call("propose_plan", {
+                "title": "Quiet Hands", "pitch": "Get into the camp at night, take the codes and leave unseen.",
+                "style": "stealth", "difficulty": "normal", "time_of_day": "night", "weather": "clear", "time_limit_min": 15,
+                "fail_on_alarm": False, "player_start": {"x": x0, "y": y0, "facing_deg": 0},
+                "briefing": "Intel places the codes in the camp.\nGet in and out unseen.",
+                "areas": [
+                    {"letter": "A", "name": "Start", "role": "start", "x": cx(x0), "y": cy(y0), "w": 40, "d": 40, "structures": "rocks for cover"},
+                    {"letter": "B", "name": "Outpost", "role": "outpost", "x": cx(x0 + 70), "y": cy(y0 + 50), "w": 50, "d": 40,
+                     "guards": "two snipers", "security": "a camera on the gate"},
+                    {"letter": "C", "name": "The camp", "role": "objective", "x": cx(x0 - 60), "y": cy(y0 + 110), "w": 70, "d": 60,
+                     "structures": "a fenced compound", "guards": "two guards on patrol"}],
+                "objectives": [{"number": 1, "kind": "reach", "area": "C", "target": "the camp", "text": "Reach the camp."}],
+                "events": [{"when": "the alarm goes off", "then": "two guards arrive from the north"}]})
+        else:
+            pr = res("propose_plan") or {}
+            say("The plan is ready: three areas and one objective. Build it, or tell me what to change."
+                if pr.get("ok") else "The studio found problems with the plan: %s" % pr.get("error"))
+        return done_turn()
     flows = [("stealth", "stealth_check", [("stealth_check", {})]),
              ("walkway", "add_walkways", [("find_places", {"query": "radar dome", "limit": 3}),
                                           ("add_walkways", {"place": "@place", "area_radius": 10})]),
@@ -650,8 +740,10 @@ def mock(body, emit):
 # ------------------------------------------------------------------ chat threads
 # A mission's conversations with the designer, one file each:
 # missions/custom/<id>/ai/threads/<tid>.json {title, created, updated, items,
-# view, responseId, synced, mode, model}. The single chat.json of before is
-# taken in as the first thread.
+# view, responseId, synced, agent, model, plan}: agent is which of the
+# designer's agents the chat is with (older chats have mode "ideas" or
+# "build" instead), plan the Mission builder's plan and its progress. The
+# single chat.json of before is taken in as the first thread.
 def _threads_dir(store, mid):
     if not (store / mid).is_dir():
         raise FileNotFoundError(mid)
@@ -687,7 +779,8 @@ def list_threads(store, mid):
         except (OSError, ValueError):
             continue
         out.append({"id": f.stem, "title": t.get("title") or "Chat", "created": t.get("created"), "updated": t.get("updated"),
-                    "count": sum(1 for it in t.get("view") or [] if it.get("k") == "user"), "mode": t.get("mode")})
+                    "count": sum(1 for it in t.get("view") or [] if it.get("k") == "user"),
+                    "agent": t.get("agent"), "mode": t.get("mode")})
     return sorted(out, key=lambda t: -(t.get("updated") or 0))
 
 
@@ -700,7 +793,7 @@ def load_thread(store, mid, tid):
 
 def save_thread(store, mid, tid, data):
     f = _threads_dir(store, mid) / (_tid(tid) + ".json")
-    keep = {k: data.get(k) for k in ("title", "titled", "created", "items", "view", "responseId", "synced", "mode", "model")}
+    keep = {k: data.get(k) for k in ("title", "titled", "created", "items", "view", "responseId", "synced", "agent", "mode", "model", "plan")}
     keep["items"] = (keep["items"] or [])[-800:]
     keep["view"] = (keep["view"] or [])[-500:]
     keep["created"] = keep["created"] or int(time.time())

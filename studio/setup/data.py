@@ -42,7 +42,7 @@ REQUIRED = (["index.json", "models.json", "catalog.json", "meshes.bin", "meshes.
             + ["graphs%d.json" % n for n in range(1, 15)])
 
 STAMP = "data.json"
-VERSION = 1          # bump when an extractor's output changes, so data is rebuilt
+VERSION = 3          # bump when an extractor's output changes, so data is rebuilt (2: the ground's colour tiles; 3: splines)
 
 
 def _run(module, args, log):

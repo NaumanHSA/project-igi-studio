@@ -404,6 +404,29 @@ def extract(level, src_path=None, ai_dir=None):
                         "electric": expr[:160] or None, "ref": ref("Fence", x, y, z),
                         "cutscene": in_cutscene(cuts, mm.start())})
 
+    # ---- SplineObj tasks ----------------------------------------------------
+    # Roads, the railway (track, embankments, bridge), fence runs, power lines:
+    # the engine lays a segment model along a curve through waypoints (straight
+    # lines with Linear Segments). SplineObj(Linear Segments, Display waypoints,
+    # Snap Length, Automatic Orientation, matrices, collision LOD, Position,
+    # Gamma, light...) holds its SplineObjWaypoint children: Orientation (three
+    # angles as written), Position, Waypoint Model, Segment Model (laid from this
+    # waypoint to the next; "" leaves a gap), NumAreas, Align, Flip, Automatic
+    # Orientation.
+    splines = []
+    for mm in re.finditer(r'Task_New\((-?\d+), "SplineObj", "[^"]*", (TRUE|FALSE)', src):
+        body = src[mm.start():_task_end(src, mm.start())]
+        pts = []
+        for w in re.finditer(r'Task_New\(-?\d+, "SplineObjWaypoint", "[^"]*", ((?:-?[\d.eE+-]+, ){6,12})"([^"]*)", "([^"]*)"', body):
+            nums = [float(v) for v in w.group(1).rstrip(", ").split(", ")]
+            x, y, z = nums[-3:]
+            seg = w.group(3)
+            pts.append({"x": round(x/SCALE, 2), "y": round(y/SCALE, 2), "z": round(z/SCALE, 2),
+                        "seg": seg, "segName": models.get(seg, seg) if seg else "", "wp": w.group(2)})
+        if len(pts) >= 2:
+            splines.append({"id": int(mm.group(1)), "linear": mm.group(2) == "TRUE", "points": pts,
+                            "cutscene": in_cutscene(cuts, mm.start())})
+
     # ---- AIGraph origins ----------------------------------------------------
     # Node coordinates inside graphN.dat are offsets from this point, not
     # absolute: absolute = origin + offset.
@@ -484,6 +507,7 @@ def extract(level, src_path=None, ai_dir=None):
         "bounds": {"minX": min(xs), "maxX": max(xs), "minY": min(ys), "maxY": max(ys),
                    "minZ": min(zs), "maxZ": max(zs)},
         "objects": objects,
+        "splines": splines,
         "graphs": graphs,
         "graphOrigins": origins,
         "usedIds": used,

@@ -26,8 +26,117 @@ var PICKING = false;
 var THREADS = [];             // this mission's chats, newest first: {id, title, updated, count}
 var ATT = [];                 // pictures, map snapshots and sketches for the next message
 
+// ------------------------------------------------------------------ the agents
+// The designer is a team: each agent has a job, its own instructions and the
+// kinds of tool it may use (plotter.html gives every tool a kind). A chat is
+// with one agent at a time; switching keeps the history, so the next agent
+// reads what happened.
+var AGENTS = {
+  ideas: {
+    label: "Ideas", kinds: ["look", "design"], changes: false,
+    hint: "Looks at the level and suggests missions. Nothing changes.",
+    placeholder: "Ask for mission ideas for this level",
+    title: "Mission ideas",
+    lead: function (lv) { return "Ask for ideas for " + lv + ". It looks at the level and suggests missions; each one has a Build button that hands it to the Mission builder."; },
+    chips: function (lv) {
+      return ["Suggest three missions for " + lv + ", each with a different style", "What would make this mission harder without being unfair?",
+        "Where would the player most likely be seen? Suggest fixes"];
+    },
+    prompt: [
+      "Your job: suggest missions that fit this level's real places. You can look (get_overview, find_places, look_around, list_catalog, get_item, check_mission, stealth_check) but not change anything.",
+      "Write each suggestion as a heading \"### Design N: Title\", then a two line pitch and short lists: objectives, enemies and where they are, security, time and weather, difficulty. The user can press Build on one, which hands it to the Mission builder."
+    ]
+  },
+  mission: {
+    label: "Mission", kinds: ["look", "design", "build", "ground", "texts", "plan"], changes: true,
+    hint: "Plans a whole mission, then builds it one area at a time.",
+    placeholder: "Describe the mission to plan and build",
+    title: "Build a whole mission",
+    lead: function () { return "It surveys the map, writes a plan (the story, the areas, what goes in each, the objectives and events) and shows it to you. Once you agree, it builds the mission one area at a time while you watch."; },
+    chips: function () {
+      return ["Plan a stealth mission for this map: a guarded compound with the objective inside, and two ways in",
+        "Plan a sniper mission: the player on high ground, the targets in a camp below, and a way out",
+        "Plan a rescue: a prisoner held in a building in the middle of a patrolled camp",
+        "Plan an assault on a radar post on a hill, with an alarm that brings reinforcements"];
+    },
+    prompt: [
+      "Your job: a whole mission, planned first and then built one area at a time. Most often the map is an empty map: the level's terrain, sky, weather, walkways and player start, with no buildings, guards, pickups, objectives or mission logic of its own. Everything the mission needs, you build.",
+      "1. Survey: get_overview, then look_around across the map (send the scout on broad sweeps): where the ground is flat, where it rises, where the walkways run, where the player starts.",
+      "2. Plan: call propose_plan with the whole mission: 3 to 6 areas in the order they will be built (each with its centre and size in metres, its role, and what goes there: ground work, structures, guards with their posts or patrols, cameras and alarms, pickups), at most 6 objectives (each in an area, with its target), the events, the settings, the player start and a briefing. The studio checks it; fix what it says and propose again. The user sees the plan as a card with the areas outlined on the map. Then stop: one line saying the plan is ready. Build nothing until they agree. When they ask for changes, call update_plan.",
+      "3. Building: the studio asks for one area at a time (\"Build area C now\"). Build that area only, inside its bounds: level the ground where a compound or building goes, lay walkways (add_walkways) before placing guards, then the structures, guards, security and pickups. Look at what you made (look_around), then call plan_progress for the area: built, or problem with what went wrong. Keep your reply to a line.",
+      "4. Finishing: when asked to finish, add the objectives with their targets, the events, move the player start if the plan says so, set the time and weather, write the texts (write_texts), run check_mission and stealth_check, fix what they find, and end with a short summary.",
+      "Keep a way on foot from the player start to every objective, and more than one way in where you can. On an empty map there are none of the level's terminals, so no hack objectives: use reach, collect, kill or destroy."
+    ]
+  },
+  edit: {
+    label: "Edit", kinds: ["look", "design", "build", "ground", "texts", "library"], changes: true,
+    hint: "Changes the mission as it is, while you watch.",
+    placeholder: "Say what to change, add or fix",
+    title: "Edit the mission",
+    lead: function () { return "Say what to change and watch it happen on the map, one step at a time. Select something or tag a place to say where. Everything it does is an ordinary change: undo works, and Apply stays yours."; },
+    chips: function () {
+      return ["Make the mission harder: more guards on the routes to the objectives, and an alarm that brings reinforcements",
+        "Build a fenced compound near the player start with guards, a camera and a weapon to collect inside",
+        "Check the mission and fix what you can",
+        "Run a stealth check and tell me where the player will be seen",
+        "Write the mission's name, briefing, objective texts and map labels",
+        "Make easy and hard versions of this mission"];
+    },
+    prompt: [
+      "Your job: change the mission as it is, the way the user asks. Read what is there first (get_overview, look_around, get_item), change only what is asked and keep the rest. The selection and the tagged places say where.",
+      "How to work: look before you change. Tell the user in two to four short lines what you are going to do, then do it step by step. After changing, run check_mission and fix what it finds. End with a short summary: what you changed and where, and what to try when playing it."
+    ]
+  },
+  workshop: {
+    label: "Workshop", kinds: ["look", "design"], changes: false, drop: /^(check_mission|stealth_check|list_missions|make_campaign|focus_map)$/,
+    hint: "Buildings, characters and objects for your inventory.",
+    placeholder: "Describe a building, a character or an object",
+    title: "Workshop",
+    lead: function () { return "Buildings, characters and objects for your inventory, made from the game's parts and shown turning in 3D. Nothing on the map changes: add what you like to the inventory and place it yourself."; },
+    chips: function () {
+      return ["Design a sandbagged sniper nest", "Design a checkpoint: a barrier, a guard hut and two guards",
+        "Design a weapons cache hidden among crates", "Design an officer: a pistol, sharp eyes, and a model of his kind",
+        "Design a watchtower with a sniper on top"];
+    },
+    prompt: [
+      "Your job: design things for the user's inventory: buildings and structures made of the game's parts (with guards and pickups when they belong), characters, and groups of objects. You change nothing in the mission; the user places what they like.",
+      "How to work: look through the catalogue first (list_catalog structures with a search word, for the parts and their sizes; list_catalog guards for the character types and their models). Then design with design_structure or design_character; each design appears in the chat turning in 3D. Say in a line or two what it is and how to use it. If it could be better, make a second version rather than explaining.",
+      "Make designs that hold together: parts meet or overlap slightly and never float, stand on the ground (dz 0) unless stacked on another part (dz = the top of the part under it: its dz plus its height), face sensibly (a gate across the road, a guard looking out), and keep to a sensible size (use the sizes from list_catalog). A part's origin is not always its middle: box_centre_from_origin_m and bottom_from_origin_m in list_catalog say where its box sits.",
+      "The studio checks every design and lists its flaws (a part floating or sunk, the same part twice, a part far from the rest, a guard or pickup inside a wall or crate). When there are flaws, make a corrected version at once, before you describe it. New weapon types, new 3D models and new textures can't be made yet: design with what the game has."
+    ]
+  }
+};
+AGENTS.review = {
+  label: "Review", kinds: ["look"], changes: false, drop: /^(make_campaign|list_missions)$/,
+  hint: "Plays it on paper and lists what to fix.",
+  placeholder: "Ask what would go wrong, or what to check",
+  title: "Review the mission",
+  lead: function () { return "It walks the mission as the player would: the ways in, who sees them, the objectives, the alarm, the texts. Each finding comes with a Fix button that hands it to Edit. Nothing changes until you press one."; },
+  chips: function () {
+    return ["Review the mission: what would go wrong for the player, and what is unfair?",
+      "Where will the player be seen on the way to each objective?",
+      "Check the objectives, the briefing and the map labels"];
+  },
+  prompt: [
+    "Your job: review the mission as the player will meet it, and say what to fix. You change nothing: look (get_overview, check_mission, stealth_check, look_around at the start, the objectives and the guarded places, get_item) and judge.",
+    "Look for: objectives the game can't complete or the player can't reach on foot; ways in that are watched all the way, or none that are; guards who stand alone, face walls or walk off (more than 25 m from a walkway); cameras with nothing to raise; an alarm that brings nothing; a time limit too tight for the distance; texts too long or unclear; and what makes it too easy.",
+    "Write each finding as a heading \"### Finding N: <what, in a few words>\", then one to three lines: where (a place name, or x, y), why it matters to the player, and the fix, concrete enough to make (\"move the sniper at the water tower 10 m east so he sees the gate\"). Most important first; at most 8. End with a heading \"### What works\" and a line on what already works well. The user presses Fix on a finding to hand it to Edit."
+  ]
+};
+var ORDER = ["ideas", "mission", "edit", "workshop", "review"];
+function agentOf(d) { return d && AGENTS[d.agent] ? d.agent : d && d.mode === "ideas" ? "ideas" : "edit"; }
+function AG() { return AGENTS[CHAT.agent] || AGENTS.edit; }
+// the tools an agent is given
+function agentTools(id) {
+  var a = AGENTS[id] || AGENTS.edit, list = api().tools(a.kinds);
+  if (a.kinds.indexOf("plan") >= 0) list = list.concat(PLAN_TOOLS);
+  return a.drop ? list.filter(function (t) { return !a.drop.test(t.name); }) : list;
+}
+
 function newId() { return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
-function blank() { return { id: newId(), title: "", created: 0, items: [], view: [], responseId: null, synced: 0, mode: "build", model: "main" }; }
+function blank() { return { id: newId(), title: "", created: 0, items: [], view: [], responseId: null, synced: 0, agent: "edit", model: "main" }; }
+// a saved chat, taken in: chats from before the agents have a mode instead
+function adopt(d, tid) { var c = Object.assign(blank(), d, { id: tid }); c.agent = agentOf(d); delete c.mode; if (!c.plan) delete c.plan; return c; }
 function pref(k, d) { try { var v = localStorage.getItem("ai:" + k); return v == null ? d : v; } catch (e) { return d; } }
 function setPref(k, v) { try { localStorage.setItem("ai:" + k, v); } catch (e) { /* private window */ } }
 function $(id) { return document.getElementById(id); }
@@ -49,9 +158,9 @@ var CSS = [
 ".ai-ib{background:transparent;border:1px solid transparent;color:var(--muted);border-radius:4px;width:28px;height:28px;display:grid;place-items:center;cursor:pointer;flex:none}",
 ".ai-ib:hover{color:var(--ink);border-color:var(--line)}",
 ".ai-ib svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6}",
-".ai-modes{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}",
-".ai-modes .seg .btn{padding:4px 12px;font-size:12.5px}",
-".ai-modes .hint{margin:0;flex:1;font-size:11.5px}",
+".ai-modes{display:flex;flex-wrap:wrap;gap:5px 8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}",
+".ai-modes .seg .btn{padding:4px 8px;font-size:12.5px}",
+".ai-modes .hint{margin:0;flex-basis:100%;font-size:11.5px}",
 ".ai-log{flex:1;min-height:0;overflow-y:auto;padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px;scroll-behavior:smooth}",
 ".ai-log>*{flex:none}",
 ".ai-u{align-self:flex-end;max-width:88%;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--ink);border-radius:9px 9px 2px 9px;padding:7px 10px;font-size:13px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}",
@@ -66,6 +175,8 @@ var CSS = [
 ".ai-design{margin:6px 0 10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--sunken)}",
 ".ai-design h4{margin-top:0}",
 ".ai-design .btn{margin-top:6px;font-size:12px;padding:3px 10px}",
+".ai-finding{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}",
+".ai-finding h4{color:var(--warn)}",
 ".ai-think{font-size:12px;color:var(--faint);border-left:2px solid var(--line);padding:2px 0 2px 8px}",
 ".ai-think summary{cursor:pointer;color:var(--muted);font-size:11.5px;list-style:none}",
 ".ai-think summary::-webkit-details-marker{display:none}",
@@ -169,7 +280,33 @@ var CSS = [
 ".ai-dcard .dc-b p{margin:2px 0 0;font-size:12.5px;color:var(--muted);line-height:1.4}",
 ".ai-dcard .dc-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}",
 ".ai-dcard .dc-acts .btn{font-size:12px;padding:3px 10px}",
-".ai-dcard .dc-acts .btn.done{background:transparent;border-color:var(--ok);color:var(--ok);cursor:default}"
+".ai-dcard .dc-acts .btn.done{background:transparent;border-color:var(--ok);color:var(--ok);cursor:default}",
+".ai-step{align-self:flex-start;font:600 11px 'Barlow Condensed',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#6fb6ff;border:1px solid color-mix(in srgb,#6fb6ff 45%,var(--line));border-radius:10px;padding:2px 9px}",
+".ai-plan{border:1px solid color-mix(in srgb,#6fb6ff 55%,var(--line));border-radius:7px;background:var(--sunken);padding:9px 10px 10px;font-size:12.5px;color:var(--muted);line-height:1.45}",
+".ai-plan.old{opacity:.6;padding:6px 10px}",
+".ai-plan p{margin:4px 0 0}.ai-plan .pl-sets{font:11px 'IBM Plex Mono',monospace;color:var(--faint)}",
+".ai-plan .pl-note{color:#6fb6ff;font-size:12px}",
+".pl-h{display:flex;align-items:baseline;gap:7px}",
+".pl-h em{font:600 11px 'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6fb6ff;font-style:normal}",
+".pl-h b{flex:1;font-size:14px;color:var(--ink);min-width:0;overflow-wrap:anywhere}",
+".pl-st{font:500 10.5px 'IBM Plex Mono',monospace;border:1px solid var(--line);border-radius:9px;padding:0 7px;white-space:nowrap;color:var(--muted)}",
+".pl-st.building,.pl-st.finishing{color:var(--accent);border-color:var(--accent)}.pl-st.done{color:var(--ok);border-color:var(--ok)}",
+".pl-areas{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}",
+".pl-areas li{display:grid;grid-template-columns:20px 1fr auto;gap:7px;align-items:start;border-top:1px solid var(--line);padding-top:5px}",
+".pl-areas i{font:700 11px 'IBM Plex Mono',monospace;font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,#6fb6ff 25%,transparent);color:#6fb6ff}",
+".pl-areas li.built i{background:color-mix(in srgb,var(--ok) 25%,transparent);color:var(--ok)}",
+".pl-areas li.building i{background:var(--accent);color:var(--accent-ink)}",
+".pl-areas li.problem i{background:color-mix(in srgb,var(--danger) 25%,transparent);color:var(--danger)}",
+".pl-areas b{color:var(--ink)}.pl-areas span{font-size:11.5px;color:var(--faint)}",
+".pl-areas small{display:block;font:11px 'IBM Plex Mono',monospace;color:var(--faint)}",
+".pl-areas li.built small{color:var(--ok)}.pl-areas li.building small{color:var(--accent)}.pl-areas li.problem small{color:var(--danger)}",
+".pl-areas p{margin:2px 0 0;font-size:12px}",
+".pl-areas .go{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:4px;font-size:11px;padding:1px 6px;cursor:pointer}",
+".pl-areas .go:hover{color:var(--ink);border-color:#6fb6ff}",
+".pl-areas .pl-b{display:flex;gap:4px}",
+".pl-sub{margin-top:8px;font:600 11px 'Barlow Condensed',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}",
+".pl-obj{margin:2px 0 0;padding-left:18px}.pl-obj span{color:var(--faint)}",
+".pl-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.pl-acts .btn{font-size:12px;padding:3px 10px}"
 ].join("\n");
 
 var IC = {
@@ -204,10 +341,9 @@ function build() {
     '<button class="ai-ib" id="ai-new" title="New chat\nStart a new conversation. The others stay in the chat list." aria-label="New chat">' + IC.plus + '</button>' +
     '<button class="ai-ib" id="ai-cfg" title="Settings\nAPI keys, models and how it works" aria-label="AI settings">' + IC.gear + '</button></div>' +
     '<div class="ai-threads" id="ai-threads" hidden></div>' +
-    '<div class="ai-modes"><div class="seg" role="radiogroup" aria-label="Mode">' +
-    '<button class="btn" data-mode="ideas" role="radio" title="Ideas\nIt looks at the level and suggests missions. Nothing changes.">Ideas</button>' +
-    '<button class="btn" data-mode="build" role="radio" title="Build\nIt builds on the map while you watch. Every step can be undone.">Build</button></div>' +
-    '<p class="hint" id="ai-mode-hint"></p></div>' +
+    '<div class="ai-modes"><div class="seg" role="radiogroup" aria-label="Agent">' +
+    ORDER.map(function (k) { var a = AGENTS[k]; return '<button class="btn" data-agent="' + k + '" role="radio" title="' + esc(a.label + "\n" + a.hint) + '">' + esc(a.label) + '</button>'; }).join("") +
+    '</div><p class="hint" id="ai-mode-hint"></p></div>' +
     '<div class="ai-log" id="ai-log" aria-live="polite"></div>' +
     '<div class="ai-foot">' +
     '<div class="ai-status" id="ai-status" hidden><i class="dot"></i><span id="ai-status-t"></span></div>' +
@@ -260,8 +396,8 @@ function build() {
   $("tab-ai").addEventListener("click", function () { showTab("ai"); });
   $("ai-cfg").addEventListener("click", function () { if (api()) api().openSettings("ai"); });
   $("ai-new").addEventListener("click", newChat);
-  panel.querySelectorAll("[data-mode]").forEach(function (b) {
-    b.addEventListener("click", function () { if (!RUN) { CHAT.mode = b.getAttribute("data-mode"); paintMode(); saveSoon(); } });
+  panel.querySelectorAll("[data-agent]").forEach(function (b) {
+    b.addEventListener("click", function () { if (!RUN) setAgent(b.getAttribute("data-agent")); });
   });
   $("ai-follow").checked = FOLLOW;
   $("ai-follow").addEventListener("change", function () { FOLLOW = this.checked; setPref("follow", FOLLOW ? "1" : "0"); });
@@ -288,13 +424,29 @@ function showTab(t) {
   if (TAB === "ai") { loadSettings(); render(); setTimeout(function () { if (el.input && !RUN) el.input.focus(); }, 30); }
 }
 function paintMode() {
-  el.panel.querySelectorAll("[data-mode]").forEach(function (b) {
-    var on = b.getAttribute("data-mode") === CHAT.mode;
+  el.panel.querySelectorAll("[data-agent]").forEach(function (b) {
+    var on = b.getAttribute("data-agent") === CHAT.agent;
     b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on));
   });
-  el.hint.textContent = CHAT.mode === "ideas" ? "Looks and suggests. Nothing changes." : "Builds on the map as you watch.";
-  el.input.placeholder = CHAT.mode === "ideas" ? "Ask for mission ideas for this level" : "Describe the mission to build, or what to change";
+  el.hint.textContent = AG().hint;
+  el.input.placeholder = AG().placeholder;
   if (!CHAT.view.length) render();
+}
+// hand the chat to another agent; it keeps the history
+function setAgent(k) {
+  if (!AGENTS[k] || k === CHAT.agent) return;
+  CHAT.agent = k; setPref("agent", k);
+  paintMode();
+  if (CHAT.view.length) add({ k: "note", text: "Now with " + AGENTS[k].label + ": " + AGENTS[k].hint });
+  saveSoon();
+}
+// the agent a new chat starts with: the Mission builder on an empty map of
+// the user's, else the one used last
+function startAgent() {
+  var A = api(), c = A && A.ready() ? A.context() : null;
+  if (c && c.editable && c.empty && !c.counts.yours) return "mission";
+  var k = pref("agent", "edit");
+  return AGENTS[k] ? k : "edit";
 }
 
 // ------------------------------------------------------------------ tagging a place
@@ -528,6 +680,308 @@ async function runScout(q, row, grp) {
   return { ok: !last.error, answer: (last.text || "").trim().slice(0, 2500), looked: looked, error: last.error || undefined };
 }
 
+// ------------------------------------------------------------------ the Mission builder's plan
+// The Mission agent surveys, then proposes the whole mission as data
+// (propose_plan): the studio checks it, shows it as a card, and outlines its
+// areas on the map. Once the user agrees, the areas are built one run each
+// ("Build area C now"), the agent reporting each with plan_progress, then a
+// last run finishes what spans them (objectives, events, texts, checks). The
+// plan and its progress are kept with the chat (CHAT.plan).
+var PLAN_BEFORE = {};         // chat id -> the mission before the first area, for "Undo the whole build"
+var KINDS = ["kill", "killAll", "collect", "reach", "hack", "destroy"];
+var AREA_PROPS = {
+  letter: { type: "string", description: "A, B, C... in the order they are built" },
+  name: { type: "string", description: "a short name, e.g. \"Rail yard checkpoint\"" },
+  role: { type: "string", description: "start, approach, outpost, patrol zone, objective, way out..." },
+  x: { type: "number", description: "centre, metres east" }, y: { type: "number", description: "centre, metres north" },
+  w: { type: "number", description: "width east-west in metres (with d: a rectangle)" }, d: { type: "number", description: "depth north-south in metres" },
+  r: { type: "number", description: "or a radius in metres, for a round area" },
+  turn_deg: { type: "number", description: "how far a rectangle is turned, anticlockwise" },
+  ground: { type: "string", description: "ground work: level it, ramps, walkways to lay" },
+  structures: { type: "string" }, guards: { type: "string", description: "how many, which kinds, posts and patrols" },
+  security: { type: "string", description: "cameras, alarm system, buttons, sirens" }, pickups: { type: "string" }, notes: { type: "string" }
+};
+var PLAN_PROPS = {
+  title: { type: "string" }, pitch: { type: "string", description: "two lines: what the mission is and what makes it good" },
+  style: { type: "string", description: "stealth, assault, sniper, rescue, sabotage..." }, difficulty: { type: "string", enum: ["easy", "normal", "hard"] },
+  time_of_day: { type: "string" }, weather: { type: "string", description: "as the level, clear, rain or snow" },
+  time_limit_min: { type: "number" }, fail_on_alarm: { type: "boolean" },
+  player_start: { type: "object", properties: { x: { type: "number" }, y: { type: "number" }, facing_deg: { type: "number" } }, required: ["x", "y"] },
+  briefing: { type: "string", description: "one to three short lines" },
+  way_through: { type: "string", description: "the way the player is meant to get through" }, other_ways: { type: "string" },
+  areas: { type: "array", items: { type: "object", properties: AREA_PROPS, required: ["letter", "name", "role", "x", "y"] } },
+  objectives: { type: "array", items: { type: "object", properties: {
+    number: { type: "integer" }, kind: { type: "string", enum: KINDS }, area: { type: "string", description: "the area's letter" },
+    target: { type: "string", description: "what or whom: the officer, the radio, the codes..." }, text: { type: "string", description: "under 60 characters" } }, required: ["kind", "area", "text"] } },
+  events: { type: "array", items: { type: "object", properties: { when: { type: "string" }, then: { type: "string" } }, required: ["when", "then"] } }
+};
+var PLAN_TOOLS = [
+  { name: "propose_plan", description: "Propose the whole mission as a plan: 3 to 6 areas in build order (each with its centre, size, role and what goes there), at most 6 objectives (each in an area), the events, the settings, the player start and a briefing. The studio checks it (fix what it says and propose again); the user then sees it as a card, with the areas outlined on the map. Build nothing until the user agrees.",
+    parameters: { type: "object", properties: PLAN_PROPS, required: ["title", "pitch", "areas", "objectives"] } },
+  { name: "update_plan", description: "Change the plan the user is looking at, as they ask: any of propose_plan's fields. Areas are matched by letter (a new letter adds an area); remove_areas drops some; objectives or events, when given, replace the lists. Say what changed in note.",
+    parameters: { type: "object", properties: Object.assign({}, PLAN_PROPS, { remove_areas: { type: "array", items: { type: "string" } }, note: { type: "string" } }) } },
+  { name: "plan_progress", description: "Report an area as built, or as a problem you could not solve (say what in note), once you have built it and looked at it.",
+    parameters: { type: "object", properties: { area: { type: "string" }, status: { type: "string", enum: ["built", "problem"] }, note: { type: "string" } }, required: ["area", "status"] } },
+  { name: "get_plan", description: "The plan as it stands, with each area's progress.", parameters: { type: "object", properties: {} } }
+];
+var PLAN_NAMES = PLAN_TOOLS.map(function (t) { return t.name; });
+function r1(v) { return Math.round(v * 10) / 10; }
+// an area as the map draws it and the tools take it
+function areaBox(a) {
+  var r = +a.r > 0 ? +a.r : 0, w = +a.w > 0 ? +a.w : r * 2, d = +a.d > 0 ? +a.d : r * 2;
+  return { x0: a.x - w / 2, x1: a.x + w / 2, y0: a.y - d / 2, y1: a.y + d / 2, w: w, d: d, r: r };
+}
+function paintPlanAreas() {
+  var A = api(), p = CHAT.plan;
+  if (!A || !A.setPlanAreas) return;
+  A.setPlanAreas(p && p.stage !== "replaced" ? p.areas.map(function (a) {
+    return { letter: a.letter, name: a.name, x: a.x, y: a.y, w: areaBox(a).w, d: areaBox(a).d, r: +a.r > 0 ? +a.r : 0, turn: +a.turn_deg || 0, status: a.status };
+  }) : []);
+}
+function cleanArea(a) {
+  var o = {};
+  Object.keys(AREA_PROPS).forEach(function (k) { if (a[k] != null && a[k] !== "") o[k] = a[k]; });
+  o.letter = String(o.letter || "").trim().toUpperCase().slice(0, 2);
+  ["x", "y", "w", "d", "r", "turn_deg"].forEach(function (k) { if (o[k] != null) o[k] = +o[k]; });
+  o.status = a.status || "planned";
+  if (a.note) o.note = a.note;
+  return o;
+}
+// what is wrong with a plan (it is not shown until there is nothing), and
+// what is worth a second look
+function planProblems(p) {
+  var A = api(), c = A.context(), ext = A.extent ? A.extent() : null, bad = [], warn = [], seen = {};
+  if (!p.title) bad.push("It needs a title.");
+  if (!p.areas.length) bad.push("It needs areas: 3 to 6, in the order they are built.");
+  if (p.areas.length > 8) bad.push("At most 8 areas; merge some.");
+  p.areas.forEach(function (a) {
+    var L = a.letter || "?";
+    if (!/^[A-Z]$/.test(a.letter)) bad.push("Area \"" + (a.name || L) + "\": its letter is one of A to Z.");
+    if (seen[a.letter]) bad.push("Two areas are lettered " + L + ".");
+    seen[a.letter] = 1;
+    if (!isFinite(a.x) || !isFinite(a.y)) { bad.push("Area " + L + " needs its centre (x, y)."); return; }
+    var b = areaBox(a);
+    if (!(b.w > 0 && b.d > 0)) bad.push("Area " + L + " needs its size: w and d in metres, or r.");
+    else if (b.w < 6 || b.d < 6 || b.w > 900 || b.d > 900) bad.push("Area " + L + " is " + Math.round(b.w) + " x " + Math.round(b.d) + " m; keep areas between 6 and 900 m across.");
+    if (ext && (a.x < ext.x0 - 30 || a.x > ext.x1 + 30 || a.y < ext.y0 - 30 || a.y > ext.y1 + 30))
+      bad.push("Area " + L + " at " + r1(a.x) + ", " + r1(a.y) + " is off the map (x " + Math.round(ext.x0) + " to " + Math.round(ext.x1) + ", y " + Math.round(ext.y0) + " to " + Math.round(ext.y1) + ").");
+  });
+  for (var i = 0; i < p.areas.length; i++) for (var j = i + 1; j < p.areas.length; j++) {
+    var a = areaBox(p.areas[i]), b = areaBox(p.areas[j]);
+    var ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    if (ox > 0 && oy > 0 && ox * oy > 0.5 * Math.min(a.w * a.d, b.w * b.d))
+      warn.push("Areas " + p.areas[i].letter + " and " + p.areas[j].letter + " mostly overlap.");
+  }
+  if (!p.objectives.length) bad.push("It needs objectives (1 to 6).");
+  if (p.objectives.length > 6) bad.push("The map computer shows 6 objectives at most.");
+  p.objectives.forEach(function (o, n) {
+    if (KINDS.indexOf(o.kind) < 0) bad.push("Objective " + (n + 1) + ": kind is one of " + KINDS.join(", ") + ".");
+    if (!seen[String(o.area || "").toUpperCase()]) bad.push("Objective " + (n + 1) + " is in area \"" + o.area + "\", which the plan doesn't have.");
+    if (o.kind === "hack" && c.empty) bad.push("Objective " + (n + 1) + " is a hack, but an empty map has none of the level's terminals; make it reach, collect, kill or destroy.");
+    if (o.text && o.text.length > 60) warn.push("Objective " + (n + 1) + "'s text is over 60 characters.");
+  });
+  if (p.player_start && ext && (p.player_start.x < ext.x0 || p.player_start.x > ext.x1 || p.player_start.y < ext.y0 || p.player_start.y > ext.y1))
+    bad.push("The player start is off the map.");
+  return { bad: bad, warn: warn };
+}
+function planOf(a, old) {
+  var p = old ? JSON.parse(JSON.stringify(old)) : { areas: [], objectives: [], events: [] };
+  Object.keys(PLAN_PROPS).forEach(function (k) { if (k !== "areas" && a[k] != null) p[k] = a[k]; });
+  if (Array.isArray(a.areas)) a.areas.forEach(function (x) {
+    var L = String(x.letter || "").trim().toUpperCase(), cur = p.areas.filter(function (y) { return y.letter === L; })[0];
+    if (cur) { var st = cur.status, note = cur.note; Object.assign(cur, cleanArea(Object.assign({}, cur, x))); cur.status = st; if (note) cur.note = note; }
+    else p.areas.push(cleanArea(x));
+  });
+  if (Array.isArray(a.remove_areas)) {
+    var gone = a.remove_areas.map(function (s) { return String(s).toUpperCase(); });
+    p.areas = p.areas.filter(function (x) { return gone.indexOf(x.letter) < 0; });
+  }
+  p.objectives = (p.objectives || []).map(function (o, i) { return Object.assign({}, o, { number: o.number || i + 1, area: String(o.area || "").toUpperCase() }); });
+  p.events = p.events || [];
+  return p;
+}
+function planTool(name, a) {
+  var p = CHAT.plan;
+  if (name === "get_plan") return p ? { ok: true, plan: planBrief(p) } : { ok: false, error: "There is no plan yet: survey the map, then propose_plan." };
+  if (name === "plan_progress") {
+    if (!p) return { ok: false, error: "There is no plan." };
+    var L = String(a.area || "").toUpperCase(), ar = p.areas.filter(function (x) { return x.letter === L; })[0];
+    if (!ar) return { ok: false, error: "The plan has no area " + a.area + "." };
+    // built means something was: a run that changed nothing reports a problem
+    if (a.status !== "problem" && RUN && RUN.planArea === L && !RUN.changes)
+      return { ok: false, error: "Nothing in area " + L + " was built in this run: every change failed or none was made. Read the errors and build it another way (guards need walkways within 35 m: add_walkways first), or report status problem with what stops you." };
+    ar.status = a.status === "problem" ? "problem" : "built";
+    ar.note = a.note ? String(a.note).slice(0, 300) : "";
+    paintPlan(); saveSoon();
+    return { ok: true, area: L, status: ar.status };
+  }
+  var building = p && p.areas.some(function (x) { return x.status !== "planned"; });
+  var next = planOf(a, name === "update_plan" ? p : null);
+  if (name === "update_plan" && !p) return { ok: false, error: "There is no plan to change yet: use propose_plan." };
+  var chk = planProblems(next);
+  if (chk.bad.length) return { ok: false, error: "The plan isn't shown yet. Fix these and " + name + " again: " + chk.bad.join(" "), problems: chk.bad };
+  next.v = (p && p.v || 0) + 1;
+  next.stage = name === "update_plan" && building ? (p.stage === "done" ? "done" : "paused") : "proposed";
+  if (name === "propose_plan" && p) p.stage = "replaced";
+  CHAT.plan = next;
+  add({ k: "plan", v: next.v, note: name === "update_plan" ? String(a.note || "The plan changed").slice(0, 200) : "" });
+  paintPlan(); saveSoon();
+  return { ok: true, shown: true, areas: next.areas.length, objectives: next.objectives.length, warnings: chk.warn.length ? chk.warn : undefined,
+    next: "The user sees the plan now. Say in one line that it is ready and wait for their answer: they build it, or ask for changes (update_plan)." };
+}
+// the plan in short, for the model
+function planBrief(p) {
+  return { title: p.title, stage: p.stage, areas: p.areas.map(function (a) {
+    var b = areaBox(a);
+    return { letter: a.letter, name: a.name, role: a.role, x: r1(a.x), y: r1(a.y), size: Math.round(b.w) + " x " + Math.round(b.d) + " m", status: a.status, note: a.note || undefined };
+  }), objectives: p.objectives, events: p.events };
+}
+// repaint every card of this chat's plan and the areas on the map
+function paintPlan() {
+  CHAT.view.forEach(function (b) { if (b.k === "plan") paintNode(b); });
+  paintPlanAreas();
+}
+function planStatus(p) {
+  var n = p.areas.length, built = p.areas.filter(function (a) { return a.status === "built"; }).length;
+  return { n: n, built: built, left: p.areas.filter(function (a) { return a.status === "planned"; }).length };
+}
+function paintPlanCard(b, d) {
+  var p = CHAT.plan, old = !p || b.v !== p.v;
+  d.className = "ai-plan" + (old ? " old" : "");
+  if (old) { d.innerHTML = '<div class="pl-h"><em>Plan</em><b>An earlier version of the plan</b></div>' + (b.note ? '<p class="pl-note">' + esc(b.note) + '</p>' : ''); return; }
+  var s = planStatus(p), sets = [p.style, p.difficulty, p.time_of_day, p.weather, p.time_limit_min ? p.time_limit_min + " min" : "", p.fail_on_alarm ? "fails on alarm" : ""].filter(Boolean);
+  var chip = { proposed: "Proposed", building: "Building " + s.built + " of " + s.n, finishing: "Finishing", paused: s.built + " of " + s.n + " built", done: "Built" }[p.stage] || "";
+  var h = '<div class="pl-h"><em>Plan</em><b>' + esc(p.title) + '</b><span class="pl-st ' + esc(p.stage) + '">' + esc(chip) + '</span></div>' +
+    (b.note ? '<p class="pl-note">' + esc(b.note) + '</p>' : '') +
+    '<p>' + esc(p.pitch || "") + '</p>' + (sets.length ? '<p class="pl-sets">' + esc(sets.join(" · ")) + '</p>' : '') + '<ol class="pl-areas">';
+  p.areas.forEach(function (a) {
+    var bx = areaBox(a), what = [a.structures, a.guards, a.security, a.pickups].filter(Boolean).join("; ");
+    h += '<li class="' + esc(a.status) + '"><i>' + esc(a.letter) + '</i><div><b>' + esc(a.name) + '</b> <span>' + esc(a.role || "") + ' · ' + Math.round(bx.w) + ' × ' + Math.round(bx.d) + ' m</span>' +
+      '<small>' + (a.status === "built" ? "✓ built" : a.status === "building" ? "building…" : a.status === "problem" ? "! " + esc(a.note || "a problem") : "planned") + '</small>' +
+      (what ? '<p>' + esc(what.length > 170 ? what.slice(0, 170) + "…" : what) + '</p>' : '') + '</div>' +
+      '<span class="pl-b">' + (a.status === "problem" && !RUN && p.stage !== "building" && p.stage !== "finishing" ?
+        '<button class="go" data-retry="' + esc(a.letter) + '" title="Try again\nBuild this area once more">Try again</button>' : '') +
+      '<button class="go" data-area="' + esc(a.letter) + '" title="Show it on the map">Show</button></span></li>';
+  });
+  h += '</ol>';
+  if (p.objectives.length) h += '<div class="pl-sub">Objectives</div><ol class="pl-obj">' + p.objectives.map(function (o) { return '<li>' + esc(o.text) + ' <span>(' + esc(o.area) + ')</span></li>'; }).join("") + '</ol>';
+  if (p.events.length) h += '<div class="pl-sub">Events</div><ul class="pl-obj">' + p.events.map(function (e) { return '<li>' + esc(e.when) + ': ' + esc(e.then) + '</li>'; }).join("") + '</ul>';
+  var acts = "";
+  if (!RUN) {
+    if (p.stage === "proposed") acts = '<button class="btn primary" data-p="all" title="Build it\nEvery area in turn, then the objectives, events and texts">Build it</button>' +
+      '<button class="btn" data-p="step" title="Area by area\nIt stops after each area for you to look">Area by area</button>';
+    else if (p.stage === "paused" && s.left) acts = '<button class="btn primary" data-p="all">Build the rest</button><button class="btn" data-p="next">Build the next area</button>';
+    else if (p.stage === "paused") acts = '<button class="btn primary" data-p="finish" title="Finish\nObjectives, events, texts and the checks">Finish the mission</button>';
+    if (PLAN_BEFORE[CHAT.id] && s.built) acts += '<button class="btn" data-p="undo" title="Undo the whole build\nThe mission goes back to how it was before area ' + esc(p.areas[0].letter) + '. Ctrl+Z brings it back.">Undo the whole build</button>';
+  }
+  h += acts ? '<div class="pl-acts">' + acts + '</div>' : '';
+  d.innerHTML = h;
+  d.querySelectorAll("[data-area]").forEach(function (bt) {
+    bt.addEventListener("click", function () {
+      var a = p.areas.filter(function (x) { return x.letter === bt.getAttribute("data-area"); })[0];
+      if (a) api().jump(a.x, a.y);
+    });
+  });
+  d.querySelectorAll("[data-retry]").forEach(function (bt) {
+    bt.addEventListener("click", function () {
+      var a = p.areas.filter(function (x) { return x.letter === bt.getAttribute("data-retry"); })[0];
+      if (!a || RUN) return;
+      a.status = "planned"; delete a.note;
+      if (p.stage === "done") p.stage = "paused";
+      planStart(false);
+    });
+  });
+  d.querySelectorAll("[data-p]").forEach(function (bt) {
+    bt.addEventListener("click", function () {
+      var k = bt.getAttribute("data-p");
+      if (k === "all") planStart(true); else if (k === "step" || k === "next") planStart(false);
+      else if (k === "finish") planFinish(); else if (k === "undo") planUndo();
+    });
+  });
+}
+// build the plan: every area in turn (auto), or the next one and a pause
+function planStart(auto) {
+  var A = api(), p = CHAT.plan;
+  if (RUN || !p) return;
+  if (!A.editable()) { A.toast("Built-in missions are never changed. Make your own mission to build it"); return; }
+  if (!PLAN_BEFORE[CHAT.id] || p.stage === "proposed") PLAN_BEFORE[CHAT.id] = A.state();
+  p.auto = !!auto;
+  planNext();
+}
+function planNext() {
+  var p = CHAT.plan;
+  if (!p || RUN) return;
+  var a = p.areas.filter(function (x) { return x.status === "planned"; })[0];
+  if (!a) { planFinish(); return; }
+  p.stage = "building"; a.status = "building"; p.cur = a.letter;
+  paintPlan();
+  var b = areaBox(a), done = p.areas.filter(function (x) { return x.status === "built"; }).map(function (x) { return x.letter; });
+  var parts = [["ground", a.ground], ["structures", a.structures], ["guards", a.guards], ["security", a.security], ["pickups", a.pickups], ["notes", a.notes]]
+    .filter(function (x) { return x[1]; }).map(function (x) { return x[0] + ": " + x[1]; });
+  var objs = p.objectives.filter(function (o) { return o.area === a.letter; }).map(function (o) { return o.kind + (o.target ? " " + o.target : "") + " (\"" + o.text + "\")"; });
+  var text = "Build area " + a.letter + " now, and only area " + a.letter + ": \"" + a.name + "\" (" + (a.role || "area") + "), centre " + r1(a.x) + ", " + r1(a.y) + ", " +
+    Math.round(b.w) + " x " + Math.round(b.d) + " m" + (a.turn_deg ? " turned " + a.turn_deg + " degrees" : "") + ". From the plan: " + (parts.join("; ") || "as the plan says") + "." +
+    (objs.length ? " Objectives here, added when the mission is finished, so build what they need: " + objs.join(", ") + "." : "") +
+    " Stay inside x " + r1(b.x0) + " to " + r1(b.x1) + ", y " + r1(b.y0) + " to " + r1(b.y1) + "." +
+    (done.length ? " Built so far: " + done.join(", ") + "." : "") + " When it is done, look at it and call plan_progress for " + a.letter + ".";
+  planRun(text, "Area " + a.letter + ": " + a.name, { planArea: a.letter });
+}
+function planFinish() {
+  var p = CHAT.plan;
+  if (!p || RUN) return;
+  p.stage = "finishing"; paintPlan();
+  var text = "Every area is built. Finish the mission now: the objectives with their targets as the plan says (" +
+    p.objectives.map(function (o) { return o.kind + " in " + o.area + ": \"" + o.text + "\""; }).join("; ") + ")" +
+    (p.events.length ? ", the events (" + p.events.map(function (e) { return e.when + ": " + e.then; }).join("; ") + ")" : "") +
+    (p.player_start ? ", the player start at " + r1(p.player_start.x) + ", " + r1(p.player_start.y) : "") +
+    ", the settings (" + [p.time_of_day, p.weather, p.time_limit_min ? p.time_limit_min + " minutes" : "", p.fail_on_alarm ? "fail on alarm" : ""].filter(Boolean).join(", ") + ")" +
+    ", and the texts (write_texts: name \"" + p.title + "\", the briefing" + (p.briefing ? " \"" + p.briefing.replace(/\n/g, " / ") + "\"" : "") + ", objective texts, labels). Then run check_mission and stealth_check, fix what they find, and end with a short summary.";
+  planRun(text, "Finishing: objectives, events, texts and the checks", { planFinish: true });
+}
+function planUndo() {
+  var A = api(), p = CHAT.plan, s = PLAN_BEFORE[CHAT.id];
+  if (RUN || !p || !s) return;
+  if (!A.restore(s)) return;
+  delete PLAN_BEFORE[CHAT.id];
+  p.areas.forEach(function (a) { a.status = "planned"; delete a.note; });
+  p.stage = "proposed";
+  add({ k: "note", text: "The whole build is undone: the mission is back as it was before area " + p.areas[0].letter + ". Ctrl+Z brings it back." });
+  paintPlan(); saveSoon();
+}
+// one step of the plan, sent the way a message is, shown as a step row
+function planRun(text, label, flags) {
+  var A = api();
+  if (RUN || !A || !A.ready()) return;
+  add({ k: "step", text: label });
+  var item = { k: "user", text: text };
+  CHAT.items.push(item);
+  run([], item, [], flags);
+}
+// after a plan step's run: its area's outcome, and the next step or a pause
+function planAfter(r) {
+  var p = CHAT.plan;
+  if (!p) return;
+  if (r.planArea) {
+    var a = p.areas.filter(function (x) { return x.letter === r.planArea; })[0];
+    if (a && a.status === "building") {
+      a.status = r.stop || r.failed ? "planned" : r.changes ? "built" : "problem";
+      if (a.status === "problem") a.note = "nothing was built";
+    }
+    p.stage = r.stop || r.failed || !p.auto ? "paused" : "building";
+  } else if (r.planFinish) p.stage = r.stop || r.failed ? "paused" : "done";
+  paintPlan(); saveSoon();
+  if (p.stage === "building" && p.auto) setTimeout(planNext, 500);
+}
+// a plan left mid-build (the page closed) picks up as paused
+function planLoaded() {
+  var p = CHAT.plan;
+  if (p) {
+    p.areas.forEach(function (a) { if (a.status === "building") a.status = "planned"; });
+    if (p.stage === "building" || p.stage === "finishing") p.stage = "paused";
+  }
+  paintPlanAreas();
+}
+
 // ------------------------------------------------------------------ settings
 function loadSettings(force) {
   if (!hasServer()) { S = null; paintChip(); return Promise.resolve(null); }
@@ -721,27 +1175,20 @@ function emptyState() {
     d.querySelector("#ai-go-cfg").addEventListener("click", function () { api().openSettings("ai"); });
     return d;
   }
-  var lv = c ? c.levelName : "this level";
-  var chips = CHAT.mode === "ideas" ?
-    ["Suggest three missions for " + lv + ", each with a different style", "What would make this mission harder without being unfair?",
-     "Where would the player most likely be seen? Suggest fixes"] :
-    ["Build a stealth mission around the most important building: snipers, cameras, an objective inside, and a way out",
-     "Build a fenced compound near the player start with guards, a camera and a weapon to collect inside",
-     "Make the mission harder: more guards on the routes to the objectives, and an alarm that brings reinforcements",
-     "Check the mission and fix what you can",
-     "Run a stealth check and tell me where the player will be seen",
-     "Write the mission's name, briefing, objective texts and map labels",
-     "Make easy and hard versions of this mission",
-     "Design a sandbagged sniper nest I can keep in my inventory"];
-  d.innerHTML = '<h3>' + (CHAT.mode === "ideas" ? "Mission ideas" : "Build a mission") + '</h3>' +
-    '<p>' + (CHAT.mode === "ideas" ?
-      "Ask for ideas for " + esc(lv) + ". It looks at the level and suggests missions; each one has a Build button." :
-      "Say what the mission is and watch it being built on the map, one step at a time. Everything it does is an ordinary change: undo works, and Apply stays yours.") + '</p>' +
-    (c && !c.editable && CHAT.mode === "build" ? '<div class="ai-card"><b>' + esc(c.mission) + ' is a built-in mission</b>, which is never changed. Make your own mission from it to build.' +
-      '<br><button class="btn primary" id="ai-copy">New mission from this</button></div>' : '') +
-    '<div class="ai-chips">' + chips.map(function (t) { return '<button class="ai-chip">' + esc(t) + '</button>'; }).join("") + '</div>';
+  var lv = c ? c.levelName : "this level", ag = AG(), card = "";
+  var emptyBtn = c && c.hasEmpty ? '<button class="btn primary" id="ai-empty">New mission on an empty map</button> ' : "";
+  if (c && !c.editable && ag.changes)
+    card = '<div class="ai-card"><b>' + esc(c.mission || c.levelName) + ' is a built-in mission</b>, which is never changed. ' +
+      (CHAT.agent === "mission" ? "Start a mission of your own, on this level's empty map or as a copy of this one." : "Make your own mission from it to change it.") +
+      '<br>' + (CHAT.agent === "mission" ? emptyBtn : "") + '<button class="btn' + (CHAT.agent === "mission" && emptyBtn ? "" : " primary") + '" id="ai-copy">New mission from this</button></div>';
+  else if (c && c.editable && CHAT.agent === "mission" && !c.empty)
+    card = '<div class="ai-card"><b>This mission already has the level\'s buildings and guards.</b> The Mission builder builds on top of them. For a fresh start, make a mission on an empty map: terrain, sky and walkways, nothing built.' +
+      (emptyBtn ? '<br>' + emptyBtn.replace(" primary", "") : "") + '</div>';
+  d.innerHTML = '<h3>' + esc(ag.title) + '</h3><p>' + esc(ag.lead(lv)) + '</p>' + card +
+    '<div class="ai-chips">' + ag.chips(lv).map(function (t) { return '<button class="ai-chip">' + esc(t) + '</button>'; }).join("") + '</div>';
   d.querySelectorAll(".ai-chip").forEach(function (b) { b.addEventListener("click", function () { el.input.value = b.textContent; grow(); submit(); }); });
   if (d.querySelector("#ai-copy")) d.querySelector("#ai-copy").addEventListener("click", function () { api().makeCopy(); });
+  if (d.querySelector("#ai-empty")) d.querySelector("#ai-empty").addEventListener("click", function () { api().makeEmpty(); });
   return d;
 }
 function node(b) {
@@ -767,6 +1214,8 @@ function paintNode(b) {
     d.innerHTML = '<details><summary>Picture ' + b.n + ', as the light model reads it</summary><div>' + esc(b.text) + '</div></details>';
   }
   else if (b.k === "design") paintDesign(b, d);
+  else if (b.k === "plan") paintPlanCard(b, d);
+  else if (b.k === "step") { d.className = "ai-step"; d.textContent = b.text; }
   else if (b.k === "assistant") { d.className = "ai-a"; d.innerHTML = md(b.text, b.live) + (b.live ? '<span class="cursor"></span>' : ""); bindDesigns(d); }
   else if (b.k === "think") {
     d.className = "ai-think";
@@ -863,21 +1312,31 @@ function pretty(s) {
   catch (e) { return String(s).slice(0, 3000); }
 }
 // a little markdown: headings, lists, bold, italics, code; a "Design N" heading
-// becomes a card with its Build button
+// becomes a card with its Build button, a "Finding N" one (Review) a card with
+// its Fix button
 function md(text, live) {
-  var lines = String(text || "").replace(/\r/g, "").split("\n"), out = [], list = null, design = false;
+  var lines = String(text || "").replace(/\r/g, "").split("\n"), out = [], list = null, design = false, finding = null;
   function inline(s) {
     return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
       .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>").replace(/(^|[\s(])_([^_\s][^_]*)_/g, "$1<i>$2</i>");
   }
   function endList() { if (list) { out.push("</" + list + ">"); list = null; } }
-  function endDesign() { endList(); if (design) { out.push(live ? "</div>" : '<button class="btn primary ai-build" data-design="' + esc(design) + '">Build this</button></div>'); design = false; } }
+  function endDesign() {
+    endList();
+    if (design) { out.push(live ? "</div>" : '<button class="btn primary ai-build" data-design="' + esc(design) + '">Build this</button></div>'); design = false; }
+    if (finding) {
+      out.push(live ? "</div>" : '<button class="btn ai-fix" data-finding="' + esc(finding.t) + '" data-body="' + esc(finding.body.join(" ").slice(0, 900)) + '">Fix</button></div>');
+      finding = null;
+    }
+  }
   lines.forEach(function (ln) {
     var m;
+    if (finding && !/^\s{0,3}#{1,4}\s/.test(ln) && ln.trim()) finding.body.push(ln.replace(/^\s*[-*•]\s+|^\s*\d+[.)]\s+/, "").trim());
     if ((m = /^\s{0,3}#{1,4}\s+(.*)$/.exec(ln))) {
       var t = m[1].replace(/\*\*/g, "");
       endDesign();
       if (/^design\s+\d+/i.test(t)) { design = t; out.push('<div class="ai-design"><h4>' + inline(t) + '</h4>'); }
+      else if (/^finding\s+\d+/i.test(t)) { finding = { t: t, body: [] }; out.push('<div class="ai-design ai-finding"><h4>' + inline(t) + '</h4>'); }
       else { endList(); out.push("<h4>" + inline(t) + "</h4>"); }
     } else if ((m = /^\s*[-*•]\s+(.*)$/.exec(ln))) {
       if (list !== "ul") { endList(); out.push("<ul>"); list = "ul"; }
@@ -898,8 +1357,19 @@ function bindDesigns(d) {
       if (RUN) return;
       var A = api();
       if (!A.editable()) { A.toast("Built-in missions are never changed. Make your own mission from it to build"); return; }
-      CHAT.mode = "build"; paintMode();
-      el.input.value = "Build " + b.getAttribute("data-design") + ", from your suggestions above.";
+      setAgent("mission");
+      el.input.value = "Plan and build " + b.getAttribute("data-design") + ", from the suggestions above.";
+      submit();
+    });
+  });
+  // a Review finding, handed to Edit to fix
+  d.querySelectorAll(".ai-fix").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (RUN) return;
+      var A = api();
+      if (!A.editable()) { A.toast("Built-in missions are never changed. Make your own mission from it to fix it"); return; }
+      setAgent("edit");
+      el.input.value = "Fix " + b.getAttribute("data-finding").replace(/^finding\s+\d+:\s*/i, "the review's finding: ") + ". " + b.getAttribute("data-body");
       submit();
     });
   });
@@ -965,6 +1435,11 @@ function label(name, a, r) {
     case "write_texts": return "Wrote the texts" + (r.wrote ? ": " + r.wrote.join(", ") : "");
     case "make_versions": return "Made " + ((r.made && r.made.length) || "") + " version" + (r.made && r.made.length === 1 ? "" : "s") + (r.made ? ": " + r.made.map(function (m) { return m.difficulty; }).join(", ") : "");
     case "list_missions": return "Looked through your missions";
+    case "propose_plan": return r.ok ? "Proposed the plan “" + (a.title || "") + "”: " + r.areas + " areas" : "Tried a plan; the studio found problems";
+    case "update_plan": return r.ok ? "Changed the plan" + (a.note ? ": " + String(a.note).slice(0, 60) : "") : "Tried to change the plan";
+    case "plan_progress": return "Area " + String(a.area || "").toUpperCase() + ": " + (r.ok === false ? "not taken as built" :
+      a.status === "problem" ? "a problem" + (a.note ? ", " + String(a.note).slice(0, 60) : "") : "built");
+    case "get_plan": return "Read the plan";
     case "make_campaign": return "A campaign" + (a.name ? ", “" + a.name + "”" : "") + (r.missions ? " of " + r.missions + " missions" : "");
   }
   return LOOKS[name] || name.replace(/_/g, " ");
@@ -981,9 +1456,10 @@ function settingsText(s) {
 
 // ------------------------------------------------------------------ the prompt
 function instructions() {
-  var c = api().context(), mode = CHAT.mode;
-  return [
-    "You are the mission designer inside Project IGI Studio, an editor for Project IGI: I'm Going In (2000). You work on the mission open in the editor through tools, and each change you make appears on the user's map as you make it.",
+  var c = api().context(), ag = AG(), has = function (k) { return ag.kinds.indexOf(k) >= 0; };
+  var team = ORDER.map(function (k) { return AGENTS[k].label + " (" + AGENTS[k].hint.replace(/\.$/, "").toLowerCase() + ")"; }).join("; ");
+  var P = [
+    "You are the " + ag.label + " agent of the AI designer inside Project IGI Studio, an editor for Project IGI: I'm Going In (2000). The designer is a team of agents, each with its own job: " + team + ". The user picks the agent above the chat; when they ask for another agent's job, say which one does it. You work on the mission open in the editor through tools; each change appears on the user's map as it is made.",
     "",
     "The game: the player, David Jones, is a lone infiltrator who gets into enemy bases on foot with a few weapons, binoculars and a map computer. A mission is a set of objectives (eliminate a guard or everyone, collect an item, reach an area, hack a terminal, destroy something) in a base held by soldiers who stand guard or patrol walkways, snipers on towers, security cameras and alarm systems that bring reinforcements. A good mission has a clear goal, more than one way in, guards who cover each other, cover to move through, risk that rises near the objective, and a reward for staying unseen.",
     "",
@@ -999,31 +1475,29 @@ function instructions() {
     "- Building the mission into the game (Apply) is the user's action. Never say the mission is in the game.",
     "",
     "Places the user tags: a message can end with places tagged on the map ([A], [B]...). Then \"here\", \"this area\" and the like mean them: look_around a tagged place first, and keep what you build for an area inside its bounds.",
+    ""
+  ];
+  if (has("design")) P.push("New things for the inventory: design_structure makes a design out of the game's structures (with guards and pickups if it needs them): a guard post, a sniper nest, a checkpoint, a weapons cache, a bunker entrance. design_character makes a character: a guard type with a model of its kind, a weapon and sight of its own. The user sees each in 3D in the chat and adds it to the inventory if they like it" +
+    (has("build") ? "; place_design places one" : "") + ". Make designs that look right: parts meet or overlap slightly, stand on the ground (dz 0) unless stacked, face sensibly, and keep to a sensible size (use sizes from list_catalog). New weapon types and new 3D models can't be made: design with what the game has.", "");
+  if (has("ground")) P.push("Walkways and ground: add_walkways lays walkway points from the nearest walkway to a place (and round it), so guards can stand and patrol where there were none; put guards there after. shape_ground levels, raises, lowers, smooths or ramps the ground (the game moves it 4 m at most); sculpt_terrain makes big natural shapes.", "");
+  if (!ag.drop || !ag.drop.test("stealth_check")) P.push("Stealth: stealth_check works out the quietest way on foot from the player start to each objective, how much of it the guards and cameras watch, and who watches it. Use it to judge and tune a mission (the user sees the routes on the map), then suggest or make fixes.", "");
+  if (has("texts")) P.push("Texts: write_texts sets the mission's name and one-line description (what the game's mission list shows), the objective texts, the map computer labels of the mission's buildings, and a short briefing shown at the start. Write them the way the game does: terse military orders in plain English, like \"Infiltrate the airbase and locate the flight recorder.\" or \"Destroy the SAM radar.\"; objectives under 60 characters, labels under 20.", "");
+  if (has("library")) P.push("Versions and campaigns: make_versions makes easy and hard copies of this mission in the user's library (fewer or more guards, sight, time limit, alarm). list_missions lists the user's missions; make_campaign puts several in order under a name and a briefing, for the user to export as one pack.", "");
+  P.push(
+    "Pictures: a message can come with pictures: a sketch, a screenshot, the map with a grid in metres, or a sketch drawn on the map (its strokes are given as exact coordinates; use those). Turn what they show into " + (has("build") ? "the mission: walls and fences where lines are drawn, guards and objectives where marked" : "what you make") + ". If it is unclear which colour means what, say what you assume.",
     "",
-    "New things for the inventory: design_structure makes a design out of the game's structures (with guards and pickups if it needs them): a guard post, a sniper nest, a checkpoint, a weapons cache, a bunker entrance. design_character makes a character: a guard type with a model of its kind, a weapon and sight of its own. The user sees each in 3D in the chat and adds it to the inventory if they like it; place_design places one. Make designs that look right: parts meet or overlap slightly, stand on the ground (dz 0) unless stacked, face sensibly, and keep to a sensible size (use sizes from list_catalog). New weapon types and new 3D models can't be made: design with what the game has.",
+    "The scout: when there is a scout tool, it is a fast local model with the looking tools; send it on broad look-ups to save time, and keep the planning and " + (has("build") ? "building" : "designing") + " to yourself.",
     "",
-    "Walkways and ground: add_walkways lays walkway points from the nearest walkway to a place (and round it), so guards can stand and patrol where there were none; put guards there after. shape_ground levels, raises, lowers, smooths or ramps the ground (the game moves it 4 m at most).",
-    "",
-    "Stealth: stealth_check works out the quietest way on foot from the player start to each objective, how much of it the guards and cameras watch, and who watches it. Use it to judge and tune a mission (the user sees the routes on the map), then suggest or make fixes.",
-    "",
-    "Texts: write_texts sets the mission's name and one-line description (what the game's mission list shows), the objective texts, the map computer labels of the mission's buildings, and a short briefing shown at the start. Write them the way the game does: terse military orders in plain English, like \"Infiltrate the airbase and locate the flight recorder.\" or \"Destroy the SAM radar.\"; objectives under 60 characters, labels under 20.",
-    "",
-    "Versions and campaigns: make_versions makes easy and hard copies of this mission in the user's library (fewer or more guards, sight, time limit, alarm). list_missions lists the user's missions; make_campaign puts several in order under a name and a briefing, for the user to export as one pack.",
-    "",
-    "Pictures: a message can come with pictures: a sketch, a screenshot, the map with a grid in metres, or a sketch drawn on the map (its strokes are given as exact coordinates; use those). Turn what they show into the mission: walls and fences where lines are drawn, guards and objectives where marked. If it is unclear which colour means what, say what you assume.",
-    "",
-    "The scout: when there is a scout tool, it is a fast local model with the looking tools; send it on broad look-ups to save time, and keep the planning and building to yourself.",
-    "",
-    "How to work: look before you build (get_overview first, then find_places and look_around where you will build). Tell the user in two to four short lines what you are going to build, then build it step by step. After building, run check_mission and fix what it finds. End with a short summary: what you built and where, and what to try when playing it. Keep messages short and plain, and never use long dashes. When a call fails, read the error and try another way; don't repeat a failing call unchanged.",
-    "",
-    mode === "build" ? "Mode: Build. Make the changes with the tools." :
-      "Mode: Ideas. You can look (get_overview, find_places, look_around, list_catalog, get_item, check_mission) but not change anything. Suggest designs that fit this level's real places. Write each as a heading \"### Design N: Title\", then a two line pitch and short lists: objectives, enemies and where they are, security, time and weather, difficulty. The user can press Build on one.",
-    "",
-    "Now: the mission \"" + c.mission + "\" on " + c.levelName + " (level " + c.level + "), " + (c.editable ? "which you can change" : "a built-in mission, read only") +
+    "Always: keep messages short and plain, and never use long dashes. When a call fails, read the error and try another way; don't repeat a failing call unchanged.",
+    "");
+  P.push.apply(P, ag.prompt);
+  P.push("",
+    "Now: the mission \"" + c.mission + "\" on " + c.levelName + " (level " + c.level + ")" + (c.empty ? ", made from the level's empty map" : "") + ", " +
+      (c.editable ? "which can be changed" : "a built-in mission, read only") +
       ". Yours so far: " + c.counts.yours + " things, " + c.counts.objectives + " objectives, " + c.counts.events + " events." +
       (c.selected ? " The user has selected " + c.selected.name + " (" + c.selected.id + ") at " + c.selected.x + ", " + c.selected.y + "." : "") +
-      (c.group ? " The user has " + c.group + " things selected as a group." : "")
-  ].join("\n");
+      (c.group ? " The user has " + c.group + " things selected as a group." : ""));
+  return P.join("\n");
 }
 // what goes to the model when the whole history has to be sent: old tool
 // results cut short, and pictures only with the latest message
@@ -1045,9 +1519,19 @@ function submit() {
   if (!A || !A.ready()) { A && A.toast("The level is still loading. Try again in a moment"); return; }
   if (!hasServer()) { render(); return; }
   if (S && !S.hasKey) { render(); return; }
-  if (CHAT.mode === "build" && !A.editable()) {
-    CHAT.mode = "ideas"; paintMode();
-    add({ k: "note", text: "Built-in missions are never changed, so this goes as Ideas. Make your own mission from it to build." });
+  if (AG().changes && !A.editable()) {
+    CHAT.agent = "ideas"; paintMode();
+    add({ k: "note", text: "Built-in missions are never changed, so this goes to Ideas. Make your own mission from it to build." });
+  }
+  // a plain yes to the Mission builder's plan builds it
+  var pl = CHAT.plan;
+  if (CHAT.agent === "mission" && pl && !TAGS.length && !ATT.length && (pl.stage === "proposed" || pl.stage === "paused") &&
+      /^(yes|yep|yeah|ok(ay)?|sure|go( ahead| on)?|build( it| it all| the plan| the rest)?|do it|looks good|start|continue|next( area)?)[\s.!]*$/i.test(text)) {
+    el.input.value = ""; grow();
+    add({ k: "user", text: text });
+    if (!pl.areas.some(function (a) { return a.status === "planned"; })) planFinish();
+    else planStart(!/^next/i.test(text));
+    return;
   }
   el.input.value = ""; grow();
   var tags = TAGS.slice(), atts = ATT.slice();
@@ -1069,15 +1553,17 @@ function stop() {
   (RUN.subs || []).forEach(function (c) { try { c.abort(); } catch (e) { /* over */ } });
   status("Stopping…");
 }
-function run(tags, item, atts) {
-  var A = api(), mode = CHAT.mode;
-  RUN = { id: "r" + Date.now().toString(36), stop: false, ctrl: null, subs: [], steps: 0, changes: 0, t0: performance.now(), tokens: 0, cached: 0, mode: mode,
-    before: mode === "build" && A.editable() ? A.state() : null, max: (S && S.maxSteps) || 60, pace: S && S.pace != null ? S.pace : 350, tags: tags || [] };
+function run(tags, item, atts, flags) {
+  var A = api(), ag = AG();
+  RUN = { id: "r" + Date.now().toString(36), stop: false, ctrl: null, subs: [], steps: 0, changes: 0, t0: performance.now(), tokens: 0, cached: 0,
+    agent: CHAT.agent, kinds: ag.kinds, planArea: flags && flags.planArea || null, planFinish: !!(flags && flags.planFinish),
+    before: ag.changes && A.editable() ? A.state() : null, max: (S && S.maxSteps) || 60, pace: S && S.pace != null ? S.pace : 350, tags: tags || [] };
   A.setTags(RUN.tags.concat(TAGS));
+  if (CHAT.plan) paintPlan();                // no plan buttons while it works
   el.send.textContent = "Stop";
   el.send.classList.remove("primary");
   el.send.title = "Stop\nEnds this request now";
-  el.panel.querySelectorAll("[data-mode]").forEach(function (b) { b.disabled = true; });
+  el.panel.querySelectorAll("[data-agent]").forEach(function (b) { b.disabled = true; });
   (async function () {
     try {
       // the light model reads the pictures first, and what it sees goes with them
@@ -1095,7 +1581,7 @@ function run(tags, item, atts) {
       while (!RUN.stop) {
         status("Thinking…");
         var turn = await ask();
-        if (turn.error) { add({ k: "error", text: turn.error, code: turn.code }); break; }
+        if (turn.error) { RUN.failed = true; add({ k: "error", text: turn.error, code: turn.code }); break; }
         if (turn.aborted) break;
         if (!turn.calls.length) break;
         for (var i = 0; i < turn.calls.length; i++) {
@@ -1107,6 +1593,7 @@ function run(tags, item, atts) {
         if (RUN.steps >= RUN.max) { add({ k: "note", text: "Stopped after " + RUN.steps + " steps, the most one request may take (Settings). Say \"go on\" to continue." }); break; }
       }
     } catch (e) {
+      RUN.failed = true;
       add({ k: "error", text: "Something went wrong: " + (e && e.message ? e.message : e) });
     }
     finish();
@@ -1119,7 +1606,7 @@ function finish() {
   el.send.textContent = "Send";
   el.send.classList.add("primary");
   el.send.title = "Send\nEnter sends, Shift+Enter starts a new line";
-  el.panel.querySelectorAll("[data-mode]").forEach(function (b) { b.disabled = false; });
+  el.panel.querySelectorAll("[data-agent]").forEach(function (b) { b.disabled = false; });
   if (r.stop) add({ k: "note", text: "Stopped." });
   if (r.before && r.changes) BEFORE[r.id] = r.before;
   api().setTags(TAGS);
@@ -1128,6 +1615,8 @@ function finish() {
   el.usage.textContent = r.tokens ? fmtK(r.tokens) + " tokens last request" + (r.lightTokens ? ", " + fmtK(r.lightTokens) + " on the light model" : "") : "";
   save();
   nameChat();
+  if (r.planArea || r.planFinish) planAfter(r);
+  else if (CHAT.plan) paintPlan();          // its buttons come back
   el.input.focus();
 }
 // one model turn, streamed in
@@ -1135,10 +1624,10 @@ function ask() {
   return new Promise(function (resolve) {
     var ctrl = new AbortController(), turn = { text: "", calls: [], responseId: null, error: null, aborted: false }, block = null, think = null;
     RUN.ctrl = ctrl;
-    var light = CHAT.model === "light" && lightOn(), tools = api().tools(CHAT.mode);
+    var light = CHAT.model === "light" && lightOn(), tools = agentTools(RUN.agent);
     if (lightOn() && !light) tools = tools.concat([SCOUT_TOOL]);
     var body = { instructions: instructions(), tools: tools, history: history(), previousId: light ? null : CHAT.responseId,
-      fresh: light ? 0 : CHAT.synced, role: light ? "light" : "main" };
+      fresh: light ? 0 : CHAT.synced, role: light ? "light" : "main", agent: RUN.agent };
     var paintT = 0;
     function paint(b) { var now = performance.now(); if (now - paintT > 40) { paintT = now; paintNode(b); scroll(); } }
     function ev(e) {
@@ -1189,7 +1678,7 @@ function ask() {
 async function step(c) {
   var A = api(), args = {};
   try { args = c.args ? JSON.parse(c.args) : {}; } catch (e) { args = null; }
-  var look = c.name === "scout" || A.isLook(c.name);
+  var look = c.name === "scout" || PLAN_NAMES.indexOf(c.name) >= 0 || A.isLook(c.name);
   var grp = CHAT.view[CHAT.view.length - 1];
   if (!grp || grp.k !== "tools") grp = add({ k: "tools", list: [] });
   var t = { name: c.name, args: c.args, look: look, status: "run", label: label(c.name, args || {}, {}) };
@@ -1198,8 +1687,12 @@ async function step(c) {
   var res;
   if (args == null) res = { ok: false, error: "The arguments were not valid JSON." };
   else if (c.name === "scout") res = await runScout(String(args.question || ""), t, grp);
+  else if (PLAN_NAMES.indexOf(c.name) >= 0) {
+    if (RUN.kinds.indexOf("plan") < 0) res = { ok: false, error: "Plans are the Mission builder's; this agent has none." };
+    else res = planTool(c.name, args);
+  }
   else {
-    try { res = await Promise.resolve(A.run(c.name, args, RUN.mode)); }
+    try { res = await Promise.resolve(A.run(c.name, args, RUN.kinds)); }
     catch (e) { res = { ok: false, error: String(e && e.message ? e.message : e) }; }
   }
   if (!res || typeof res !== "object") res = { ok: false, error: "No answer from the tool." };
@@ -1257,7 +1750,7 @@ function snapshot() {
   // pictures go to the model once; only the latest message keeps its own
   var last = -1;
   CHAT.items.forEach(function (it, i) { if (it.k === "user") last = i; });
-  return { title: CHAT.title, titled: !!CHAT.titled, created: CHAT.created, responseId: CHAT.responseId, synced: CHAT.synced, mode: CHAT.mode, model: CHAT.model,
+  return { title: CHAT.title, titled: !!CHAT.titled, created: CHAT.created, responseId: CHAT.responseId, synced: CHAT.synced, agent: CHAT.agent, model: CHAT.model, plan: CHAT.plan || null,
     items: CHAT.items.map(function (it, i) { if (it.images && i !== last) { var c = Object.assign({}, it); delete c.images; return c; } return it; }),
     view: CHAT.view.map(function (b) { var c = {}; for (var k in b) if (k !== "_n" && k !== "live" && k !== "_viewer") c[k] = b[k]; return c; }) };
 }
@@ -1286,7 +1779,7 @@ function openThread(tid) {
   save();
   TS.load(tid).then(function (d) {
     if (KEY !== want || !d) return;
-    CHAT = Object.assign(blank(), d, { id: tid });
+    CHAT = adopt(d, tid); planLoaded();
     toggleThreads(false);
     paintMode(); paintThread(); render();
   });
@@ -1294,8 +1787,8 @@ function openThread(tid) {
 function newChat() {
   if (RUN) return;
   save();
-  var mode = CHAT.mode, model = CHAT.model;
-  CHAT = blank(); CHAT.mode = mode; CHAT.model = model;
+  var agent = CHAT.agent, model = CHAT.model;
+  CHAT = blank(); CHAT.agent = agent; CHAT.model = model; paintPlanAreas();
   toggleThreads(false);
   render(); paintMode(); paintThread();
   el.input.focus();
@@ -1354,7 +1847,7 @@ function paintThreads() {
       if (!del.classList.contains("sure")) { del.classList.add("sure"); del.textContent = "Sure?"; setTimeout(function () { del.classList.remove("sure"); del.textContent = "Delete"; }, 3000); return; }
       TS.remove(tid).then(function () {
         THREADS = THREADS.filter(function (x) { return x.id !== tid; });
-        if (tid === CHAT.id) { var m = CHAT.mode; CHAT = blank(); CHAT.mode = m; render(); paintMode(); paintThread(); }
+        if (tid === CHAT.id) { var m = CHAT.agent; CHAT = blank(); CHAT.agent = m; render(); paintMode(); paintThread(); paintPlanAreas(); }
         paintThreads();
       });
     });
@@ -1367,7 +1860,7 @@ function missionChanged() {
   if (RUN) stop();
   if (KEY) save();
   KEY = key;
-  CHAT = blank(); THREADS = [];
+  CHAT = blank(); CHAT.agent = startAgent(); THREADS = []; paintPlanAreas();
   if (el.log) { paintMode(); paintThread(); render(); }
   var want = key;
   TS.list().then(function (list) {
@@ -1376,7 +1869,7 @@ function missionChanged() {
     if (list.length) {
       return TS.load(list[0].id).then(function (d) {
         if (KEY !== want || !d || CHAT.view.length) return;
-        CHAT = Object.assign(blank(), d, { id: list[0].id });
+        CHAT = adopt(d, list[0].id); planLoaded();
         if (el.log) { paintMode(); paintThread(); render(); }
       });
     }
@@ -1400,7 +1893,9 @@ function nameChat() {
 window.AIPanel = {
   missionChanged: missionChanged, renderSettings: renderSettings, show: function () { showTab("ai"); },
   // for the tests
-  send: function (t, mode) { if (mode) { CHAT.mode = mode; paintMode(); } el.input.value = t; submit(); },
+  // the agent by id, or the old mode names ("build" is Edit)
+  send: function (t, agent) { if (agent) { CHAT.agent = agent === "build" ? "edit" : AGENTS[agent] ? agent : CHAT.agent; paintMode(); } el.input.value = t; submit(); },
+  agent: function () { return CHAT.agent; }, agents: function () { return ORDER.slice(); }, setAgent: function (k) { if (!RUN) setAgent(k); },
   busy: function () { return !!RUN; }, chat: function () { return CHAT; }, stop: stop,
   threads: function () { return THREADS; }, openThread: openThread, newChat: newChat, attach: function (a) { ATT.push(a); paintAtts(); },
   settings: function () { return S; }, useModel: function (m) { CHAT.model = m; paintChip(); },

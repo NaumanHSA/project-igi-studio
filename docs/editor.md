@@ -106,6 +106,18 @@ The plan looks like the in-game map computer, and that is its only look.
 
 - **Ground:** the level's real terrain, lit from the north-west, with ridge and
   gully shading, rock strata on steep slopes, and contours (see *Terrain*).
+- **Roads, railways, fence runs and power lines** are splines in the level:
+  a `SplineObj` whose `SplineObjWaypoint`s each name the model laid from it to
+  the next (a road, railroad track on its embankment, the train bridge, a
+  fence, a wire). They are drawn along the curve through the waypoints
+  (straight where the spline has linear segments), as wide as that model is
+  across: roads grey with a centre line, railway with its rails once you zoom
+  in, fences and wires as lines with their posts. An empty map has none of
+  them (it keeps only the terrain).
+- **A narrow map:** the tools across the top stay on one row. What doesn't fit
+  folds into a **⋯** menu at the end of its bar (the show-on-map layers first,
+  then the view tools), each with its name and a ✓ when shown; the menu stays
+  open while you flip layers in it. A wider window brings them back.
 - **Buildings, towers, containers and other structures** are drawn from the
   model itself: `studio/extract/meshes.py` extracts the render mesh of all 1328
   structure models in the game (the collision mesh for the few that have
@@ -1071,31 +1083,60 @@ and labels** the mission uses (the check list warns before a 33rd).
 ## AI designer
 
 The **AI designer** tab on the right edge (next to *Selection*) is a chat with
-a model that designs missions with you: it suggests missions for the open
-level, and builds them on the map while you watch. It works through the
-studio's own editing, so everything it does is an ordinary change: undo, the
-change log, saving, the 3D view and Apply all work on it, and building into
-the game stays yours.
+a team of agents that design missions with you, each with its own job. It
+works through the studio's own editing, so everything it does is an ordinary
+change: undo, the change log, saving, the 3D view and Apply all work on it,
+and building into the game stays yours.
+
+Pick the agent above the chat. A chat keeps its history when you switch, so
+the next agent reads what happened.
 
 - **Ideas:** it looks at the level (its named places, buildings, guards,
   alarms, walkways) and answers with designs, each a pitch with objectives,
   enemies and where they stand, security, time and weather, and difficulty.
-  Nothing changes. Each design has a **Build this** button.
-- **Build:** say what the mission is ("a stealth mission at the radar dome:
-  two snipers on the approach, a camera on the dome, reach the dome, light
-  snow, 8 minutes"). It looks at the places it will use, says in a few lines
-  what it will build, then builds it step by step: each step is a row in the
-  chat (with **Show** to find it on the map) and appears on the map as it
-  happens; *Follow on the map* moves the map along. At the end it runs the
-  check list the Apply button shows and fixes what it finds.
-- **Changing and reviewing:** "make it harder", "move the snipers so they
-  cover the road". It reads the mission as it is, your own changes included;
-  what you have selected on the map is part of what it knows ("put a sniper
-  up there").
-- **Stop** ends a request at once. **Undo these changes** under a request
-  puts the mission back as it was before it (Ctrl+Z brings the changes back).
-- A built-in mission is never changed: Ideas works on it, and Build asks for
-  a mission of your own first.
+  Nothing changes. Each design has a **Build this** button, which hands it to
+  the Mission builder.
+- **Mission:** a whole mission, planned first and built one area at a time.
+  It is at its best on an empty map, where nothing is built yet (a new chat on
+  an empty-map mission of yours starts with it). It surveys the map, then
+  proposes the mission as a **plan**: a card with the title and pitch, the
+  settings, 3 to 6 **areas** (each lettered, with its role and what goes
+  there: ground work, structures, guards, cameras and alarms, pickups), the
+  objectives and the events. The areas are outlined on the map (blue while
+  planned, yellow while being built, green once built, red where it hit a
+  problem). The studio checks the plan before you see it: areas on the map,
+  six objectives at most, objectives the game can test. Ask for changes in the
+  chat ("move B north", "three areas, not five") and the card changes.
+  **Build it** builds every area in turn, then finishes the mission (the
+  objectives, events, player start, time and weather, texts, the check list
+  and the stealth check); **Area by area** stops after each area for you to
+  look (**Build the next area**, **Build the rest**). Typing "yes" or "build
+  it" does the same. Each area is a request of its own, with its own **Undo
+  these changes**; **Undo the whole build** on the card puts the mission back
+  as it was before the first area. An area that ends with nothing built is
+  marked as a problem, with **Try again**. The plan and its progress are kept
+  with the chat, so a build left halfway goes on later.
+- **Edit:** changes to the mission as it is: "make it harder", "move the
+  snipers so they cover the road", "check the mission and fix what you can".
+  It reads the mission as it is, your own changes included; what you have
+  selected, and places you tag, say where ("put a sniper up there"). Each
+  step is a row in the chat (with **Show** to find it on the map) and appears
+  on the map as it happens; *Follow on the map* moves the map along.
+- **Workshop:** buildings, characters and objects for your inventory, made
+  from the game's parts and shown turning in 3D (see *New things for the
+  inventory* below). The map
+  doesn't change: add what you like to the inventory and place it yourself.
+- **Review:** it walks the mission as the player would (the check list, the
+  stealth check, the start, the objectives, the guarded places, the texts)
+  and lists what to fix, most important first, each as a card saying where,
+  why it matters and the fix. **Fix** on a card hands that finding to Edit,
+  which makes it. Review itself changes nothing.
+- **Stop** ends a request at once (and a plan's build after the area it is
+  on). **Undo these changes** under a request puts the mission back as it was
+  before it (Ctrl+Z brings the changes back).
+- A built-in mission is never changed: Ideas and the Workshop work on it; the
+  Mission builder and Edit offer a mission of your own first (the Mission
+  builder: on this level's empty map, or a copy).
 - **Chats:** each mission keeps its conversations, as many as you like
   (`missions/custom/<id>/ai/threads/`, one file each, ignored by git; a
   built-in mission's stay in the browser). The name at the top of the panel
@@ -1218,6 +1259,13 @@ it out of what the game has, as a card in the chat with its 3D model turning:
   checkpoint, a weapons cache, a bunker entrance.
 - **A character** (`design_character`): a guard type with a model of its
   kind, a weapon and sight of its own.
+- **The studio checks a structure** as it is made and tells the AI its flaws,
+  which it corrects before showing it: a part floating with nothing under it,
+  or sunk into the ground; the same part twice in one place; a part far from
+  the rest; a guard or pickup inside a wall, a fence or a crate. Each part's
+  box is its model's real one (size, height, and where the box sits from the
+  model's origin, which the catalogue now reports for parts whose origin is not
+  their middle, like a sandbag wall's end).
 - **View in 3D** shows it bigger, **Place** puts it on the map where you
   click (R turns it), and **Add to inventory** keeps it (`missions/groups/`,
   kind `blueprint` or `character`), for any mission. It can place its own

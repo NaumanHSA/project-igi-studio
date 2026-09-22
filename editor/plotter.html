@@ -153,8 +153,21 @@ canvas{display:block}
 .mapbar{position:absolute;left:12px;top:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;
   align-items:flex-start;pointer-events:none;z-index:9}
 .mapbar>*{pointer-events:auto}
-.toggles{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);
+.toggles{position:relative;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);
   border-radius:6px;padding:3px;box-shadow:var(--shadow)}
+.tgmore[aria-expanded="true"]{background:var(--sunken);color:var(--accent)}
+.tgpop{position:absolute;top:calc(100% + 6px);right:0;min-width:250px;max-height:min(70vh,560px);overflow-y:auto;
+  background:var(--surface);border:1px solid var(--line);border-radius:6px;box-shadow:var(--shadow);padding:4px;z-index:12;
+  display:flex;flex-direction:column;gap:1px}
+.tgpop[hidden]{display:none}
+#toggles>.tgpop{left:0;right:auto}
+.tgm-row{display:flex;align-items:center;gap:8px;padding:1px 10px 1px 1px;border-radius:4px;cursor:pointer;font-size:12.5px;color:var(--ink);white-space:nowrap}
+.tgm-row:hover{background:var(--sunken)}
+.tgm-l{flex:1}
+.tgm-row.on::after{content:"✓";color:var(--ok);font-size:12px}
+.tgm-row .tg{flex:none}
+.tgm-row .tg.wide{width:30px;padding:0}.tgm-row .tg.wide .tg-txt{display:none}
+.tgm-sep{height:1px;background:var(--line);margin:3px 4px}
 .tg{position:relative;width:30px;height:30px;display:grid;place-items:center;border:none;border-radius:4px;
   background:transparent;color:var(--ink);cursor:pointer;padding:0;font:inherit}
 .tg svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -697,11 +710,6 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .ob.ev .ob-p{margin-left:7px}
 .ob.ev .ev-do input[type=text]{box-sizing:border-box}
 .ob.ev .ob-t{flex-wrap:wrap}
-.ev-types{display:flex;flex-direction:column;gap:0}
-.ev-types button{display:flex;align-items:center;gap:8px;width:100%;padding:5px 6px;border:0;border-radius:4px;background:transparent;
-  color:var(--ink);font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
-.ev-types button:hover{background:var(--sunken);color:var(--accent)}
-.ev-types button svg{width:14px;height:14px;flex:none;fill:none;stroke:var(--electric);stroke-width:1.7;stroke-linejoin:round}
 .ob.ev .ob-t select{width:auto;flex:1;margin:0}
 .ev-l{margin-top:9px;font-size:10.5px}
 .ev-do{margin-top:6px;padding:5px 7px 6px;border-left:2px solid var(--electric);background:var(--surface);border-radius:0 4px 4px 0}
@@ -1400,6 +1408,18 @@ function contentBounds(all){
   // that would otherwise shrink the part you edit into a corner
   var cut=all||xs.length<20?0:Math.floor(xs.length*0.04);
   return {minX:xs[cut],maxX:xs[xs.length-1-cut],minY:ys[cut],maxY:ys[ys.length-1-cut]};
+}
+// Where the mission is played: the level's things, or on an empty map (which
+// has next to none) its walkways, with what the mission has placed.
+function playBounds(){
+  var b=contentBounds(false);
+  if(LEVEL&&LEVEL.objects.length+placements.length<4&&GRAPHS){
+    var xs=[],ys=[];
+    for(var g in GRAPHS)(GRAPHS[g].nodes||[]).forEach(function(n){xs.push(n.x);ys.push(n.y)});
+    placements.forEach(function(p){xs.push(p.x);ys.push(p.y)});
+    if(xs.length)b={minX:Math.min.apply(null,xs),maxX:Math.max.apply(null,xs),minY:Math.min.apply(null,ys),maxY:Math.max.apply(null,ys)};
+  }
+  return b;
 }
 function fit(all){
   if(!LEVEL)return;
@@ -2979,6 +2999,79 @@ function wallShown(sg){
   if(o.cutscene&&!layers.cutscene)return false;
   return layers[sg.gate?"door":"wall"]!==false;
 }
+// Roads, the railway (its embankments and bridge), fence runs and power lines:
+// the level's splines (SplineObj in the level script, "splines" in its data).
+// Each run is the curve through its waypoints (straight with Linear Segments),
+// every stretch laid with the segment model its first waypoint names; that
+// model's width across (its d in models.json) is the band's width. An empty
+// map has none of them: it keeps only the terrain.
+var SPLINE_LOOK={
+  TRAIN_TRACK:{fill:"rgba(64,58,46,.9)",rails:true},
+  TRAIN_BRIDGE:{fill:"rgba(86,84,76,.92)",rails:true,edge:"rgba(214,208,186,.6)"},
+  ROAD:{fill:"rgba(52,58,54,.88)",centre:true},
+  SNOW_ROAD:{fill:"rgba(150,160,158,.78)",centre:true},
+  // "road track" is railroad track (368 is the raised embankment Trainyard's
+  // trains run on; level 9's ends on its train bridge)
+  ROAD_TRACK:{fill:"rgba(76,68,54,.9)",rails:true},
+  FENCES:{line:"rgba(214,208,184,.9)",posts:true},
+  CHAIN_FENCE:{line:"rgba(214,208,184,.9)",posts:true},
+  FLOODLIGHT:{line:"rgba(214,208,184,.9)",posts:true,lights:true},
+  POLE_WIRE:{line:"rgba(176,182,166,.65)",dash:[5,4],posts:true},
+  WIRE:{line:"rgba(176,182,166,.65)",dash:[5,4]}
+};
+// the points of stretch i of a spline, in world metres: Catmull-Rom through
+// the waypoints, or straight
+function splineStretch(P,i,linear){
+  var a=P[i],b=P[i+1];
+  if(linear)return [[a.x,a.y],[b.x,b.y]];
+  var p0=P[Math.max(0,i-1)],p3=P[Math.min(P.length-1,i+2)];
+  var n=Math.max(4,Math.min(24,Math.round(Math.hypot(b.x-a.x,b.y-a.y)/6))),out=[];
+  for(var k=0;k<=n;k++){
+    var t=k/n,t2=t*t,t3=t2*t;
+    out.push([0.5*(2*a.x+(-p0.x+b.x)*t+(2*p0.x-5*a.x+4*b.x-p3.x)*t2+(-p0.x+3*a.x-3*b.x+p3.x)*t3),
+              0.5*(2*a.y+(-p0.y+b.y)*t+(2*p0.y-5*a.y+4*b.y-p3.y)*t2+(-p0.y+3*a.y-3*b.y+p3.y)*t3)]);
+  }
+  return out;
+}
+// a screen polyline moved sideways by d pixels
+function offsetLine(S,d){
+  return S.map(function(p,i){
+    var q=S[Math.max(0,i-1)],r=S[Math.min(S.length-1,i+1)],dx=r[0]-q[0],dy=r[1]-q[1],l=Math.hypot(dx,dy)||1;
+    return [p[0]-dy/l*d,p[1]+dx/l*d];
+  });
+}
+function strokePts(S){ctx.beginPath();ctx.moveTo(S[0][0],S[0][1]);for(var i=1;i<S.length;i++)ctx.lineTo(S[i][0],S[i][1]);ctx.stroke()}
+function drawSplines(){
+  if(!LEVEL||!LEVEL.splines||MODE==="empty"||layers.splines===false)return;
+  ctx.save();ctx.lineJoin="round";ctx.lineCap="butt";
+  LEVEL.splines.forEach(function(s){
+    if(s.cutscene&&!layers.cutscene)return;
+    var P=s.points,xs=P.map(function(p){return p.x}),ys=P.map(function(p){return p.y});
+    var a=w2s(Math.min.apply(null,xs),Math.max.apply(null,ys)),b=w2s(Math.max.apply(null,xs),Math.min.apply(null,ys)),m=40;
+    if(b[0]<-m||b[1]<-m||a[0]>W+m||a[1]>H+m)return;       // off screen
+    for(var i=0;i<P.length-1;i++){
+      var seg=P[i].seg;if(!seg)continue;
+      var look=SPLINE_LOOK[P[i].segName]||{fill:"rgba(80,84,78,.72)"},z=MODELS&&MODELS.sizes&&MODELS.sizes[seg];
+      var S=splineStretch(P,i,s.linear).map(function(p){return w2s(p[0],p[1])}),wpx=(z&&z.d>1?z.d:4)*view.k;
+      ctx.setLineDash(look.dash||[]);
+      if(look.line){
+        ctx.strokeStyle=look.line;ctx.lineWidth=Math.max(1,Math.min(2.2,0.35*view.k));strokePts(S);
+        ctx.setLineDash([]);
+        if(look.posts&&view.k>0.6){ctx.fillStyle=look.line;var e=S[0];ctx.beginPath();ctx.arc(e[0],e[1],Math.max(1.5,Math.min(3,0.4*view.k)),0,6.2832);ctx.fill()}
+        if(look.lights&&view.k>0.6){var f=S[S.length-1];ctx.fillStyle="rgba(255,226,140,.9)";ctx.beginPath();ctx.arc(f[0],f[1],Math.max(2,Math.min(4,0.5*view.k)),0,6.2832);ctx.fill()}
+        continue;
+      }
+      ctx.strokeStyle=look.fill;ctx.lineWidth=Math.max(2,wpx);strokePts(S);
+      if(look.edge&&wpx>6){ctx.strokeStyle=look.edge;ctx.lineWidth=1;strokePts(offsetLine(S,wpx/2-0.5));strokePts(offsetLine(S,-wpx/2+0.5))}
+      if(look.rails&&view.k>=1.2){            // standard gauge, 1.435 m
+        ctx.strokeStyle="rgba(196,190,176,.85)";ctx.lineWidth=Math.max(1,0.12*view.k);
+        strokePts(offsetLine(S,0.72*view.k));strokePts(offsetLine(S,-0.72*view.k));
+      }
+      if(look.centre&&view.k>=1.5){ctx.setLineDash([3*view.k,3*view.k]);ctx.strokeStyle="rgba(220,220,200,.35)";ctx.lineWidth=Math.max(1,0.15*view.k);strokePts(S);ctx.setLineDash([])}
+    }
+  });
+  ctx.restore();
+}
 function wallBase(){return Math.max(1.4,Math.min(3.2,view.k*0.5))}
 function drawWalls(){
   var ws=walls();if(!ws.length)return;
@@ -3146,6 +3239,7 @@ function present(){
   drawReplay();
   drawLive();
   drawBoxSelect();
+  drawAIPlan();
   drawAITags();
   drawSketch();
 }
@@ -3243,7 +3337,7 @@ function renderScene(){
     return;
   }
   drawTerrain();drawBuildable();drawCoverage();
-  grid();drawWalls();drawPatrols();
+  grid();drawSplines();drawWalls();drawPatrols();
   // cameras and alarm fittings sit ON buildings: they are drawn over them, or
   // they vanish under the roof they are bolted to
   var order={prop:0,door:1,building:2,pickup:3,terminal:3,soldier:4,
@@ -3414,12 +3508,16 @@ function loadGround(level,T){
       .then(function(buf){return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer()})
       .then(function(raw){
         if(TERR!==T||meta.w!==T.meta.w||meta.h!==T.meta.h)return;
-        var tiles=meta.tiles.map(function(b64){
+        function bytes(b64){
           if(!b64)return null;
           var bin=atob(b64),a=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a;
-        });
+        }
+        var tiles=meta.tiles.map(bytes);
+        // each material's own texture in colour, for the 3D view's ground (data made before them has none)
+        var ctiles=(meta.ctiles||[]).map(bytes);
         var used=0,sum=0;meta.cells.forEach(function(c,m){if(c&&tiles[m]){used+=c;sum+=c*meta.mean[m]}});
-        T.ground={mat:new Uint8Array(raw),tiles:tiles,mean:meta.mean,rgb:meta.rgb||null,names:meta.names||null,avg:used?sum/used:0.5,tile:meta.tile};
+        T.ground={mat:new Uint8Array(raw),tiles:tiles,mean:meta.mean,rgb:meta.rgb||null,names:meta.names||null,avg:used?sum/used:0.5,tile:meta.tile,
+          ctiles:ctiles.length?ctiles:null,ctile:meta.ctile||0};
         if(layers.groundtex){T.img=null;T.job=null;draw()}
       });
   }).catch(function(){});
@@ -3847,14 +3945,14 @@ function draftPlace(words,places){
   return bs>=0.5?best:null;
 }
 // the walkway points round a spot, far enough apart, for guards to stand on
-function draftSpots(x,y,n,taken){
-  var cand=[];
+function draftSpots(x,y,n,taken,z){
+  var cand=[],ref=heightRef(x,y,z);
   Object.keys(GRAPHS||{}).forEach(function(g){nodesOf(g).forEach(function(nd){
-    var d=Math.hypot(nd.x-x,nd.y-y);if(d<35)cand.push({x:nd.x,y:nd.y,z:nd.z,d:d});
+    var d=Math.hypot(nd.x-x,nd.y-y);if(d<35&&nearHeight(nd,ref))cand.push({x:nd.x,y:nd.y,z:nd.z,d:d});
   })});
   // and the walkway points the mission adds (the ones that join up)
   navNodes.forEach(function(nd){
-    var d=Math.hypot(nd.x-x,nd.y-y);if(d<35&&nodeLinks(nd).length)cand.push({x:nd.x,y:nd.y,z:nd.z,d:d});
+    var d=Math.hypot(nd.x-x,nd.y-y);if(d<35&&nearHeight(nd,ref)&&nodeLinks(nd).length)cand.push({x:nd.x,y:nd.y,z:nd.z,d:d});
   });
   cand.sort(function(a,b){return a.d-b.d});
   var out=[];
@@ -4037,13 +4135,22 @@ function compoundDialog(cx,cy){
   });
 }
 // the walkway point nearest a spot (on any graph), or null
-function nearestNode(x,y){
-  var best=null,bd=1e18;
+// The walkway points near a spot are the ones at about its height: a level's
+// tunnels and cellars run under its hills (Trainyard's 3 km down), and a point
+// straight above one is no walkway for a guard on the grass. z is the spot's
+// height; without it, the ground's there (no ground: any height).
+var NEAR_HEIGHT=30;
+function heightRef(x,y,z){return z!=null&&isFinite(z)?z:terrainZ(x,y)}
+function nearHeight(n,ref){return ref==null||Math.abs(n.z-ref)<=NEAR_HEIGHT}
+function nearestNode(x,y,z){
+  var best=null,bd=1e18,ref=heightRef(x,y,z);
   Object.keys(GRAPHS||{}).forEach(function(g){nodesOf(g).forEach(function(n){
+    if(!nearHeight(n,ref))return;
     var d=(n.x-x)*(n.x-x)+(n.y-y)*(n.y-y);if(d<bd){bd=d;best={n:n,g:g,d:Math.sqrt(d)}}
   })});
   // the mission's own walkway points count too, once they join up
   navNodes.forEach(function(n){
+    if(!nearHeight(n,ref))return;
     var d=(n.x-x)*(n.x-x)+(n.y-y)*(n.y-y);if(d<bd&&nodeLinks(n).length){bd=d;best={n:n,g:String(n.graph),d:Math.sqrt(d)}}
   });
   return best;
@@ -4613,6 +4720,7 @@ function objectInspector(el){
     if(o.type==="door")h+='<p class="hint" style="margin:7px 0 0">Doors slide to a stop position stored with them, so they are not moved here.</p>'+doorSection(o);
   }
   if(own)h+='<div class="field" style="margin-top:7px"><span class="lbl">Label</span><input id="inm" value="'+esc(o.name)+'"></div>';
+  if(own&&o.type==="building"&&!segInfo(o.model))h+=mapLabelSection(o);
   if(own&&o.type==="building"&&!segInfo(o.model))h+=flattenSection(o);
   if(hasLayout(o))h+=interiorSection(o);
   if(isSoldier)h+=patrolSection(o);
@@ -4669,7 +4777,19 @@ function objectInspector(el){
     if(o.own)setProp(o,{pickupId:v,name:weaponLabel(v)});else setProp(o,{model:v});
     renderSide();draw();
   });
-  if($("inm"))$("inm").addEventListener("input",function(){o.name=$("inm").value;touch();renderList()});
+  if($("inm"))$("inm").addEventListener("input",function(){
+    o.name=$("inm").value;
+    if(o.label&&(o.label.title||"").trim()&&mapTitle(o))o.label.title=mapTitle(o);    // named on the map as it is labelled here
+    touch();renderList();draw();
+  });
+  if($("imap"))$("imap").addEventListener("change",function(){
+    if(this.checked){
+      if(!mapTitle(o)){this.checked=false;toast("Give it a label first: that is its name on the map");return}
+      o.label={title:mapTitle(o),info:(o.label&&o.label.info)||""};
+    }else delete o.label;
+    lastChangeAt=0;touch();renderSide();draw();
+  });
+  if($("imapinfo"))$("imapinfo").addEventListener("input",function(){if(o.label){o.label.info=$("imapinfo").value;touch();draw()}});
   if($("ireset"))$("ireset").addEventListener("click",function(){resetShipped(o);touch();renderSide();draw()});
   if($("isettle"))$("isettle").addEventListener("click",function(){editShipped(o,{settle:true});touch();renderSide()});
   if($("idel"))$("idel").addEventListener("click",removeSel);
@@ -4691,6 +4811,19 @@ function objectInspector(el){
     });
   });
   if(!isSoldier)patrolMode=false;
+}
+// Named on the map computer: a building of yours, under its own label (the map
+// holds 40 letters of it), with a line for what the map computer says about it.
+// The build points the name at the building's task (plan.py, LABELS).
+function mapTitle(o){return (o.name||"").trim().slice(0,40)}
+function mapLabelSection(o){
+  var L=o.label&&(o.label.title||"").trim()?o.label:null,ro=!canEditQuiet();
+  var h='<label class="sg-t" style="margin-top:9px"><input type="checkbox" id="imap"'+(L?' checked':'')+(ro?' disabled':'')+
+    '> Show it on the map computer</label>';
+  if(!L)return h+'<p class="hint" style="margin:2px 0 0">Its label becomes its name on the in-game map.</p>';
+  if(L.title!==mapTitle(o))h+='<p class="hint" style="margin:2px 0 0">On the map as “'+esc(L.title)+'”: change the label to rename it.</p>';
+  return h+'<input type="text" id="imapinfo" maxlength="120" style="margin-top:5px" value="'+esc(L.info||"")+'"'+
+    ' placeholder="What the map computer says about it (optional)"'+(ro?' disabled':'')+'>';
 }
 function flattenSection(o){
   var chk=placeCheck(o),on=flattens(o),sp=chk&&chk.spread!=null?chk.spread:null;
@@ -5165,6 +5298,19 @@ function buildPalette(){
     parent.appendChild(b);
     return b;
   }
+  // a category's row, for the structures and the weapons alike: hovered, its
+  // list opens beside the panel; clicked, it stays open
+  function catRow(b,key,title,meta,thumb){
+    var r=document.createElement("button");r.type="button";r.className="catrow";r.setAttribute("data-cat",key);
+    r.setAttribute("aria-expanded",String(FLY.key===key));
+    r.title=title+"\nHover to see them beside the panel; click to keep the list open";
+    r.innerHTML='<span class="thumb"></span><span class="t"><b>'+esc(title)+'</b><span>'+meta+'</span></span>'+CHEVRON;
+    r.querySelector(".thumb").appendChild(thumb);
+    r.addEventListener("mouseenter",function(){flyHover(key,r)});
+    r.addEventListener("mouseleave",flyLeave);
+    r.addEventListener("click",function(){flyClick(key,r)});
+    b.appendChild(r);
+  }
   var IMPORT_TAG='<i style="font-style:normal;color:var(--accent)">import</i>';
 
   // characters - every AI type any mission uses: the enemy soldiers, then
@@ -5191,22 +5337,29 @@ function buildPalette(){
     });
   });
 
-  // weapons, explosives, items and ammo - global, usable on any level
+  // weapons, explosives, items and ammo - global, usable on any level. As the
+  // structures: a row a group, whose list opens beside the panel; a search
+  // lists them here instead
   var arms=((CATALOG&&CATALOG.weapons)||[]).filter(function(w){return hit(w.label,w.id,w.group)});
+  var ARMS=[["weapons","Weapons"],["explosives","Explosives"],["items","Items"],["ammo","Ammo"]];
+  function armsOf(g){return arms.filter(function(w){return w.group===g})}
+  function armItems(b,g,px){
+    armsOf(g).forEach(function(w){
+      var wi=item(b,{group:"pickup",id:w.id,label:w.label,count:w.count},
+        markerSwatch("pickup",PlanIcons.weaponIcon(w.id),css("--pickup"),px||20),w.label,
+        esc(w.id.replace(/^(WEAPON|AMMO)_ID_/,""))+(w.count&&g==="ammo"?" · ×"+w.count:""));
+      var wm=window.MeshSprites&&MeshSprites.pickupModel(w.id);
+      if(wi&&wm){
+        wi.addEventListener("mouseenter",function(){hoverCard(wi,{name:w.label,model:wm})});
+        wi.addEventListener("mouseleave",function(){hoverCard(null)});
+      }
+    });
+  }
   section("pickup","Weapons & items",arms.length,false,function(b){
-    [["weapons","Weapons"],["explosives","Explosives"],["items","Items"],["ammo","Ammo"]].forEach(function(g){
-      var rows=arms.filter(function(w){return w.group===g[0]});
-      if(!rows.length||!sub(b,"pickup:"+g[0],g[1],rows.length))return;
-      rows.forEach(function(w){
-        var wi=item(b,{group:"pickup",id:w.id,label:w.label,count:w.count},
-          markerSwatch("pickup",PlanIcons.weaponIcon(w.id),css("--pickup"),20),w.label,
-          esc(w.id.replace(/^(WEAPON|AMMO)_ID_/,""))+(w.count&&g[0]==="ammo"?" · ×"+w.count:""));
-        var wm=window.MeshSprites&&MeshSprites.pickupModel(w.id);
-        if(wi&&wm){
-          wi.addEventListener("mouseenter",function(){hoverCard(wi,{name:w.label,model:wm})});
-          wi.addEventListener("mouseleave",function(){hoverCard(null)});
-        }
-      });
+    ARMS.forEach(function(g){
+      var list=armsOf(g[0]);if(!list.length)return;
+      if(q){if(sub(b,"pickup:"+g[0],g[1],list.length))armItems(b,g[0]);return}
+      catRow(b,"pk:"+g[0],g[1],list.length+" · any level",markerSwatch("pickup",PlanIcons.weaponIcon(list[0].id),css("--pickup"),26));
     });
   });
 
@@ -5251,26 +5404,23 @@ function buildPalette(){
   }
   if(!q){
     FLY.fill=function(b,key){
+      if(key.indexOf("pk:")===0){armItems(b,key.slice(3),30);return armsOf(key.slice(3)).length}   // a group of weapons
       if(key==="_designs"){designItems(b);return myDesigns.length}
       var c=cats.filter(function(x){return x.key===key})[0];if(!c)return 0;
       catItems(b,c);return rows.filter(function(r){return r.cat===key}).length;
     };
-    FLY.title=function(key){return key==="_designs"?"Your designs":((cats.filter(function(x){return x.key===key})[0]||{}).title||"")};
+    FLY.title=function(key){
+      if(key.indexOf("pk:")===0)return (ARMS.filter(function(g){return "pk:"+g[0]===key})[0]||[])[1]||"";
+      return key==="_designs"?"Your designs":((cats.filter(function(x){return x.key===key})[0]||{}).title||"");
+    };
     section("obj","Structures & objects",rows.length+myDesigns.length,true,function(b){
       var list=cats.map(function(c){return {key:c.key,title:c.title,n:rows.filter(function(r){return r.cat===c.key}).length,
         first:rows.filter(function(r){return r.cat===c.key&&lm.has(r.model)})[0]||rows.filter(function(r){return r.cat===c.key})[0]}});
       if(myDesigns.length)list.unshift({key:"_designs",title:"Your designs",n:myDesigns.length,design:myDesigns[0]});
       list.forEach(function(c){
-        var r=document.createElement("button");r.type="button";r.className="catrow";r.setAttribute("data-cat",c.key);
-        r.setAttribute("aria-expanded",String(FLY.key===c.key));
-        r.title=c.title+"\nHover to see them beside the panel; click to keep the list open";
         var packedN=c.key==="_designs"?c.n:rows.filter(function(x){return x.cat===c.key&&lm.has(x.model)}).length;
-        r.innerHTML='<span class="thumb"></span><span class="t"><b>'+esc(c.title)+'</b><span>'+c.n+(c.key==="_designs"?" of yours":" · "+packedN+" in "+esc(lvName))+'</span></span>'+CHEVRON;
-        r.querySelector(".thumb").appendChild(c.design?groupThumb(c.design.data,26):c.first?thumbFor(c.first.model,c.first.kind,c.first.raw,26):iconSwatch("dot",css("--build"),20));
-        r.addEventListener("mouseenter",function(){flyHover(c.key,r)});
-        r.addEventListener("mouseleave",flyLeave);
-        r.addEventListener("click",function(){flyClick(c.key,r)});
-        b.appendChild(r);
+        catRow(b,c.key,c.title,c.n+(c.key==="_designs"?" of yours":" · "+packedN+" in "+esc(lvName)),
+          c.design?groupThumb(c.design.data,26):c.first?thumbFor(c.first.model,c.first.kind,c.first.raw,26):iconSwatch("dot",css("--build"),20));
       });
     });
     if(FLY.key)flyOpen(FLY.key,null,true);
@@ -5306,7 +5456,7 @@ var FLY={key:null,pinned:false,t:0,el:null,fill:null,title:null};
 function flyEl(){
   if(FLY.el)return FLY.el;
   var el=document.createElement("div");el.className="invfly";el.id="invfly";el.hidden=true;
-  el.setAttribute("role","dialog");el.setAttribute("aria-label","Structures in this category");
+  el.setAttribute("role","dialog");el.setAttribute("aria-label","Everything in this category");
   el.innerHTML='<div class="fly-h"><b></b><span class="n"></span><button type="button" class="fly-pin" aria-pressed="false" title="Keep it open\nThe list stays until you close it">Pin</button>'+
     '<button type="button" class="fly-x" aria-label="Close" title="Close\nEsc">×</button></div><input class="fly-q" type="search" placeholder="Filter this list" aria-label="Filter this list"><div class="fly-b"></div>';
   document.body.appendChild(el);
@@ -5960,7 +6110,79 @@ function buildToggles(){
     LIVE.on||!$("livepop").hidden,toggleLivePanel,
     '<svg viewBox="0 0 24 24" aria-hidden="true">'+TG_ICONS.live+'</svg><span class="tg-txt">Live</span>');
   lb.classList.add("wide");if(LIVE.on&&LIVE.state&&LIVE.state.status==="live")lb.classList.add("on-air");
+  fitMapbar();
 }
+// A narrow map: the map bar is one row (what to show on the left, the view
+// tools and the legend on the right). When the window or the side panels leave
+// too little room, the tools at the end of a bar fold into its ⋯ menu, the
+// show-on-map bar's first, then the view bar's; a wider map brings them back.
+// The bars are rebuilt on every change, so this runs after each build, and a
+// menu left open stays open (flipping several layers in a row).
+var MOREOPEN=null,KEEPMORE=false;     // KEEPMORE: this rebuild came from a click in the menu
+function fitMapbar(){
+  var bar=document.querySelector(".mapbar"),rb=document.querySelector(".rightbar"),tg=$("toggles"),vb=$("viewbar");
+  if(!bar||!rb||!tg||!vb||!bar.clientWidth)return;
+  function over(){return tg.offsetWidth+8+rb.offsetWidth-bar.clientWidth}
+  var keep=KEEPMORE;KEEPMORE=false;
+  if(over()<=0){MOREOPEN=null;return}
+  var menus=[];
+  function fold(h,keep){
+    var m=document.createElement("button");
+    m.type="button";m.className="tg tgmore";m.setAttribute("aria-haspopup","true");
+    m.setAttribute("data-tip","More tools");m.setAttribute("aria-label","More tools");
+    m.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>';
+    h.appendChild(m);
+    var out=[];
+    while(over()>0){
+      var kids=[].slice.call(h.children).filter(function(c){return c!==m});
+      if(kids.length<=keep)break;
+      var last=kids[kids.length-1];
+      last.remove();
+      out.unshift(last.classList.contains("tgsep")?"|":last);
+    }
+    while(out[0]==="|")out.shift();
+    if(!out.length){m.remove();return false}
+    // a separator left at the end of the bar goes too
+    var tail=h.children[h.children.length-2];if(tail&&tail.classList.contains("tgsep"))tail.remove();
+    menus.push({h:h,m:m,items:out});
+    return over()<=0;
+  }
+  if(!fold(tg,1))fold(vb,0);
+  menus.forEach(function(x){
+    var pop=document.createElement("div");pop.className="tgpop";pop.setAttribute("role","menu");
+    x.items.forEach(function(b){
+      if(b==="|"){pop.appendChild(Object.assign(document.createElement("div"),{className:"tgm-sep"}));return}
+      var row=document.createElement("div");row.className="tgm-row";
+      // its name without the state or the explanation; a shortcut key stays
+      var tip=(b.getAttribute("data-tip")||b.getAttribute("aria-label")||"").split("\n")[0]
+        .replace(/ \((shown|hidden)\)$/,"").split(": ")[0].replace(/ \([^)]{6,}\)/g,"");
+      var lb=document.createElement("span");lb.className="tgm-l";lb.textContent=tip;
+      row.appendChild(b);row.appendChild(lb);
+      if(b.getAttribute("aria-pressed")==="true")row.classList.add("on");
+      row.addEventListener("click",function(e){if(!b.contains(e.target))b.click()});
+      pop.appendChild(row);
+    });
+    x.h.appendChild(pop);
+    pop.addEventListener("click",function(){KEEPMORE=true;setTimeout(function(){KEEPMORE=false},0)},true);
+    pop.hidden=!(keep&&MOREOPEN===x.h.id);
+    x.m.setAttribute("aria-expanded",String(!pop.hidden));
+    x.m.addEventListener("click",function(){
+      MOREOPEN=pop.hidden?x.h.id:null;
+      document.querySelectorAll(".tgpop").forEach(function(p){p.hidden=p!==pop||!MOREOPEN});
+      x.m.setAttribute("aria-expanded",String(!!MOREOPEN));
+    });
+  });
+  if(!keep)MOREOPEN=null;
+}
+document.addEventListener("mousedown",function(e){
+  if(MOREOPEN&&!e.target.closest(".tgpop")&&!e.target.closest(".tgmore")){
+    MOREOPEN=null;document.querySelectorAll(".tgpop").forEach(function(p){p.hidden=true});
+    document.querySelectorAll(".tgmore").forEach(function(m){m.setAttribute("aria-expanded","false")});
+  }
+});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&MOREOPEN){MOREOPEN=null;document.querySelectorAll(".tgpop").forEach(function(p){p.hidden=true})}});
+var fitMapT=0;
+window.addEventListener("resize",function(){clearTimeout(fitMapT);fitMapT=setTimeout(function(){if(LEVEL)buildToggles()},80)});
 function toggleLayer(key){
   layers[key]=!layers[key];
   if(key==="nodes"&&layers.nodes)hiddenGraphs={};
@@ -7622,17 +7844,25 @@ function terrain3d(o,R){
   var w=Math.floor((c[1]-c[0])/st)+1,h=Math.floor((c[3]-c[2])/st)+1;
   var G=TERR.ground,z=new Float32Array(w*h),shade=G?new Float32Array(w*h):null;
   var rgb=G&&G.rgb?new Float32Array(w*h*3):null,count={};
+  var mat=G&&G.ctiles?new Uint8Array(w*h):null;           // each point's material, for the textured ground
   for(var j=0;j<h;j++)for(var i=0;i<w;i++){
     var k=(c[2]+j*st)*m.w+c[0]+i*st,q=j*w+i;
     z[q]=TERR.h[k];
     if(shade){var mt=G.mat[k],mv=G.mean[mt];shade[q]=mv!=null?mv:0.5;count[mt]=(count[mt]||0)+1}
     if(rgb){var col=G.rgb[G.mat[k]]||[0.5,0.5,0.5];rgb[q*3]=col[0];rgb[q*3+1]=col[1];rgb[q*3+2]=col[2]}
+    if(mat)mat[q]=G.mat[k];
   }
   // the most common material's texture, as fine detail over the colours
   var top=null;for(var mk in count)if(top==null||count[mk]>count[top])top=mk;
   var tile=G&&top!=null&&G.tiles[top]?{px:G.tiles[top],size:G.tile,mean:G.mean[top]}:null;
+  // the textures of the materials in view, in colour, most of the ground first
+  var tex=null;
+  if(mat){
+    var ks=Object.keys(count).map(Number).filter(function(k){return G.ctiles[k]}).sort(function(a,b){return count[b]-count[a]});
+    if(ks.length)tex={size:G.ctile,order:ks,px:ks.map(function(k){return G.ctiles[k]})};
+  }
   var x0=m.x0+c[0]*m.cell,y0=m.y0+c[2]*m.cell,cell=m.cell*st;
-  return {x0:x0,y0:y0,cell:cell,w:w,h:h,z:z,shade:shade,rgb:rgb,tile:tile,hole:openBelow(x0,y0,cell,w,h,z)};
+  return {x0:x0,y0:y0,cell:cell,w:w,h:h,z:z,shade:shade,rgb:rgb,tile:tile,mat:tex?mat:null,tex:tex,hole:openBelow(x0,y0,cell,w,h,z)};
 }
 // Where a building standing on the ground is open to the sky below ground
 // level (a ramp down to bunker doors, a sunken yard), the game draws no ground
@@ -7731,16 +7961,35 @@ function open3dAt(x,y,R){
   View3D.open({host:document.querySelector(".stage"),
     target:{key:"spot",name:"Shaped ground",sub:"the ground as the game will get it",type:"spot",model:null,x:x,y:y,z:z,
       rot:[0,0,0],head:2,headOff:0,lift:0,kind:"fixed",editable:false,own:false,cam:null,on:""},
-    objects:sceneAround(spot,reach3d(V3D.radius),true),terrain:terrain3d(spot,V3D.radius),
+    objects:sceneAround(spot,reach3d(V3D.radius),true),terrain:terrain3d(spot,V3D.radius),splines:splines3d(spot,V3D.radius),
     nav:nav3d(spot,reach3d(V3D.radius)),onAddNode:canEditQuiet()?addNode3d:null,explore:explore3d,
     onTest:Store&&!Store.local&&canEditQuiet()?function(p){testFromHere(p.x,p.y,p.z,p.gamma)}:null,
-    mesh:function(m){return MeshSprites.raw(m)},radius:V3D.radius,inside:false,keepView:false,
+    mesh:function(m){return MeshSprites.raw(m)},mapImage:mapPatch,radius:V3D.radius,inside:false,keepView:false,
     level:SRV?(LEVEL?LEVEL.level:LV):0,
     onMove:function(){},
     onPick:function(k){var q=byKey3d(k);if(q){sel=q;multi=[];renderSide();open3d(q,true)}},
     onRadius:function(r){open3dAt(x,y,r)},
     onClose:function(){V3D.spot=null;V3D.at=null;renderSide();draw();sync3dSwitch()}});
   sync3dSwitch();
+}
+// The roads and the railway round a spot, for the 3D close-up: each stretch of
+// the level's splines as a line of points, with the width of the model laid
+// along it (the map draws the same stretches in drawSplines).
+function splines3d(o,R){
+  if(!LEVEL||!LEVEL.splines||MODE==="empty")return [];
+  var out=[];
+  LEVEL.splines.forEach(function(s){
+    if(s.cutscene&&!layers.cutscene)return;
+    for(var i=0;i<s.points.length-1;i++){
+      var seg=s.points[i].seg;if(!seg)continue;
+      var a=s.points[i],b=s.points[i+1];
+      if(Math.hypot((a.x+b.x)/2-o.x,(a.y+b.y)/2-o.y)>R+Math.hypot(b.x-a.x,b.y-a.y))continue;
+      var z=MODELS&&MODELS.sizes&&MODELS.sizes[seg],look=SPLINE_LOOK[s.points[i].segName]||{};
+      out.push({kind:look.rails?"rail":look.line?"line":"road",
+        width:z&&z.d>0.5?z.d:(look.line?0.25:4),pts:splineStretch(s.points,i,s.linear)});
+    }
+  });
+  return out.slice(0,60);
 }
 // The walkways round a spot, for the 3D close-up: the level's navmesh nodes and
 // links (as the plan leaves them), the mission's own, and the guard's patrol.
@@ -7809,10 +8058,10 @@ function open3d(o,keep,view){
   var fl=inb?floorAt(o.x,o.y,o.z):groundAt(o.x,o.y);
   t.floor=fl!=null?fl:o.z;
   V3D.key=t.key;V3D.spot=null;V3D.at=null;V3D.ver=planVer;
-  View3D.open({host:document.querySelector(".stage"),target:t,objects:sceneAround(o,reach3d(R)),terrain:terrain3d(o,R),
+  View3D.open({host:document.querySelector(".stage"),target:t,objects:sceneAround(o,reach3d(R)),terrain:terrain3d(o,R),splines:splines3d(o,R),
     nav:nav3d(o,reach3d(R)),onAddNode:canEditQuiet()?addNode3d:null,explore:explore3d,
     onTest:Store&&!Store.local&&canEditQuiet()?function(p){testFromHere(p.x,p.y,p.z,p.gamma)}:null,
-    mesh:function(m){return MeshSprites.raw(m)},radius:R,inside:!!inb,keepView:!!keep,view:view,
+    mesh:function(m){return MeshSprites.raw(m)},mapImage:mapPatch,radius:R,inside:!!inb,keepView:!!keep,view:view,
     level:SRV?(LEVEL?LEVEL.level:LV):0,
     onMove:function(k,p){
       var q=byKey3d(k);if(!q)return;
@@ -8493,16 +8742,8 @@ function renderObjectives(){
     '<p class="hint" style="margin:2px 0 0">Dying always fails it.</p>'+
     '<div class="ob-set"><span><b>Time limit and weather</b><i>'+esc(settingsText()||"as the level")+'</i></span>'+
     '<button class="btn" id="ob-set"'+(ro?' disabled':'')+'>Change</button></div>';
-  var labelled=placements.filter(function(p){return p.type==="building"&&!segInfo(p.model)});
-  h+='<div class="lbl" style="margin:16px 0 4px">Map computer labels</div>';
-  h+=labelled.length?labelled.map(function(p){
-      var L=p.label||{};
-      return '<div class="ob lb" data-u="'+esc(p.uid)+'"><div class="ob-h"><span>'+esc(p.name||p.model)+'</span>'+
-        '<button class="btn" data-a="showp">Show</button></div>'+
-        '<input type="text" maxlength="40" data-a="title" value="'+esc(L.title||"")+'" placeholder="Title on the map (none)">'+
-        '<input type="text" maxlength="120" data-a="info" value="'+esc(L.info||"")+'" placeholder="What the map computer says about it"></div>';
-    }).join(""):'<p class="hint" style="margin:0">Buildings you place can be named on the map computer here.</p>';
-  h+='<p class="hint" style="margin:10px 0 0">Texts are added to the game\'s language files under this mission\'s own keys when you apply.</p>';
+  h+='<p class="hint" style="margin:10px 0 0">Texts are added to the game\'s language files under this mission\'s own keys when you apply. '+
+    'A building of yours is named on the map computer from its own panel.</p>';
   host.innerHTML=h;
   host.querySelectorAll(".ob[data-i]").forEach(function(el){
     var ob=objectives[+el.getAttribute("data-i")];
@@ -8523,18 +8764,6 @@ function renderObjectives(){
   host.querySelectorAll("[data-add]").forEach(function(b){b.addEventListener("click",function(){addObjective(b.getAttribute("data-add"))})});
   if($("ob-alarm"))$("ob-alarm").addEventListener("change",function(){failOnAlarm=this.checked;touch()});
   if($("ob-set"))$("ob-set").addEventListener("click",settingsDialog);
-  host.querySelectorAll(".lb").forEach(function(el){
-    var p=placements.filter(function(x){return x.uid===el.getAttribute("data-u")})[0];if(!p)return;
-    el.querySelectorAll("[data-a]").forEach(function(c){
-      var a=c.getAttribute("data-a");
-      if(a==="showp")c.addEventListener("click",function(){sel=p;renderSide();jumpTo(p.x,p.y,Math.max(view.k,4))});
-      else c.addEventListener("input",function(){
-        p.label=p.label||{};p.label[a]=c.value;
-        if(!(p.label.title||"").trim()&&!(p.label.info||"").trim())delete p.label;
-        touch();draw();
-      });
-    });
-  });
 }
 // The alarm picked in the Security tab, drawn on the plan: a line from every
 // part to its control, and a ring around each guard who answers it.
@@ -8728,6 +8957,11 @@ var EV_WHEN=[
   ["time","Time passes","",null],
   ["after","Some time after another event","",null]
 ];
+// each kind of event as the Security panel shows its hardware: the map's own
+// glyph for what it waits on, and a line under it for the ones with nothing to click
+var EV_GLYPH={area:"player",switch:"switch",dead:"guardface",hacked:"computer",picked:"rifle",destroyed:"explosive",
+  seen:"camera",alarm:"siren",time:"clock",after:"after"};
+var EV_META={alarm:"Pick which alarm system",time:"So many seconds after the start",after:"So many seconds after one of your events"};
 var EV_DO=[["message","Show a message"],["alarm","Raise an alarm"],["guards","Send in guards"],["doors","Open doors"],["fail","The mission fails"]];
 var EV_IC={
   bolt:'<svg viewBox="0 0 16 16"><path d="M9.2 1.5 3.5 9h4l-1 5.5L12.5 7h-4z"/></svg>',
@@ -8834,8 +9068,9 @@ function renderEvents(){
   if(host.contains(document.activeElement)&&document.activeElement.tagName==="INPUT"&&document.activeElement.type==="text")return;
   var ro=!canEditQuiet(),sys=alarmSystems();
   var h='<p class="hint" style="margin:0 0 8px">When something happens in the mission, something else does: a message, an alarm, guards arriving, the mission failing. Each event happens once.</p>';
-  if(!ro)h+='<div class="lbl" style="margin:4px 0 4px">Add an event: when…</div><div class="ev-types">'+EV_WHEN.map(function(x){
-    return '<button type="button" data-add="'+x[0]+'" title="'+esc(x[1]+(x[2]?"\n"+x[2]:""))+'">'+EV_IC.bolt+'<span>'+esc(x[1].replace(/^./,function(c){return c.toLowerCase()}))+'</span></button>'}).join("")+'</div>';
+  if(!ro)h+='<div class="lbl" style="margin:4px 0 4px">Add an event: when…</div><div class="sec-tools">'+EV_WHEN.map(function(x){
+    return '<button type="button" class="sec-tool" data-add="'+x[0]+'">'+iconSvg(EV_GLYPH[x[0]]||"dot")+
+      '<span class="t"><b>'+esc(x[1].replace(/^./,function(c){return c.toLowerCase()}))+'</b><i>'+esc(x[2]||EV_META[x[0]]||"")+'</i></span></button>'}).join("")+'</div>';
   h+=events.length?'<div class="lbl" style="margin:14px 0 6px">Your events ('+events.length+')</div>':'';
   events.forEach(function(v,i){
     var w=v.when,k=evWhen(w.kind),pr=eventProblem(v),open=EVOPEN===v.uid,o=eventTarget(v);
@@ -8901,6 +9136,9 @@ function renderEvents(){
   });
   h+='<p class="hint" style="margin:10px 0 0">Messages are added to the game\'s language files under this mission\'s own keys when you apply.</p>';
   host.innerHTML=h;
+  host.querySelectorAll(".sec-tool .al-glyph").forEach(function(g){
+    g.appendChild(iconSwatch(g.getAttribute("data-icon"),css("--build"),34,{fillAlpha:.35,line:1.15,r:.46}));
+  });
   host.querySelectorAll(".ev[data-u]").forEach(function(el){
     var v=events.filter(function(x){return x.uid===el.getAttribute("data-u")})[0];if(!v)return;
     function ch(){lastChangeAt=0;touch();renderList();draw()}
@@ -9551,19 +9789,30 @@ function makeCover(){
   var keep={W:W,H:H,DPR:DPR,ctx:ctx,cx:view.cx,cy:view.cy,k:view.k,sel:sel,tool:tool};
   try{
     W=336;H=248;DPR=1;ctx=c.getContext("2d");sel=null;tool=null;
-    var b=contentBounds(false),pad=14;
-    if(LEVEL.objects.length+placements.length<4&&GRAPHS){
-      // an empty map: frame the navmesh instead
-      var xs=[],ys=[];
-      for(var g in GRAPHS)(GRAPHS[g].nodes||[]).forEach(function(n){xs.push(n.x);ys.push(n.y)});
-      placements.forEach(function(p){xs.push(p.x);ys.push(p.y)});
-      if(xs.length)b={minX:Math.min.apply(null,xs),maxX:Math.max.apply(null,xs),minY:Math.min.apply(null,ys),maxY:Math.max.apply(null,ys)};
-    }
+    var b=playBounds(),pad=14;          // an empty map frames its walkways
     view.k=Math.min((W-pad*2)/Math.max(1,b.maxX-b.minX),(H-pad*2)/Math.max(1,b.maxY-b.minY));
     view.cx=(b.minX+b.maxX)/2;view.cy=(b.minY+b.maxY)/2;
     groundCv=null;
     renderScene();
     return c.toDataURL("image/png");
+  }catch(e){return null}
+  finally{
+    W=keep.W;H=keep.H;DPR=keep.DPR;ctx=keep.ctx;view.cx=keep.cx;view.cy=keep.cy;view.k=keep.k;sel=keep.sel;tool=keep.tool;
+    groundCv=null;
+  }
+}
+// A patch of the map for the 3D view's corner: `metres` across round (cx, cy),
+// north up, drawn by the map itself the way the cover is, into px x px
+function mapPatch(cx,cy,metres,px){
+  if(!LEVEL||!W)return null;
+  var c=document.createElement("canvas");c.width=px;c.height=px;
+  var keep={W:W,H:H,DPR:DPR,ctx:ctx,cx:view.cx,cy:view.cy,k:view.k,sel:sel,tool:tool};
+  try{
+    W=px;H=px;DPR=1;ctx=c.getContext("2d");sel=null;tool=null;
+    view.cx=cx;view.cy=cy;view.k=px/metres;
+    groundCv=null;
+    renderScene();
+    return c;
   }catch(e){return null}
   finally{
     W=keep.W;H=keep.H;DPR=keep.DPR;ctx=keep.ctx;view.cx=keep.cx;view.cy=keep.cy;view.k=keep.k;sel=keep.sel;tool=keep.tool;
@@ -11134,6 +11383,35 @@ function drawAITags(){
   });
   ctx.restore();
 }
+// The Mission builder's plan (editor/ai.js): its areas outlined on the map,
+// lettered, in blue while planned, bright while being built, green once
+// built, red where it hit a problem. Rectangles (x, y, w, d, turned) or circles.
+var AIPLAN=[];
+function drawAIPlan(){
+  if(!AIPLAN.length)return;
+  var cols={planned:"#6fb6ff",building:"#ffd24a",built:"#5fd46f",problem:"#ff6b5a"};
+  ctx.save();ctx.font='600 11px "IBM Plex Sans",sans-serif';
+  AIPLAN.forEach(function(a){
+    var col=cols[a.status]||cols.planned,lx,ly;
+    ctx.strokeStyle=col;ctx.lineWidth=a.status==="building"?2.6:1.8;
+    ctx.setLineDash(a.status==="built"?[]:[9,5]);
+    ctx.fillStyle=a.status==="building"?"rgba(255,210,74,.12)":a.status==="built"?"rgba(95,212,111,.07)":"rgba(111,182,255,.07)";
+    ctx.beginPath();
+    if(a.r){var c=w2s(a.x,a.y),r=Math.max(10,a.r*view.k);ctx.arc(c[0],c[1],r,0,6.2832);lx=c[0]-r*0.72;ly=c[1]-r*0.72}
+    else{
+      var t=(a.turn||0)*Math.PI/180,hw=a.w/2,hd=a.d/2,pts=[[-hw,hd],[hw,hd],[hw,-hd],[-hw,-hd]].map(function(p){
+        return w2s(a.x+p[0]*Math.cos(t)-p[1]*Math.sin(t),a.y+p[0]*Math.sin(t)+p[1]*Math.cos(t))});
+      ctx.moveTo(pts[0][0],pts[0][1]);for(var i=1;i<4;i++)ctx.lineTo(pts[i][0],pts[i][1]);ctx.closePath();
+      lx=Math.min(pts[0][0],pts[1][0],pts[2][0],pts[3][0]);ly=Math.min(pts[0][1],pts[1][1],pts[2][1],pts[3][1]);
+    }
+    ctx.fill();ctx.stroke();ctx.setLineDash([]);
+    var txt=a.letter+"  "+(a.name||"")+(a.status==="built"?"  ✓":a.status==="problem"?"  !":"");
+    var w=ctx.measureText(txt).width+12;
+    ctx.fillStyle=col;ctx.beginPath();ctx.roundRect(lx,ly-20,w,18,4);ctx.fill();
+    ctx.fillStyle="#0b1a0e";ctx.fillText(txt,lx+6,ly-7);
+  });
+  ctx.restore();
+}
 function undo(){
   if(!undoStack.length){toast("Nothing to undo");return}
   redoStack.push(planState());
@@ -12386,7 +12664,7 @@ function versionPlan(kind){
     var taken=guards.slice(),added=0;
     guards.forEach(function(q,i){
       if(i%2)return;
-      var sp=draftSpots(q.x,q.y,1,taken)[0];if(!sp)return;
+      var sp=draftSpots(q.x,q.y,1,taken,q.z)[0];if(!sp)return;
       var n={uid:uid(),type:"soldier",kind:"soldier",ai:q.ai,model:q.model,weapon:q.weapon,name:q.name,graph:guardGraph(sp.x,sp.y,sp.z),
         patrol:[],x:+sp.x.toFixed(3),y:+sp.y.toFixed(3),z:+sp.z.toFixed(3),gamma:q.gamma};
       p.placements.push(n);taken.push(n);added++;
@@ -12541,14 +12819,19 @@ function designSize(d){
 /* ---------------- walkways where there are none, and what a guard sees ---------------- */
 // The nearest walkway point on the floor a height is on: the level's nodes and
 // your own that are linked. {n:{x,y,z}, g:graph, d:metres} or null.
-function nearestWalk(x,y,z){
+// the nearest walkway point on the floor at height z; with surface, the
+// nearest one standing on the terrain (not in a building, a tunnel or a cellar)
+function onSurface(n){var t=terrainZ(n.x,n.y);return t!=null&&Math.abs(n.z-t)<=5}
+function nearestWalk(x,y,z,surface){
   var best=null,bd=1e18;
   Object.keys(GRAPHS||{}).forEach(function(g){nodesOf(g).forEach(function(n){
     if(z!=null&&Math.abs(n.z-z)>SAME_FLOOR)return;
+    if(surface&&!onSurface(n))return;
     var d=(n.x-x)*(n.x-x)+(n.y-y)*(n.y-y);if(d<bd){bd=d;best={n:n,g:g}}
   })});
   navNodes.forEach(function(n){
     if(z!=null&&Math.abs(n.z-z)>SAME_FLOOR)return;
+    if(surface&&!onSurface(n))return;
     var d=(n.x-x)*(n.x-x)+(n.y-y)*(n.y-y);if(d<bd&&nodeLinks(n).length){bd=d;best={n:n,g:n.graph}}
   });
   if(best)best.d=Math.sqrt(bd);
@@ -12799,7 +13082,7 @@ var AIB=(function(){
   var H={};
   H.get_overview=function(){
     if(editable()&&!objBase)seedObjectives();
-    var b=contentBounds(false),bi=builtin(LV)||{},L=levelThings(),pl=playerObj(),cnt={},mine={};
+    var b=playBounds(),bi=builtin(LV)||{},L=levelThings(),pl=playerObj(),cnt={},mine={};
     L.forEach(function(o){
       var k=o.type==="soldier"?"guards":o.type==="camera"?"cameras":o.qtype==="Terminal"?"terminals":o.type==="door"?"doors":
         o.type==="pickup"?"pickups":o.type==="building"?"buildings":null;
@@ -12857,7 +13140,11 @@ var AIB=(function(){
     else if(k==="weapons"||k==="items"||k==="pickups")out=((CATALOG&&CATALOG.weapons)||[]).filter(function(w){return hit(w.id+" "+w.label+" "+w.group)}).map(function(w){
       return {item:w.id,label:w.label,group:w.group}});
     else if(k==="structures")out=((CATALOG&&CATALOG.structures)||[]).filter(function(s){return hit(s.name+" "+s.cat+" "+(s.raw||"")+" "+s.model)}).map(function(s){
-      return {model:s.model,name:s.name,category:s.cat,size_m:[r1(s.w),r1(s.d),r1(s.h)],in_this_level:lm.has(s.model)}});
+      // where its box sits from its origin, when that matters for fitting parts together
+      var z=MODELS&&MODELS.sizes&&MODELS.sizes[s.model],o={model:s.model,name:s.name,category:s.cat,size_m:[r1(s.w),r1(s.d),r1(s.h)],in_this_level:lm.has(s.model)};
+      if(z&&(Math.abs(z.cx||0)>0.5||Math.abs(z.cy||0)>0.5))o.box_centre_from_origin_m=[r1(z.cx||0),r1(z.cy||0)];
+      if(z&&Math.abs(z.z0||0)>0.3)o.bottom_from_origin_m=r1(z.z0);
+      return o});
     else if(k==="alarm_parts")out=ALARM_KINDS.map(function(x){return {kind:{ALARM_BUTTON:"button",ALARM_SIREN:"siren",ALARM_LIGHT:"light",ALARM_CTL:"system"}[x.id],label:x.label,does:x.meta}});
     else if(k==="cameras")out=CAM_KINDS.map(function(c){return {sweep:c.cam.speed>0,label:c.label,range_m:c.cam.range,fov_deg:c.cam.fov}});
     else if(k==="categories")out=((CATALOG&&CATALOG.categories)||[]).map(function(c){return {category:c.key,title:c.title}});
@@ -12875,7 +13162,7 @@ var AIB=(function(){
     if(o.type==="soldier"){
       var e=enemyInfo(o.ai);r.type_label=e?e.label:o.ai;
       if(o.sees)r.sees_m=o.sees;if(o.fov)r.view_deg=o.fov;
-      var nn=nearestNode(o.x,o.y);r.walkway_m=nn?r1(nn.d):null;
+      var nn=nearestNode(o.x,o.y,o.z);r.walkway_m=nn?r1(nn.d):null;
       if(o.own&&(o.patrol||[]).length){var ns={};nodesOf(String(o.graph)).forEach(function(n){ns[n.id]=n});navNodes.forEach(function(q){ns["n:"+q.uid]=q});r.patrol=(o.patrol||[]).map(function(id){var n=ns[id];return n?[r1(n.x),r1(n.y)]:id})}
     }
     if(o.type==="camera"&&o.cam)r.camera={range_m:o.cam.range,fov_deg:o.cam.fov,sweeps:o.cam.speed>0,raises_alarm:o.alarm!==false,on:o.mount||null};
@@ -12941,7 +13228,7 @@ var AIB=(function(){
     changed();
     made.forEach(function(m){if(!m.floor)settle(m.g,false)});
     var out=made.map(function(m){
-      var r=brief(m.g),nn=nearestNode(m.g.x,m.g.y);
+      var r=brief(m.g),nn=nearestNode(m.g.x,m.g.y,m.g.z);
       r.walkway_m=nn?r1(nn.d):null;
       if(nn&&nn.d>25)notes.push(r.name+" is "+Math.round(nn.d)+" m from the nearest walkway: in the game he walks off to it at the start. Move him nearer one.");
       return r;
@@ -13208,11 +13495,65 @@ var AIB=(function(){
         z:+(+pk.dz||0).toFixed(3),gamma:0,count:pk.count?Math.max(1,Math.min(999,+pk.count)):null});
     });
     if(!items.length)return fail("Nothing to make it of"+(notes.length?": "+notes.join(" "):"."));
+    var flaws=designFlaws(items);
     var dsg=newDesign("blueprint",name,String(a.description||"").slice(0,240),items);
     if(dsg.size[0]>150||dsg.size[1]>150)notes.push("It is "+dsg.size[0]+" by "+dsg.size[1]+" m, large for one design.");
     return {ok:true,design:{id:dsg.id,kind:"blueprint",name:name,summary:dsg.summary,size_m:dsg.size,description:dsg.description},notes:notes,
-      next:"The user sees it in 3D in the chat and can add it to the inventory or place it; place_design puts it on the map."};
+      flaws:flaws.length?flaws:undefined,
+      next:flaws.length?"It has flaws (above): make a corrected version with design_structure before showing it off.":
+        "The user sees it in 3D in the chat and can add it to the inventory or place it; place_design puts it on the map."};
   };
+  // What is physically wrong with a design: parts floating or sunk, the same
+  // part twice, a part far from the rest, a guard or pickup inside a wall.
+  // A part's box is its model's (models.json: w, d, h, the box's centre cx, cy
+  // from the origin, its bottom z0), turned by the part's gamma
+  // anticlockwise, model y north, as the map draws it.
+  function designFlaws(items){
+    var out=[],parts=[];
+    items.forEach(function(it,i){
+      if(it.type!=="building")return;
+      var s=MODELS.sizes[it.model];if(!s)return;
+      var g=it.gamma||0,c=Math.cos(g),n=Math.sin(g),cx=s.cx||0,cy=s.cy||0;
+      var ox=it.dx+cx*c-cy*n,oy=it.dy+cx*n+cy*c,hx=(Math.abs(s.w*c)+Math.abs(s.d*n))/2,hy=(Math.abs(s.w*n)+Math.abs(s.d*c))/2;
+      var z0=(it.z||0)+(s.z0||0);
+      parts.push({n:parts.length+1,it:it,name:it.name,ox:ox,oy:oy,c:c,s:n,w:s.w,d:s.d,x0:ox-hx,x1:ox+hx,y0:oy-hy,y1:oy+hy,z0:z0,z1:z0+(s.h||0)});
+    });
+    function meets(a,b,m){return a.x0-m<b.x1&&b.x0-m<a.x1&&a.y0-m<b.y1&&b.y0-m<a.y1}
+    function gap(a,b){return Math.hypot(Math.max(0,a.x0-b.x1,b.x0-a.x1),Math.max(0,a.y0-b.y1,b.y0-a.y1))}
+    function inside(p,x,y,m){var lx=(x-p.ox)*p.c+(y-p.oy)*p.s,ly=-(x-p.ox)*p.s+(y-p.oy)*p.c;return Math.abs(lx)<p.w/2+m&&Math.abs(ly)<p.d/2+m}
+    function nm(p){return "part "+p.n+" ("+p.name+")"}
+    parts.forEach(function(p){
+      if(p.z0>0.35){
+        var on=parts.some(function(q){return q!==p&&meets(p,q,0.05)&&p.z0>=q.z0-0.3&&p.z0<=q.z1+0.5});
+        if(!on){
+          var under=parts.filter(function(q){return q!==p&&meets(p,q,0.05)}).map(function(q){return q.z1}).sort(function(a,b){return b-a})[0];
+          out.push(nm(p)+" floats: its bottom is "+r1(p.z0)+" m up with nothing under it. "+(under!=null?"The part below tops out at "+r1(under)+" m.":"Set its dz to 0 or stand it on another part."));
+        }
+      }
+      if(p.z1<0.3)out.push(nm(p)+" is sunk: its top is at "+r1(p.z1)+" m, under the ground.");
+      else if(p.z0<-0.8)out.push(nm(p)+" sinks "+r1(-p.z0)+" m into the ground.");
+    });
+    for(var i=0;i<parts.length;i++)for(var j=i+1;j<parts.length;j++){
+      var a=parts[i],b=parts[j];
+      if(a.it.model===b.it.model&&Math.hypot(a.it.dx-b.it.dx,a.it.dy-b.it.dy)<0.3&&Math.abs((a.it.z||0)-(b.it.z||0))<0.3&&Math.abs(a.it.gamma-b.it.gamma)<0.05)
+        out.push(nm(a)+" and "+nm(b)+" are the same part in the same place.");
+    }
+    if(parts.length>=3)parts.forEach(function(p){
+      var near=Math.min.apply(null,parts.filter(function(q){return q!==p}).map(function(q){return gap(p,q)}));
+      if(near>10)out.push(nm(p)+" stands "+Math.round(near)+" m from the rest.");
+    });
+    items.forEach(function(it){
+      if(it.type!=="soldier"&&it.type!=="pickup")return;
+      var z=it.z||0,what=it.type==="soldier"?(it.name||"a guard"):(it.name||"a pickup");
+      parts.forEach(function(p){
+        // inside a wall, a fence, a crate: a thin part, or a low solid one, at his height
+        var solid=Math.min(p.w,p.d)<1.6||p.z1-p.z0<2.6;
+        if(solid&&z>=p.z0-0.3&&z<p.z1-0.2&&inside(p,it.dx,it.dy,it.type==="soldier"?0.3:0.05))
+          out.push(what+" at "+r1(it.dx)+", "+r1(it.dy)+" is inside "+nm(p)+": move "+(it.type==="soldier"?"him":"it")+" clear of it, or up onto it (dz "+r1(p.z1)+").");
+      });
+    });
+    return out.slice(0,12);
+  }
   H.design_character=function(a){
     var name=String(a.name||"").trim().slice(0,60),notes=[];
     if(!name)return fail("Give the character a name.");
@@ -13227,7 +13568,7 @@ var AIB=(function(){
     var dsg=design(a.id);if(!dsg)return fail("No design "+a.id+". list_catalog with kind designs lists the kept ones.");
     var w=where(a),out=pasteData(dsg.data,w.x,w.y,facingArg(a,w.x,w.y,0)),notes=[];
     changed();
-    out.forEach(function(o){if(o.type!=="soldier")return;var nn=nearestNode(o.x,o.y);if(nn&&nn.d>25)notes.push(displayName(o)+" is "+Math.round(nn.d)+" m from a walkway and walks off to it.")});
+    out.forEach(function(o){if(o.type!=="soldier")return;var nn=nearestNode(o.x,o.y,o.z);if(nn&&nn.d>25)notes.push(displayName(o)+" is "+Math.round(nn.d)+" m from a walkway and walks off to it.")});
     return {ok:true,placed:out.length,name:dsg.name,notes:notes,ids:out.map(function(o){return o.uid}),at:{x:w.x,y:w.y}};
   };
   // ---------------------------------------------------------------- walkways and ground
@@ -13238,8 +13579,9 @@ var AIB=(function(){
     // the nearest walkway on that floor; else the nearest at all, and the new
     // ones climb (or go down) the ground to it in steps a link allows
     var nn=nearestWalk(w.x,w.y,gz),climb=false;
-    if(!nn||nn.d>150){var any=nearestWalk(w.x,w.y,null);if(any&&(!nn||any.d<nn.d)){nn=any;climb=Math.abs(any.n.z-gz)>SAME_FLOOR}}
-    if(!nn)return fail("This level has no walkways to join.");
+    // (climbing goes over the ground, so it starts from a walkway on the ground)
+    if(!nn||nn.d>150){var any=nearestWalk(w.x,w.y,null,true);if(any&&(!nn||any.d<nn.d)){nn=any;climb=Math.abs(any.n.z-gz)>SAME_FLOOR}}
+    if(!nn)return fail(Object.keys(GRAPHS||{}).length?"No walkway on the ground to join: this level's walkways are all inside buildings, tunnels or cellars.":"This level has no walkways to join.");
     var made=[],notes=[],len=0,indoors=!!buildingAt(w.x,w.y),skipped=0,existing=0;
     function add(x,y,ring){
       // out of doors, walkway points keep off buildings (a link through a wall is cut on Apply)
@@ -13510,14 +13852,24 @@ var AIB=(function(){
     {name:"make_versions",description:"Make easy, normal and hard copies of this mission in the user's library: easy has a third fewer of the mission's guards, less sight, more time, no fail on alarm, a medipack by the start; hard one more guard for every two, more sight, less time, fail on alarm, fewer medipacks. This mission stays as it is.",parameters:P({versions:{type:"array",items:{type:"string",enum:["easy","normal","hard"]}}})},
     {name:"make_campaign",look:true,description:"Put several of the user's missions (ids from list_missions) in order under a campaign name and briefing: opens the campaign sheet for the user to check and export as one file.",parameters:P({name:{type:"string"},briefing:{type:"string"},mission_ids:{type:"array",items:{type:"string"}}},["name","mission_ids"])}
   ];
-  var BY={};T.forEach(function(t){BY[t.name]=t});
+  // Each tool has a kind, and each agent of the AI designer (editor/ai.js) the
+  // kinds it may use: look and design change nothing in the mission; build,
+  // ground and texts do; library makes or gathers missions in the library.
+  var KIND={add_walkways:"ground",shape_ground:"ground",remove_ground_area:"ground",sculpt_terrain:"ground",
+    write_texts:"texts",make_versions:"library",make_campaign:"library"};
+  var BY={};T.forEach(function(t){BY[t.name]=t;t.kind=KIND[t.name]||(t.look?"look":t.design?"design":"build")});
+  // what an agent may use: a list of kinds, or the old modes ("build" is all)
+  function kindsOf(a){return Array.isArray(a)?a:a==="build"?["look","design","build","ground","texts","library"]:["look","design"]}
+  function allowed(t,a){var ks=kindsOf(a);return ks.indexOf(t.kind)>=0||(t.look&&ks.indexOf("look")>=0)}
   return {
-    tools:function(mode){return T.filter(function(t){return mode==="build"||t.look||t.design}).map(function(t){return {name:t.name,description:t.description,parameters:t.parameters}})},
+    tools:function(a){return T.filter(function(t){return allowed(t,a)}).map(function(t){return {name:t.name,description:t.description,parameters:t.parameters}})},
     isLook:function(n){return !!(BY[n]&&(BY[n].look||BY[n].design))},
-    run:function(name,args,mode){
+    kindOf:function(n){return BY[n]?BY[n].kind:null},
+    run:function(name,args,a){
       var t=BY[name];
       if(!t)return fail("There is no tool "+name+".");
-      if(!t.look&&!t.design&&mode!=="build")return fail("This is Ideas mode: nothing is changed. The user switches to Build to have it built.");
+      if(!allowed(t,a))return fail(Array.isArray(a)?"This agent can't use "+name+": it "+(t.look||t.design?"is for another agent":"changes the mission, and this agent changes nothing")+". Say what should be done, and the user can hand it to the agent that does it.":
+        "This is Ideas mode: nothing is changed. The user switches to Build to have it built.");
       try{return H[name](args||{})}catch(e){return fail(e&&e.message?e.message:String(e))}
     },
     brief:brief,byId:byId,idOf:idOf,design:design,
@@ -13526,13 +13878,14 @@ var AIB=(function(){
 })();
 window.StudioAI={
   ready:function(){return !!(LEVEL&&CATALOG&&MODELS)},
-  tools:AIB.tools,run:AIB.run,isLook:AIB.isLook,
+  tools:AIB.tools,run:AIB.run,isLook:AIB.isLook,kindOf:AIB.kindOf,
   editable:function(){return !!(M&&!READONLY)},
   missionId:function(){return M?M.id:null},
   local:function(){return !Store||!!Store.local},
   context:function(){
     var bi=builtin(LV)||{};
     return {mission:MISSION,level:LV,levelName:bi.name||("Level "+LV),editable:!!(M&&!READONLY),
+      empty:MODE==="empty",hasEmpty:!!bi.emptyMap,
       selected:sel&&sel.x!=null?AIB.brief(sel):null,group:multi.length>1?multi.length:0,
       counts:{yours:placements.length,objectives:objectives.length,events:events.length}};
   },
@@ -13557,6 +13910,9 @@ window.StudioAI={
   pickArea:function(cb){if(LEVEL)aiPickStart(cb)},
   cancelPick:function(){if(AIPICK)aiPickEnd(null)},
   setTags:function(list){AITAGS=(list||[]).slice();present()},
+  setPlanAreas:function(list){AIPLAN=(list||[]).filter(function(a){return a&&isFinite(a.x)&&isFinite(a.y)});present()},
+  // where things may go: the map's extent in metres
+  extent:function(){var b=playBounds();return {x0:b.minX,x1:b.maxX,y0:b.minY,y1:b.maxY}},
   // a design shown in the chat: its data, its 3D model, keeping it, placing it
   design:function(id){return AIB.design(id)},
   registerDesign:function(dsg){AIB.register(dsg)},
@@ -13582,6 +13938,7 @@ window.StudioAI={
   },
   openSettings:function(tab){showConfig(tab)},
   makeCopy:function(){newMissionDialog({kind:"copy",level:LV})},
+  makeEmpty:function(){newMissionDialog({kind:"empty",level:(builtin(LV)||{}).emptyMap?LV:1})},
   toast:function(m){toast(m)}
 };
 
