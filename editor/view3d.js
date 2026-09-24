@@ -468,8 +468,9 @@ function ribbon(pts, width, lift) {
     const p = pts[i], q = pts[Math.max(0, i - 1)], r = pts[Math.min(pts.length - 1, i + 1)];
     let dx = r[0] - q[0], dy = r[1] - q[1];
     const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-    const x = p[0] - o[0], y = p[1] - o[1], z = groundAt(x, y);
-    if (z === null) { run = 0; continue; }                 // over a hole: the ribbon breaks
+    const x = p[0] - o[0], y = p[1] - o[1], g = groundAt(x, y), w = p[2] != null ? p[2] - o[2] : null;
+    const z = g === null ? w : w === null ? g : Math.max(g, w);   // over a gap (a bridge) the waypoints hold it up
+    if (z === null) { run = 0; continue; }
     pos.push(x - dy * half, y + dx * half, z + lift, x + dy * half, y - dx * half, z + lift);
     run++;
     if (run >= 2) { const n = pos.length / 3 - 4; idx.push(n, n + 1, n + 2, n + 1, n + 3, n + 2); }
@@ -481,15 +482,55 @@ function ribbon(pts, width, lift) {
   g.computeVertexNormals();
   return g;
 }
+// A stretch as the game lays it: its own model, which runs along +x from its
+// start, fitted from one waypoint to the next and bent along the curve - its
+// width across the way, its height up from it (an embankment hangs below the
+// rails it carries). Trainyard's embankment waypoints stand 130 m apart, the
+// length of the model itself; elsewhere the model is stretched to the stretch.
+// The curve is the map's own (Catmull-Rom through four waypoints), heights and all.
+function curveAt(c, t, out) {
+  const p0 = c.ctrl[0], p1 = c.ctrl[1], p2 = c.ctrl[2], p3 = c.ctrl[3], t2 = t * t, t3 = t2 * t;
+  for (let k = 0; k < 3; k++)
+    out[k] = c.linear ? p1[k] + (p2[k] - p1[k]) * t
+      : 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2
+        + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3);
+  return out;
+}
+function bentAlong(geo, c) {
+  const src = geo.getAttribute("position"), bb = geo.boundingBox, o = O.origin;
+  const x0 = bb.min.x, span = Math.max(0.01, bb.max.x - bb.min.x);
+  const pos = new Float32Array(src.count * 3), at = [0, 0, 0], a = [0, 0, 0], b = [0, 0, 0];
+  for (let i = 0; i < src.count; i++) {
+    const t = Math.min(1, Math.max(0, (src.getX(i) - x0) / span));
+    curveAt(c, t, at);
+    curveAt(c, Math.max(0, t - 0.02), a);
+    curveAt(c, Math.min(1, t + 0.02), b);
+    let dx = b[0] - a[0], dy = b[1] - a[1];
+    const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    const y = src.getY(i);                                  // the model's +y is left of the way it runs
+    pos[i * 3] = at[0] - dy * y - o[0];
+    pos[i * 3 + 1] = at[1] + dx * y - o[1];
+    pos[i * 3 + 2] = at[2] + src.getZ(i) - o[2];
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.setAttribute("uv", geo.getAttribute("uv").clone());
+  g.setIndex(geo.getIndex().clone());
+  for (const gr of geo.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
 function splineMeshes(list) {
   const group = new THREE.Group();
-  const mats = {};
+  const mats = {}, fillId = S.fillId;
   for (const s of list) {
     const kind = s.kind || "road", w = Math.max(0.15, s.width || 4);
     const g = ribbon(s.pts, kind === "line" ? 0.25 : w, 0.06);
     if (!g) continue;
     mats[kind] = mats[kind] || material(SPL_COL[kind], { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-    group.add(new THREE.Mesh(g, mats[kind]));
+    const strip = [new THREE.Mesh(g, mats[kind])];          // shown until the stretch's own model comes
+    group.add(strip[0]);
     if (kind === "rail") {                                  // two rails, standard gauge
       mats.steel = mats.steel || material(0xa9a49a, { polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
       for (const off of [-0.72, 0.72]) {
@@ -497,12 +538,20 @@ function splineMeshes(list) {
           const q = s.pts[Math.max(0, i - 1)], r = s.pts[Math.min(s.pts.length - 1, i + 1)];
           let dx = r[0] - q[0], dy = r[1] - q[1];
           const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-          return [p[0] - dy * off, p[1] + dx * off];
+          return [p[0] - dy * off, p[1] + dx * off, p[2]];
         });
         const rg = ribbon(side, 0.16, 0.16);
-        if (rg) group.add(new THREE.Mesh(rg, mats.steel));
+        if (rg) { const m = new THREE.Mesh(rg, mats.steel); strip.push(m); group.add(m); }
       }
     }
+    if (!s.model || !s.ctrl || !S.textured || !O.level) continue;
+    texturedModel(s.model).then(t => {
+      if (!t || fillId !== S.fillId || !group.parent) return;
+      const ms = t.groups.map(gr => new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide,
+        flatShading: true, map: gr[2] ? textureOf(gr[2]) : null, alphaTest: gr[3] ? 0.5 : 0, clippingPlanes: [S.cut] }));
+      group.add(new THREE.Mesh(bentAlong(t.geo, s), ms));
+      for (const m of strip) m.visible = false;
+    });
   }
   return group;
 }

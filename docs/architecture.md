@@ -192,7 +192,10 @@ game. It takes a minute or two. To build it again:
 python -m studio setup --data
 ```
 
-In order: the levels' objects, the walkways, every model's size and name, the
+In order: the levels' objects (with the patrol and the alarm each guard's AI
+script gives him - the scripts are decompiled first, so a first build reads
+them too - the ground the game takes away, and its lifts), the walkways, every
+model's size and name, the
 inventory, the ground's height (on a 1 m grid), what the ground is made of, the
 buildings seen from above, the walkways inside buildings, and the missions'
 names and covers. Most of it is read from the reference copy; the shared model

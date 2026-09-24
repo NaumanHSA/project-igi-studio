@@ -5022,8 +5022,8 @@ function openBigPreview(model,pal,title){
 var TEXLIST={};                      // model -> [names], once asked for
 function textureSection(o){
   var mine=MTEX.length?MTEX:null,known=TEXLIST[o.model];
-  return '<div class="sec tex-sec" data-model="'+esc(o.model)+'">'+
-    '<div class="sec-h" role="button" tabindex="0" aria-expanded="'+(known?"true":"false")+'">'+IC.caret+
+  return '<div class="sec tex-sec" data-model="'+esc(o.model)+'" data-open="'+(known?"true":"false")+'">'+
+    '<div class="sec-h" role="button" tabindex="0" aria-expanded="'+(known?"true":"false")+'">'+CHEVRON+
     '<span class="lbl">Textures</span><span class="sec-n">'+(known?known.length:"")+'</span></div>'+
     '<div class="sec-b tex-body">'+(known?texRows(o,known):'<p class="hint">Open to see the pictures this model is drawn with.</p>')+'</div></div>';
 }
@@ -5088,6 +5088,7 @@ function bindTextureSection(el,o){
   }
   function open(on){
     head.setAttribute("aria-expanded",String(on));
+    sec.setAttribute("data-open",String(on));
     sec.classList.toggle("open",on);
     if(!on)return;
     if(TEXLIST[o.model]){fill(TEXLIST[o.model]);return}
@@ -8246,9 +8247,19 @@ function sceneAround(o,R,noSelf){
   var gone={};removeRefs.forEach(function(r){gone[r]=1});
   (LEVEL?LEVEL.objects:[]).concat(placements).forEach(function(q){
     if(q===o||q.x==null||q.cutscene||gone[q.ref]||q.type==="navnode"||q.type==="alarmctl")return;
+    if(/^colbox/i.test(q.modelName||""))return;          // invisible in the game: a collision box
     if(!q.own&&removals.indexOf(q.id)>=0&&q.id>=0)return;
     if(Math.hypot(q.x-o.x,q.y-o.y)>R+reach(q))return;
     out.push(spec3d(q));
+  });
+  // the game's own lift cabins, and Eagle's Nest's cable car, where the level
+  // starts them: seen here, not edited (an empty map has none)
+  if(MODE!=="empty")((LEVEL&&LEVEL.lifts)||[]).forEach(function(l){
+    if(l.cutscene||Math.hypot(l.x-o.x,l.y-o.y)>R+reach(l))return;
+    var r=l.rot||[0,0,0];
+    out.push({key:"lift:"+l.id,name:/CABLE/i.test(l.modelName||"")?"Cable car":"Lift cabin",type:"prop",
+      model:window.MeshSprites&&MeshSprites.has(l.model)?l.model:null,x:l.x,y:l.y,z:l.z,rot:r,head:2,headOff:0,headSign:1,
+      lift:0,kind:"fixed",editable:false,own:false,solid:false,cam:null,on:"",gun:null,grip:null});
   });
   if(!noSelf)out.push(spec3d(o));
   return out;
@@ -8281,7 +8292,25 @@ function terrain3d(o,R){
     if(ks.length)tex={size:G.ctile,order:ks,px:ks.map(function(k){return G.ctiles[k]})};
   }
   var x0=m.x0+c[0]*m.cell,y0=m.y0+c[2]*m.cell,cell=m.cell*st;
-  return {x0:x0,y0:y0,cell:cell,w:w,h:h,z:z,shade:shade,rgb:rgb,tile:tile,mat:tex?mat:null,tex:tex,hole:openBelow(x0,y0,cell,w,h,z)};
+  return {x0:x0,y0:y0,cell:cell,w:w,h:h,z:z,shade:shade,rgb:rgb,tile:tile,mat:tex?mat:null,tex:tex,
+    hole:levelHoles(x0,y0,cell,w,h,openBelow(x0,y0,cell,w,h,z))};
+}
+// Where the game takes its own ground away - over a cellar, down a lift shaft,
+// at a tunnel's mouth (the level's DiscardTerrain squares, 16 or 32 m) - the
+// close-up has none either, so a basement opens as it does in the game: the
+// generator building's cellar on level 6, the tunnels of Eagle's Nest. The
+// close-up drops a patch of ground with any corner marked, so only the points
+// strictly inside a square are. An empty map is built without them
+// (studio/build/empty_map.py), and keeps its ground.
+function levelHoles(x0,y0,cell,w,h,hole){
+  var sq=MODE!=="empty"&&LEVEL&&LEVEL.terrainHoles;
+  if(!sq||!sq.length)return hole;
+  sq.forEach(function(s){
+    var i0=Math.max(0,Math.floor((s[0]-x0)/cell)+1),i1=Math.min(w-1,Math.ceil((s[0]+s[2]-x0)/cell)-1);
+    var j0=Math.max(0,Math.floor((s[1]-y0)/cell)+1),j1=Math.min(h-1,Math.ceil((s[1]+s[2]-y0)/cell)-1);
+    for(var j=j0;j<=j1;j++)for(var i=i0;i<=i1;i++){if(!hole)hole=new Uint8Array(w*h);hole[j*w+i]=1}
+  });
+  return hole;
 }
 // Where a building standing on the ground is open to the sky below ground
 // level (a ramp down to bunker doors, a sunken yard), the game draws no ground
@@ -8413,8 +8442,13 @@ function splines3d(o,R){
       var a=s.points[i],b=s.points[i+1];
       if(Math.hypot((a.x+b.x)/2-o.x,(a.y+b.y)/2-o.y)>R+Math.hypot(b.x-a.x,b.y-a.y))continue;
       var z=MODELS&&MODELS.sizes&&MODELS.sizes[seg],look=SPLINE_LOOK[s.points[i].segName]||{};
+      // the stretch at the waypoints' own heights, so a bridge over a gap keeps
+      // its track; and the four points its curve runs through, for the model
+      var pts=splineStretch(s.points,i,s.linear),n=pts.length-1;
+      pts.forEach(function(p,k){p.push(a.z+(b.z-a.z)*(n?k/n:0))});
+      var P=s.points,c=[P[Math.max(0,i-1)],a,b,P[Math.min(P.length-1,i+2)]].map(function(q){return [q.x,q.y,q.z]});
       out.push({kind:look.rails?"rail":look.line?"line":"road",
-        width:z&&z.d>0.5?z.d:(look.line?0.25:4),pts:splineStretch(s.points,i,s.linear)});
+        width:z&&z.d>0.5?z.d:(look.line?0.25:4),pts:pts,model:seg,ctrl:c,linear:!!s.linear});
     }
   });
   return out.slice(0,60);
@@ -10379,6 +10413,9 @@ function makeStore(serverOk){
 
 /* ---------------- level loading ---------------- */
 function loadLevel(n,then){
+  if(window.View3D&&View3D.isOpen())View3D.close();
+  clearTimeout(V3D.raf);V3D.key=null;V3D.spot=null;V3D.at=null;V3D.lastAt=null;V3D.ver=-1;
+  sync3dSwitch();
   LV=n;
   Promise.all([
     fetch("data/level"+n+".json?v="+DATAV).then(function(r){return r.json()}),

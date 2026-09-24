@@ -758,6 +758,31 @@ view never ends at a cliff.
   ground level (its highest floor or roof there more than 0.3 m under the
   ground), so the ramp shows and can be walked down; roofed rooms keep their
   ground, and rooms deep underground are not affected.
+- **Cellars, lift shafts and tunnel mouths are open** where the game opens
+  them. A level takes its own ground away with `DiscardTerrain` tasks - 63 of
+  them, 22 on Eagle's Nest II alone - each dropping the terrain of one square
+  of the game's octree (16 m across at LOD 15, 32 m at LOD 14, on a grid of
+  its own size). The level data keeps them (`terrainHoles`), and the close-up
+  leaves that ground out, so the generator building's cellar on level 6 opens
+  onto the generator below instead of a sheet of soil across it, and the
+  tunnels of Eagle's Nest are not blocked by snow. An empty map keeps its
+  ground, since it is built without them.
+- **Roads and the railway are the game's own models:** each stretch of a
+  spline is laid with the model its waypoint names, bent along the curve from
+  one waypoint to the next and fitted to the stretch, as the game lays it
+  (Trainyard's embankment waypoints stand 130 m apart, the length of the model
+  itself). So a railway has its ballast, sleepers and rails, an embankment
+  stands on its slopes, and a bridge over a gap keeps its track at the
+  waypoints' height. With textures off, or while a model is on its way, a
+  flat strip stands in for it.
+- **The game's own lifts are there:** each `Elevator` task's cabin (the lift
+  cabin 200_01_1, and Eagle's Nest's cable car) stands where the level starts
+  it, at one of its floors. They are shown, not edited.
+- **Collision boxes are left out:** the invisible `colbox` blocks the game
+  keeps round a lift shaft or the end of a bridge are not drawn, as the game
+  does not draw them.
+- **Another mission, another scene:** opening a mission or a built-in level
+  closes the close-up of the last one.
 - **It goes where you go:** the close-up is gathered round the camera, not
   just round the item it opened on. Fly or walk anywhere and, every few
   metres, what stands near you, the ground under you and the walkways are

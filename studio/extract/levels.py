@@ -8,7 +8,7 @@
 #   edges    - consecutive walk/run pairs, i.e. routes known to resolve
 # A node merely existing is not enough; walking to a look-at-only node gives
 # "Error in graph NNNN routenet, Node #A to #B" at level load.
-import json, os, re, sys, pathlib, collections
+import json, math, os, re, sys, pathlib, collections
 from studio import paths as studio_paths
 from studio.qvm import source as qvm_source
 # This module is a script: it does its work as it is read, the way it always
@@ -284,7 +284,9 @@ def extract(level, src_path=None, ai_dir=None):
     path = pathlib.Path(src_path) if src_path else qvm_source.level_qsc(level)
     if not path.exists():
         return None
-    ai_scripts = load_ai_scripts(ai_dir or path.parent / "ai")
+    # a guard's patrol, and the alarm he answers, are in his AI script: decompile
+    # the level's scripts first, or a fresh build falls back to guessing
+    ai_scripts = load_ai_scripts(ai_dir or (path.parent / "ai" if src_path else qvm_source.level_ai(level)))
     src = path.read_text(encoding="latin1")
     lines = src.split("\n")
     objects, blocks, cur = [], [], None
@@ -427,6 +429,36 @@ def extract(level, src_path=None, ai_dir=None):
             splines.append({"id": int(mm.group(1)), "linear": mm.group(2) == "TRUE", "points": pts,
                             "cutscene": in_cutscene(cuts, mm.start())})
 
+    # ---- DiscardTerrain -----------------------------------------------------
+    # Where the game takes its own ground away: over a cellar, down a lift shaft,
+    # at a tunnel's mouth. DiscardTerrain(Position, LOD) drops the terrain of the
+    # octree cube of that level holding the position: a square 2^(31-LOD) units
+    # across (LOD 15 is 16 m, LOD 14 32 m), on a grid of its own size. Level 6's
+    # two, both named "generator", open the generator building's cellar; level
+    # 12's twenty-odd its tunnels. Kept as [x, y, size] in metres, the square's
+    # south-west corner first.
+    holes = []
+    for mm in re.finditer(r'Task_New\(-?\d+, "DiscardTerrain", "[^"]*", (-?[\d.eE+-]+), (-?[\d.eE+-]+), -?[\d.eE+-]+, (\d+)\)', src):
+        size = float(1 << (31 - int(mm.group(3))))
+        sq = [round(math.floor(float(mm.group(k)) / size) * size / SCALE, 2) for k in (1, 2)] + [round(size / SCALE, 2)]
+        if sq not in holes:
+            holes.append(sq)
+
+    # ---- Elevator tasks -----------------------------------------------------
+    # The game's own lifts, and Eagle's Nest's cable car. Elevator(Position, the
+    # three angles, Cabin Model, Path, ...) carries a cabin of its own - 200_01_1
+    # is the lift cabin - along a path whose waypoints are its floors, and the
+    # level starts it where the task stands, at one of them (level 12's lift by
+    # the winch house waits at the top, the one across the yard at the bottom).
+    # Kept apart from the objects: they are seen, not edited.
+    lifts = []
+    for mm in re.finditer(r'Task_New\((-?\d+), "Elevator", "[^"]*", (-?[\d.eE+-]+), (-?[\d.eE+-]+), (-?[\d.eE+-]+), (-?[\d.eE+-]+), (-?[\d.eE+-]+), (-?[\d.eE+-]+), "([^"]*)"', src):
+        n = [float(mm.group(k)) for k in range(2, 8)]
+        cab = mm.group(8)
+        lifts.append({"id": int(mm.group(1)), "model": cab, "modelName": models.get(cab, cab),
+                      "x": round(n[0] / SCALE, 2), "y": round(n[1] / SCALE, 2), "z": round(n[2] / SCALE, 2),
+                      "rot": [round(v, 5) for v in n[3:6]], "cutscene": in_cutscene(cuts, mm.start())})
+
     # ---- AIGraph origins ----------------------------------------------------
     # Node coordinates inside graphN.dat are offsets from this point, not
     # absolute: absolute = origin + offset.
@@ -508,6 +540,8 @@ def extract(level, src_path=None, ai_dir=None):
                    "minZ": min(zs), "maxZ": max(zs)},
         "objects": objects,
         "splines": splines,
+        "terrainHoles": holes,
+        "lifts": lifts,
         "graphs": graphs,
         "graphOrigins": origins,
         "usedIds": used,
