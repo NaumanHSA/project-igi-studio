@@ -2005,10 +2005,32 @@ for kit in alarm_kit:
 # and the "open" prompt comes; a gate leaf (304, as level 10 writes its two
 # leaves sliding apart) is locked and opens while its switch is pressed.
 DOOR_DEFAULTS = {}
+_kits = {}                      # what each building of the game's comes with (doors.json "buildings")
 try:
-    DOOR_DEFAULTS = json.loads((paths.data() / "doors.json").read_text(encoding="utf-8")).get("models") or {}
+    _doors_json = json.loads((paths.data() / "doors.json").read_text(encoding="utf-8"))
+    DOOR_DEFAULTS = _doors_json.get("models") or {}
+    _kits = _doors_json.get("buildings") or {}
 except (OSError, ValueError):
     pass
+
+
+def _kit_leaf(o):
+    """This door as its building's kit has it, when it came with one: the leaf
+    in the same doorway, facing the same way. How far and which way a leaf
+    slides belongs to its doorway, not its model - Eagle's Nest's lift doorway
+    slides its outer leaves -0.6 and its inner +1.3, where those models most
+    often go +0.4 and +0.9 - and doors placed before the kits kept it carry the
+    model's instead."""
+    sl, home = o.get("slot"), _by_uid.get(o.get("of")) if o.get("of") else None
+    if not (isinstance(sl, dict) and home):
+        return None
+    for d in (_kits.get(home.get("model")) or {}).get("doors") or []:
+        if d.get("model") != o.get("model") or not d.get("stop"):
+            continue
+        if all(abs(float(d[k]) - float(sl.get(k, 1e9))) < 0.05 for k in ("dx", "dy", "dz")) and \
+                abs((float(d["dh"]) - float(sl.get("dh", 0)) + math.pi) % (2 * math.pi) - math.pi) < 0.05:
+            return d
+    return None
 GATE_OPEN_S = 12                # a gate of yours stands open this long after its switch
 GATE_SOUNDS = ["gate_loop_e", "gate_loop_e", "gate_loop"]
 DOOR_SOUNDS = ["door_open_1", "door_close_1", "door_slide_1"]
@@ -2072,6 +2094,9 @@ def _door_angles(head, fixed, heading):
 
 for _g in OWN_GATES:
     _d = _g["door"]
+    _kl = _kit_leaf(_g)
+    if _kl:
+        _d = dict(_d, stop=_kl["stop"], slider=_kl.get("slider", _d.get("slider")))
     _dm = DOOR_DEFAULTS.get(_g.get("model") or "") or {}
     _kind = _d.get("kind") or "gate"
     _sw = next((k for k in alarm_kit if k.get("uid") == _d.get("switch") and "_tid" in k), None)
@@ -2235,13 +2260,6 @@ HOLE_GRID = 16.0                # every opening laid in 16 m cubes (LOD 15): a 3
                                 # so a building needs only this grid - it moves at most 8 m to sit on it
 LEAF_LOD = 16                   # the terrain's 8 m leaves
 LEAF_M = (1 << (31 - LEAF_LOD)) / SCALE
-_kits = {}
-try:
-    _kits = json.loads((paths.data() / "doors.json").read_text(encoding="utf-8")).get("buildings") or {}
-except (OSError, ValueError):
-    pass
-
-
 def _lod_of(size):
     """The octree level whose cubes are this many metres across."""
     return 31 - int(round(math.log2(size * SCALE)))

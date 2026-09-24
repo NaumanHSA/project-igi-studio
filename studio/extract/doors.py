@@ -348,6 +348,7 @@ def build(game, data_dir, levels=range(1, 15), log=print):
                                               "dy": round(dx * sn + dy * c, 2), "dz": round(d["z"] - o["z"], 2),
                                               "dh": round((dh - g) % TAU, 4),
                                               "liftFloor": d.get("liftFloor"),
+                                              "stop": d.get("stop"), "slider": d.get("slider"),
                                               "_of": (lv, o.get("ref") or (o["x"], o["y"]))})
                     break
         log("  level %d: %d door(s)" % (lv, len(ds)))
@@ -398,9 +399,14 @@ def build(game, data_dir, levels=range(1, 15), log=print):
             n = sum(1 for c in by_copy.values()
                     if any(abs(q["dx"] - d["dx"]) <= CLUSTER and abs(q["dy"] - d["dy"]) <= CLUSTER
                            and abs(q["dz"] - d["dz"]) <= CLUSTER for q in c))
+            # how far and which way this leaf slides is the doorway's own, not the
+            # model's: in Eagle's Nest's lift doorway the outer leaves go -0.6 and
+            # the inner +1.3, where the most common are +0.4 and +0.9 - taken
+            # from the model, the inner pair slid apart as the outer closed
             keep.append({"model": d["model"], "dx": d["dx"], "dy": d["dy"], "dz": d["dz"],
                          "dh": d["dh"], "in": n, "of": copies,
-                         "liftFloor": d.get("liftFloor") if d.get("liftFloor") is not None else None})
+                         "liftFloor": d.get("liftFloor") if d.get("liftFloor") is not None else None,
+                         "stop": d.get("stop"), "slider": d.get("slider")})
         # two of the same door in one doorway is a level's own slip, not a double
         # door (a real double door is two leaves facing opposite ways)
         tidy = []

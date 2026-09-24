@@ -4112,6 +4112,8 @@ function addTheDoors(b){
     asDoor(o);
     // a door of the lift's own: the lift works it, as the game has it
     if(sl.liftFloor!=null&&o.door)o.door.liftFloor=sl.liftFloor;
+    // and it slides as this doorway's leaf does, not as the model most often does
+    if(sl.stop&&o.door){o.door.stop=sl.stop.slice();if(sl.slider!=null)o.door.slider=sl.slider}
     placements.push(o);made++;
   });
   if(made){b.doors=(b.doors||0)+made;touch();renderSide();draw()}

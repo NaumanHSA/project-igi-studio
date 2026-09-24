@@ -1195,6 +1195,14 @@ floor there, not on the ground, so upper floors take doors too.
   lift's path either way - Eagle's Nest's lift building has one counting from
   the bottom and one from the top, and a door read from one opened at the top
   while the cabin of the other stood at the bottom, onto the empty shaft.
+- **Each leaf slides as its doorway's does.** How far and which way a door
+  slides open (its task's stop) belongs to the doorway, not the model: the lift
+  doorway's four telescopic leaves go -0.6 m (the outer two) and +1.3 m (the
+  inner two), where those models most often go +0.4 and +0.9 - taken from the
+  model, the inner pair slid apart as the outer closed, and the doorway never
+  shut. A building's kit keeps every leaf's own slide from the copy it was read
+  from (a third of all the kits' doors slide otherwise than their model most
+  often does), and Apply takes it from the kit for doors placed before.
 - **A shaft that runs below the ground opens the ground over it**
   (`DiscardTerrain`, as the game does where its own lifts go down), so the cabin
   is not stopped by the terrain. A lift between the floors of a building leaves
