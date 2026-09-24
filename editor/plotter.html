@@ -1469,6 +1469,14 @@ function footprint(o){
 // a soldier on team 0 fights on your side: the game's own friendlies (the
 // driver in Trainyard), and any this mission turns over
 function isAlly(o){return !!o&&o.type==="soldier"&&o.team===0}
+var SIDES=[[1,"Enemy"],[0,"Fights on your side"],[2,"A side of its own"]];
+function teamOf(o){return o&&o.team!=null?o.team:1}
+function knownSide(t){return SIDES.some(function(x){return x[0]===(t==null?1:t)})}
+function sideOptions(t){
+  t=(t==null?1:t);
+  return SIDES.map(function(x){return '<option value="'+x[0]+'"'+(x[0]===t?" selected":"")+'>'+x[1]+'</option>'}).join("")+
+    '<option value="other"'+(knownSide(t)?"":" selected")+'>Another side…</option>';
+}
 // what stays a symbol on the map rather than its model from above
 var ICON_ONLY=/^(tree|bush|lamp|pole|computer|camera|switch)$/;
 // something you can't go into: not a building, and not flat (a runway, a pad)
@@ -4864,7 +4872,9 @@ function guardFields(o){
   models=models.map(function(m){return {id:m,label:m+(lm.has(m)?"":" · imported on Apply")}});
   return '<div style="display:grid;gap:7px;margin-top:11px">'+
     '<div class="field"><span class="lbl">Type</span><select id="i-ai">'+optionList(enemies,o.ai,"g")+'</select></div>'+
-    '<div class="field"><span class="lbl">Team</span><input type="number" id="i-team" step="1" min="0" value="'+(o.team!=null?o.team:1)+'" aria-label="Team ID"'+(canEditQuiet()?'':' disabled')+'><p class="hint" style="margin:3px 0 0">0 is friendly · 1 is enemy · other IDs create another team.</p></div>'+
+    '<div class="field"><span class="lbl">Side</span><select id="i-team"'+(canEditQuiet()?'':' disabled')+'>'+sideOptions(o.team)+'</select>'+
+    '<input type="number" id="i-teamid" step="1" min="0" value="'+teamOf(o)+'" aria-label="Team number"'+(knownSide(o.team)?' hidden':'')+(canEditQuiet()?'':' disabled')+'>'+
+    '<p class="hint" style="margin:3px 0 0">Who he shoots for. The game puts its own allies on your side, and keeps a third side for Ekk\'s fortress.</p></div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'+
     '<div class="field"><span class="lbl">Weapon</span><select id="i-wp">'+optionList(arms,o.weapon,"group")+'</select></div>'+
     '<div class="field"><span class="lbl">Model</span><select id="i-md">'+optionList(models,o.model)+'</select></div></div>'+
@@ -5144,8 +5154,14 @@ function objectInspector(el){
   bindDoorSection(o);
   if($("i-ai"))$("i-ai").addEventListener("change",function(){setProp(o,{ai:$("i-ai").value});renderSide();draw()});
   if($("i-team"))$("i-team").addEventListener("change",function(){
-    var v=Number($("i-team").value);
-    if(!Number.isInteger(v)||v<0){$("i-team").value=(o.team!=null?o.team:1);return}
+    var v=$("i-team").value,box=$("i-teamid");
+    if(v==="other"){box.hidden=false;box.focus();box.select();return}
+    box.hidden=true;box.value=v;
+    setProp(o,{team:Number(v)});renderSide();draw();
+  });
+  if($("i-teamid"))$("i-teamid").addEventListener("change",function(){
+    var v=Number($("i-teamid").value);
+    if(!Number.isInteger(v)||v<0){$("i-teamid").value=teamOf(o);return}   // the game cannot use it
     setProp(o,{team:v});renderSide();draw();
   });
   if($("i-wp"))$("i-wp").addEventListener("change",function(){setProp(o,{weapon:$("i-wp").value});renderSide()});
@@ -5978,7 +5994,8 @@ function describe(o){
   var gz=groundAt(o.x,o.y),up=gz!=null&&o.z!=null?o.z-gz:null;
   if(o.type==="soldier"){
     var e=enemyInfo(o.ai),stops=(o.patrol||[]).length;
-    tag=o.own?"Yours":o.team===0?"Ally":"Enemy";tagClass=o.own?"own":o.team===0?"":"enemy";
+    tag=o.own?"Yours":o.team===0?"Ally":knownSide(o.team)?"Enemy":"Side "+o.team;
+    tagClass=o.own?"own":o.team===0?"":"enemy";
     desc=(e?e.label:String(o.ai||"Guard").replace("AITYPE_",""))+(stops?", patrols "+stops+" stop"+(stops>1?"s":""):isWalker(o)?", patrols his route":", stands guard")+
       (o.cutscene?" (cutscene actor)":"")+".";
     if(o.weapon)rows.push(["weapon",weaponLabel(o.weapon)]);
