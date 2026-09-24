@@ -767,14 +767,28 @@ view never ends at a cliff.
   onto the generator below instead of a sheet of soil across it, and the
   tunnels of Eagle's Nest are not blocked by snow. An empty map keeps its
   ground, since it is built without them.
+- **A building of yours opens the ground the game opens for it.** Each
+  building's kit carries the squares its home level takes away (a cellar's
+  stairs, a lift's shaft: the underground security building one 16 m square,
+  the power building two), and Apply opens them again wherever you put it -
+  in the terrain's finest cubes, 8 m, since the game's 16 and 32 m squares
+  are laid on a grid of their own and would open ground beside the building
+  wherever it stands off that grid. Only the 8 m squares inside the
+  building's footprint are opened, and every square over a lift shaft of
+  yours that goes below the ground; the close-up shows the same squares. (The
+  game's own levels never use the 8 m cubes; they are the leaves the terrain
+  is made of.)
 - **Roads and the railway are the game's own models:** each stretch of a
   spline is laid with the model its waypoint names, bent along the curve from
   one waypoint to the next and fitted to the stretch, as the game lays it
   (Trainyard's embankment waypoints stand 130 m apart, the length of the model
   itself). So a railway has its ballast, sleepers and rails, an embankment
   stands on its slopes, and a bridge over a gap keeps its track at the
-  waypoints' height. With textures off, or while a model is on its way, a
-  flat strip stands in for it.
+  waypoints' height. The height runs straight from one waypoint to the next
+  (the curve is the map's in plan only: smoothed, the track sagged into the
+  ground before the waypoint where Trainyard's embankment begins). With
+  textures off, or while a model is on its way, a flat strip stands in for
+  it. The track is gathered again as you move, like everything else.
 - **The game's own lifts are there:** each `Elevator` task's cabin (the lift
   cabin 200_01_1, and Eagle's Nest's cable car) stands where the level starts
   it, at one of its floors. They are shown, not edited.
@@ -783,6 +797,23 @@ view never ends at a cliff.
   does not draw them.
 - **Another mission, another scene:** opening a mission or a built-in level
   closes the close-up of the last one.
+- **The close-up is ready before you open it:** opening a mission or a
+  built-in level fetches every model the 3D view draws for it - what stands
+  in the level, its railway, its lifts, yours - and then the pictures they
+  wear, a few seconds' work (level 9: 82 models and 341 textures in about
+  three). A bar at the foot of the map says how far it has got, and the 3D
+  view then opens whole. Whatever is still on its way when it opens shows a
+  bar at the foot of the close-up instead.
+- **A cut belongs to its room:** opening the close-up on something indoors
+  cuts the building it is in just under the ceiling over it. Only that
+  building is cut; the rest of the level keeps its tops - a watchtower's head,
+  the floors of the building across the yard - where a cut once took them off
+  everywhere at once.
+- **The level's guards stand where the game stands them:** the game walks
+  every guard to his walkway graph as the mission starts, so one the level
+  writes a little above his walkway - level 6's buyers and scientist, 1.2 m
+  over the base plate they stand on - is drawn on it. Only a short drop (up to
+  2.5 m): a guard the level puts up a tower stays on his tower.
 - **It goes where you go:** the close-up is gathered round the camera, not
   just round the item it opened on. Fly or walk anywhere and, every few
   metres, what stands near you, the ground under you and the walkways are

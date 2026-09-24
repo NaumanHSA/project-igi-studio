@@ -39,7 +39,9 @@ NEAR = 1.0                  # metres of slack round a building's footprint
 CLUSTER = 1.2               # metres: the same doorway in another copy of a building
 # not buildings: a collision box, the joint helper, and the like
 SKIP_HOMES = {"colbox1", "colbox2", "colbox3", "colbox4", "joint_fixer"}
-MOST_PROPS = 40             # the most a building brings with it
+DOOR_HOME_H = 2.2             # metres: what a door can belong to is at least this tall
+MOST_PROPS = 60              # the most a building brings with it (the Guard HQ brings 53;
+                            # only the fortress walls and level 14's lift complex go past it)
 NEAR_LIFT = 6.0             # metres: a lift shaft this close to a room is its own
 LIFT_HOME_M2 = 30.0         # a lift belongs to something at least this big...
 LIFT_HOME_H = 3.5           # ... and this tall: a building, not a crate
@@ -192,21 +194,24 @@ def _head_of(orient):
 
 
 def _box(o, sizes):
-    """A building's footprint: (half width, half depth, height, its heading)."""
+    """A building's footprint: (half width, half depth, height, its heading, the
+    middle's offset, and how far the model reaches below its origin)."""
     s = sizes.get(o.get("model")) or {}
     if not s.get("w"):
         return None
     return (s["w"] / 2.0 + NEAR, s.get("d", s["w"]) / 2.0 + NEAR, s.get("h") or 6.0, o.get("gamma") or 0.0,
-            s.get("cx") or 0.0, s.get("cy") or 0.0)
+            s.get("cx") or 0.0, s.get("cy") or 0.0, s.get("z0") or 0.0)
 
 
 def _inside(o, box, x, y, z):
-    """Is this point inside the building's footprint, and not far above it?"""
-    hw, hd, h, g, cx, cy = box
+    """Is this point inside the building's footprint, from the bottom of the
+    model (a cellar is the building's too: the underground security building
+    reaches 6.1 m down, its cells 4.7 m) to a little above its top?"""
+    hw, hd, h, g, cx, cy, z0 = box
     dx, dy = x - o["x"], y - o["y"]
     c, s = math.cos(-g), math.sin(-g)
     lx, ly = dx * c - dy * s - cx, dx * s + dy * c - cy
-    return abs(lx) <= hw and abs(ly) <= hd and -3.0 <= z - o["z"] <= h + 3.0
+    return abs(lx) <= hw and abs(ly) <= hd and min(-3.0, z0 - 1.0) <= z - o["z"] <= h + 3.0
 
 
 def variants(sizes):
@@ -237,6 +242,7 @@ def build(game, data_dir, levels=range(1, 15), log=print):
     slots = collections.defaultdict(list)
     lift_slots = collections.defaultdict(list)
     prop_slots = collections.defaultdict(list)
+    hole_slots = collections.defaultdict(list)
     seen_buildings = collections.defaultdict(set)
     DOOR_MODELS.clear()
     for lv in levels:
@@ -246,7 +252,8 @@ def build(game, data_dir, levels=range(1, 15), log=print):
             log("  level %d: no script (%s)" % (lv, e))
             continue
         lf = data_dir / ("level%d.json" % lv)
-        objs = json.load(lf.open(encoding="utf-8"))["objects"] if lf.exists() else []
+        lvdata = json.load(lf.open(encoding="utf-8")) if lf.exists() else {}
+        objs = lvdata.get("objects") or []
         homes = []
         for o in objs:
             if o.get("type") not in ("building", "prop") or o.get("x") is None or o.get("cutscene"):
@@ -307,13 +314,31 @@ def build(game, data_dir, levels=range(1, 15), log=print):
                                                "dy": round(dx * sn + dy * c, 2), "dz": round(q["z"] - o["z"], 2),
                                                "dh": round(((q.get("gamma") or 0.0) - g) % TAU, 4),
                                                "_of": (lv, o.get("ref") or (o["x"], o["y"]))})
+        # the ground the game takes away for a building (DiscardTerrain, kept in
+        # the level data as terrainHoles): each square to the smallest building
+        # whose footprint holds its middle - a cellar's stairs, a lift's shaft
+        for hx, hy, hs in lvdata.get("terrainHoles") or []:
+            mx, my = hx + hs / 2.0, hy + hs / 2.0
+            for _, o, b in roomy:
+                if o.get("type") != "building" or not _inside(o, b, mx, my, o["z"]):
+                    continue
+                g = o.get("gamma") or 0.0
+                c, sn = math.cos(-g), math.sin(-g)
+                dx, dy = mx - o["x"], my - o["y"]
+                hole_slots[o["model"]].append({"dx": round(dx * c - dy * sn, 2), "dy": round(dx * sn + dy * c, 2),
+                                               "size": hs, "_of": (lv, o.get("ref") or (o["x"], o["y"]))})
+                break
         ds = doors_of(src)
         for _, o, _b in homes:
             seen_buildings[o["model"]].add((lv, o.get("ref") or (o["x"], o["y"])))
+        # a door is a building's, never a desk's or a bed's that happens to stand
+        # by it (the underground security building's cellar door went to a desk):
+        # the smallest home at least a door's height tall
+        tall = [(a, o, b) for a, o, b in homes if b[2] >= DOOR_HOME_H]
         for d in ds:
             DOOR_MODELS.add(d["model"])
             by_model[d["model"]].append(d)
-            for _, o, b in homes:
+            for _, o, b in tall:
                 if _inside(o, b, d["x"], d["y"], d["z"]):
                     head, dh, _ = _head_of(d["orient"])
                     g = o.get("gamma") or 0.0
@@ -330,7 +355,7 @@ def build(game, data_dir, levels=range(1, 15), log=print):
     # a building seen in only one level borrows what its other skins were seen
     # with: the same shape has the same doorways and the same lift shaft
     same = variants(sizes)
-    for store in (slots, lift_slots):
+    for store in (slots, lift_slots, hole_slots):
         was = {m: list(v) for m, v in store.items()}          # before any sharing
         for model, mine in was.items():
             for other in same.get(model, ()):
@@ -407,8 +432,9 @@ def build(game, data_dir, levels=range(1, 15), log=print):
             continue
         keep = []
         for L in ls:
-            if any(abs(L["dx"] - k["dx"]) <= CLUSTER and abs(L["dy"] - k["dy"]) <= CLUSTER
-                   and abs(L["dz"] - k["dz"]) <= CLUSTER for k in keep):
+            # the same shaft, whichever floor its cabin starts at in each copy
+            # (Eagle's Nest's two lift buildings: one waits at the top, one below)
+            if any(abs(L["dx"] - k["dx"]) <= CLUSTER and abs(L["dy"] - k["dy"]) <= CLUSTER for k in keep):
                 continue
             if len(L.get("stops") or []) < 2:
                 continue                      # a lift with nowhere to go
@@ -427,8 +453,21 @@ def build(game, data_dir, levels=range(1, 15), log=print):
             keep.append(L)
         if keep:
             out_lifts[model] = keep
+    # the ground a building opens: the squares of one real copy of it - of the
+    # copies the game opens any ground for, the one it opens least (the Guard HQ
+    # has a 32 m square in one level and two 16 m ones in another; level 3's
+    # underground security building one 16 m square over its stairs)
+    out_holes = {}
+    for model, hs in hole_slots.items():
+        if model in SKIP_HOMES:
+            continue
+        by_copy = collections.defaultdict(list)
+        for h in hs:
+            by_copy[h["_of"]].append(h)
+        best = min(by_copy.values(), key=lambda hs: sum(h["size"] ** 2 for h in hs))
+        out_holes[model] = [{k: v for k, v in h.items() if k != "_of"} for h in best]
     every = {}
-    for model in set(out_slots) | set(out_lifts) | set(out_props):
+    for model in set(out_slots) | set(out_lifts) | set(out_props) | set(out_holes):
         e = {}
         if out_slots.get(model):
             e["doors"] = out_slots[model]
@@ -440,6 +479,8 @@ def build(game, data_dir, levels=range(1, 15), log=print):
                  if q["model"] not in cabins and q["model"] not in DOOR_MODELS]
         if props:
             e["props"] = props
+        if out_holes.get(model):
+            e["holes"] = out_holes[model]
         every[model] = e
     return {"v": 2, "models": models, "buildings": every}
 

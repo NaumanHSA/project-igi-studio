@@ -2205,11 +2205,88 @@ for _L in OWN_LIFTS:
                   % ((_lift_id, _qstr_early(_L.get("name") or "Lift", 40), q(_L["x"]), q(_L["y"]), q(_L["z"]), _g,
                       _L.get("model") or "200_01_1", _sp_id, repr(round(float(_d.get("speed") or 5.0), 3)))
                      + tuple(x.replace('"', "'") for x in _go[:10]) + (_inside, EOL)))
-# A shaft that runs below the ground needs the ground opened over it, or the
-# cabin stops against it: the game does the same where its own lifts go down
-# (DiscardTerrain, one 16 m square of terrain per point, named after the
-# building it belongs to).
-DISCARD_LOD = 15                # 15: a 16 m square; 14: 32 m
+# The ground a building of yours opens, as the game opens it for that building:
+# the squares its home level takes away (a cellar's stairs, a lift's shaft - the
+# kit carries them, doors.json "holes") and the shaft of every lift of yours
+# that goes below the ground. The game drops terrain an octree cube at a time,
+# on a grid of the cube's own size; its levels use 16 and 32 m cubes, laid where
+# the building's walls hide them. A building of yours stands anywhere on that
+# grid, where the same square opens ground beside it too - Eagle's Nest's lift
+# building, alone on an empty map, stood in a pit up to 32 m across. So the
+# opening is laid in the terrain's finest cubes instead, the 8 m leaves its
+# meshes are held in (studio/build/terrain.py), over what needs opening, and
+# kept inside the building's footprint, where the building covers it; a lift's
+# shaft is opened whatever the footprint says. A leaf is dropped at the
+# ground's height and in the cubes above and below it, so one on a slope that
+# crosses a cube's top or bottom goes whole.
+HOLE_LOD = 16                   # 16: 8 m cubes, the terrain's leaves (15: 16 m, 14: 32 m)
+HOLE_M = (1 << (31 - HOLE_LOD)) / SCALE
+_kits = {}
+try:
+    _kits = json.loads((paths.data() / "doors.json").read_text(encoding="utf-8")).get("buildings") or {}
+except (OSError, ValueError):
+    pass
+
+
+def _leaves_of(cx, cy, hw, hd, g, step=1.0):
+    """The leaves a rectangle touches: its middle (cx, cy), half its width and
+    depth, turned by g - sampled every step metres."""
+    out = set()
+    c, sn = math.cos(g), math.sin(g)
+    nx, ny = max(1, int(math.ceil(2 * hw / step))), max(1, int(math.ceil(2 * hd / step)))
+    for i in range(nx + 1):
+        for j in range(ny + 1):
+            lx, ly = -hw + 2 * hw * i / nx, -hd + 2 * hd * j / ny
+            out.add((math.floor((cx + lx * c - ly * sn) / HOLE_M), math.floor((cy + lx * sn + ly * c) / HOLE_M)))
+    return out
+
+
+def _leaves_in(cx, cy, hw, hd, g):
+    """The leaves whose middle lies inside a rectangle (as _leaves_of): the
+    game's own square, laid again in leaves, keeps to within half a leaf of it."""
+    out = set()
+    c, sn = math.cos(-g), math.sin(-g)
+    r = math.hypot(hw, hd)
+    for ix in range(math.floor((cx - r) / HOLE_M), math.floor((cx + r) / HOLE_M) + 1):
+        for iy in range(math.floor((cy - r) / HOLE_M), math.floor((cy + r) / HOLE_M) + 1):
+            x, y = (ix + 0.5) * HOLE_M - cx, (iy + 0.5) * HOLE_M - cy
+            if abs(x * c - y * sn) <= hw and abs(x * sn + y * c) <= hd:
+                out.add((ix, iy))
+    return out
+
+
+def _leaf_within(b, leaf, pad=0.3):
+    """Is a leaf wholly inside building b's footprint?"""
+    sz = _sizes.get(b.get("model")) or {}
+    if not sz.get("w"):
+        return False
+    g = float(b.get("gamma") or 0)
+    c, sn = math.cos(-g), math.sin(-g)
+    for ax in (0, 1):
+        for ay in (0, 1):
+            x, y = (leaf[0] + ax) * HOLE_M - float(b["x"]), (leaf[1] + ay) * HOLE_M - float(b["y"])
+            u, v = x * c - y * sn - (sz.get("cx") or 0), x * sn + y * c - (sz.get("cy") or 0)
+            if abs(u) > sz["w"] / 2 + pad or abs(v) > sz.get("d", sz["w"]) / 2 + pad:
+                return False
+    return True
+
+
+_open = {}                      # leaf -> (the ground's height there, whose it is)
+_opened_by = 0
+for _b in PLACE:
+    _hs = (_kits.get(_b.get("model")) or {}).get("holes") if _b.get("type") == "building" else None
+    if not _hs:
+        continue
+    _g = float(_b.get("gamma") or 0)
+    _c, _sn = math.cos(_g), math.sin(_g)
+    _n0 = len(_open)
+    for _h in _hs:
+        _hx = float(_b["x"]) + _h["dx"] * _c - _h["dy"] * _sn
+        _hy = float(_b["y"]) + _h["dx"] * _sn + _h["dy"] * _c
+        for _lf in _leaves_in(_hx, _hy, _h["size"] / 2.0, _h["size"] / 2.0, _g):
+            if _leaf_within(_b, _lf):
+                _open.setdefault(_lf, (float(_b["z"]), _b.get("name") or "Building"))
+    _opened_by += len(_open) > _n0
 _holes = 0
 for _L in OWN_LIFTS:
     _stops = [list(map(float, st))[:3] for st in (_L["lift"].get("stops") or [])]
@@ -2223,15 +2300,24 @@ for _L in OWN_LIFTS:
     _ground = float(_home["z"]) if _home else float(_L["z"])
     if _low > _ground - 2.0:
         continue                # it stays above the ground: nothing to open
-    for _dx, _dy in ((0, 0), (5, 0), (-5, 0), (0, 5), (0, -5)):
-        blocks.append('Task_New(-1, "DiscardTerrain", "%s", %s, %s, %s, %d), %s'
-                      % (_qstr_early(_L.get("name") or "Lift", 30), q(float(_L["x"]) + _dx),
-                         q(float(_L["y"]) + _dy), q(float(_L["z"])), DISCARD_LOD, EOL))
+    _cab = _sizes.get(_L.get("model") or "200_01_1") or {}
+    _lg = float(_L.get("gamma") or 0)
+    _ccx, _ccy = _cab.get("cx") or 0, _cab.get("cy") or 0
+    _mx = float(_L["x"]) + _ccx * math.cos(_lg) - _ccy * math.sin(_lg)
+    _my = float(_L["y"]) + _ccx * math.sin(_lg) + _ccy * math.cos(_lg)
+    for _lf in _leaves_of(_mx, _my, (_cab.get("w") or 3.8) / 2 + 0.2, (_cab.get("d") or 3.8) / 2 + 0.2, _lg, 0.5):
+        _open.setdefault(_lf, (_ground, _L.get("name") or "Lift"))
     _holes += 1
     warnings.append("%s runs %.0f m below the ground: the ground over its shaft is opened, "
                     "so the cabin can go down" % (_L.get("name") or "a lift", _ground - _low))
-if _holes:
-    report.append("ground opened over %d lift shaft(s)" % _holes)
+for (_ix, _iy), (_gz, _who) in sorted(_open.items()):
+    for _dz in (-HOLE_M, 0.0, HOLE_M):
+        blocks.append('Task_New(-1, "DiscardTerrain", "%s", %s, %s, %s, %d), %s'
+                      % (_qstr_early(_who, 30), q((_ix + 0.5) * HOLE_M), q((_iy + 0.5) * HOLE_M),
+                         q(_gz + _dz), HOLE_LOD, EOL))
+if _open:
+    report.append("ground opened in %d %.0f m square(s): %d lift shaft(s), %d building(s) with a cellar or stairs down"
+                  % (len(_open), HOLE_M, _holes, _opened_by))
 if OWN_LIFTS:
     report.append("%d lift(s) of yours, with a button at each floor and one inside" % len(OWN_LIFTS))
 

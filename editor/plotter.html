@@ -665,6 +665,16 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .fx-bar span{display:block;font:600 10px "IBM Plex Mono",monospace;letter-spacing:.18em;color:#7fe08a;margin:0 0 4px 1px}
 .fx-bar div{height:26px;border:1px solid #4fd062;background:rgba(3,18,6,.72);box-shadow:0 0 14px rgba(80,255,110,.22)}
 .fx-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b8a31,#3ed85b);box-shadow:0 0 10px rgba(80,255,110,.45)}
+/* the 3D view made ready while the map is open: how far it has got */
+.prep3d{position:absolute;left:50%;bottom:18px;width:min(380px,50%);transform:translateX(-50%);pointer-events:none;z-index:4;
+  transition:opacity .4s ease}
+.prep3d[hidden]{display:none}
+.prep3d.done{opacity:0}
+.prep3d span{display:flex;justify-content:space-between;gap:12px;font:600 10px "IBM Plex Mono",monospace;letter-spacing:.18em;
+  color:#7fe08a;margin:0 0 4px 1px;text-transform:uppercase}
+.prep3d em{font-style:normal;letter-spacing:.06em;color:var(--muted);text-transform:none}
+.prep3d div{height:10px;border:1px solid #4fd062;background:rgba(3,18,6,.72);box-shadow:0 0 14px rgba(80,255,110,.22)}
+.prep3d i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b8a31,#3ed85b);transition:width .25s ease}
 .stage::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.09) 0 1px,transparent 1px 3px),
              radial-gradient(ellipse at center,transparent 62%,rgba(0,0,0,.32))}
@@ -3267,18 +3277,23 @@ var labelPlaces=null;
 function labelsForLevel(){
   // every ComputerHilight marker in a level sits at the same point, so using
   // their own coordinates stacks all the names on one spot. Each one carries the
-  // task id of the building it describes - draw it there instead.
-  if(labelPlaces)return labelPlaces;
-  var rows=(MODELS&&MODELS.labels&&(MODELS.labels[String(LEVEL&&LEVEL.level)]||
-            MODELS.labels[String(BASE_LEVEL)]))||null;
-  if(!rows||!LEVEL)return (labelPlaces=[]);
-  var byId={};
-  LEVEL.objects.forEach(function(o){if(o.id!=null)byId[String(o.id)]=o});
-  labelPlaces=Object.keys(rows).map(function(k){
-    var o=byId[k],r=rows[k];
-    return {title:r.title,info:r.info,x:o?o.x:r.x,y:o?o.y:r.y,onObject:!!o};
-  });
-  return labelPlaces;
+  // task id of the building it describes - draw it there instead. A name with no
+  // building under it is drawn nowhere: not one that names none, not one whose
+  // building this mission takes out, and none on an empty map, which is built
+  // without the level's markers - they piled up at that one point, "SECURITY
+  // BUILDING" over "WATER TOWER".
+  if(!labelPlaces){
+    var rows=(MODELS&&MODELS.labels&&(MODELS.labels[String(LEVEL&&LEVEL.level)]||
+              MODELS.labels[String(BASE_LEVEL)]))||null;
+    if(!rows||!LEVEL)return (labelPlaces=[]);
+    var byId={};
+    LEVEL.objects.forEach(function(o){if(o.id!=null)byId[String(o.id)]=o});
+    labelPlaces=Object.keys(rows).map(function(k){return {title:rows[k].title,info:rows[k].info,o:byId[k]||null}})
+      .filter(function(r){return r.o});
+  }
+  if(MODE==="empty")return [];
+  return labelPlaces.filter(function(r){return !r.o.cutscene&&!isRemoved(r.o)&&!(r.o.id>=0&&removals.indexOf(r.o.id)>=0)})
+    .map(function(r){return {title:r.title,info:r.info,x:r.o.x,y:r.o.y,onObject:true}});
 }
 function drawLabels(){
   if(!MODELS||!MODELS.labels||view.k<0.55)return;
@@ -8177,7 +8192,7 @@ function scene3d(at,q){
 function explore3d(x,y,z,ground){
   var at={type:"spot",x:x,y:y,z:z},q=V3D.key?byKey3d(V3D.key):null;
   V3D.at=at;
-  var out={objects:scene3d(at,q),nav:nav3d(at,reach3d(V3D.radius),q)};
+  var out={objects:scene3d(at,q),nav:nav3d(at,reach3d(V3D.radius),q),splines:splines3d(at,reach3d(V3D.radius))};
   if(ground)out.terrain=terrain3d(at,V3D.radius);
   return out;
 }
@@ -8225,10 +8240,23 @@ function gun3d(model,weapon){
   var g=weapon&&window.MeshSprites&&MeshSprites.pickupModel(weapon),q=model&&MeshSprites.grip(model);
   return g&&q&&MeshSprites.has(g)?{gun:g,grip:q}:{};
 }
+// Where the game stands a level's own guard: it walks every guard to his walkway
+// graph as the mission starts, so one the level wrote a little above his
+// walkway - level 6's buyers and scientist, 1.2 m over the base plate they
+// stand on - is drawn on it. Only a short drop: one up a tower stays there.
+function guardFootZ(o){
+  if(o.own||o.type!=="soldier"||o.graph==null)return o.z;
+  var best=null;
+  nodesOf(String(o.graph)).forEach(function(n){
+    if(n.z>o.z+0.1||n.z<o.z-2.5||Math.hypot(n.x-o.x,n.y-o.y)>3)return;
+    if(best==null||n.z>best)best=n.z;
+  });
+  return best!=null?best:o.z;
+}
 function spec3d(o){
   var m=model3d(o),r=rot3d(o),st=styleFor(o),k=key3d(o),gn=o.type==="soldier"?gun3d(m,o.weapon):{};
   // your building on the pad the build levels for it
-  var pad=o.own&&TERR&&TERR.pads&&TERR.pads[o.uid],z=pad?pad.z:o.z;
+  var pad=o.own&&TERR&&TERR.pads&&TERR.pads[o.uid],z=pad?pad.z:guardFootZ(o);
   return {key:k||("x:"+o.type+":"+o.x+","+o.y+","+o.z),name:displayName(o),type:o.type,
     model:m&&MeshSprites.has(m)?m:null,x:o.x,y:o.y,z:z,rot:r.rot,head:r.head,headOff:r.off,headSign:r.sign||1,
     lift:o.type==="player"?-PLAYER_LIFT:0,
@@ -8270,6 +8298,9 @@ function sceneAround(o,R,noSelf){
 function terrain3d(o,R){
   if(!TERR)return null;
   var m=TERR.meta,E=Math.min(160,Math.max(R*2.5,R+40)),c=cellsOf(o.x-E,o.x+E,o.y-E,o.y+E);
+  // past the edge of the level's ground (level 9's track runs off it) there is
+  // none to give: the close-up keeps what it has instead of failing to gather
+  if(c[1]-c[0]<1||c[3]-c[2]<1)return null;
   var st=(c[1]-c[0])*(c[3]-c[2])>90000?2:1;
   var w=Math.floor((c[1]-c[0])/st)+1,h=Math.floor((c[3]-c[2])/st)+1;
   var G=TERR.ground,z=new Float32Array(w*h),shade=G?new Float32Array(w*h):null;
@@ -8295,6 +8326,51 @@ function terrain3d(o,R){
   return {x0:x0,y0:y0,cell:cell,w:w,h:h,z:z,shade:shade,rgb:rgb,tile:tile,mat:tex?mat:null,tex:tex,
     hole:levelHoles(x0,y0,cell,w,h,openBelow(x0,y0,cell,w,h,z))};
 }
+// The ground a building of yours opens, laid as Apply lays it
+// (studio/build/plan.py, HOLE_LOD): the game's own squares for that building,
+// in the terrain's 8 m leaves whose middle is inside them and which lie inside
+// the building's footprint, and the leaves over the shaft of each lift of
+// yours that goes below the ground. As [x, y, size] squares, like the level's.
+var HOLE_M=8;
+function placedHoles(){
+  var out={},SZ=MODELS&&MODELS.sizes,KB=DOORS&&DOORS.buildings;
+  if(!SZ)return [];
+  function within(b,ix,iy){
+    var s=SZ[b.model];if(!s||!s.w)return false;
+    var c=Math.cos(-(b.gamma||0)),sn=Math.sin(-(b.gamma||0));
+    for(var ax=0;ax<2;ax++)for(var ay=0;ay<2;ay++){
+      var x=(ix+ax)*HOLE_M-b.x,y=(iy+ay)*HOLE_M-b.y,u=x*c-y*sn-(s.cx||0),v=x*sn+y*c-(s.cy||0);
+      if(Math.abs(u)>s.w/2+0.3||Math.abs(v)>(s.d||s.w)/2+0.3)return false;
+    }
+    return true;
+  }
+  placements.forEach(function(b){
+    var hs=b.type==="building"&&KB&&KB[b.model]&&KB[b.model].holes;if(!hs)return;
+    var g=b.gamma||0,c=Math.cos(g),sn=Math.sin(g),ci=Math.cos(-g),si=Math.sin(-g);
+    hs.forEach(function(h){
+      var hx=b.x+h.dx*c-h.dy*sn,hy=b.y+h.dx*sn+h.dy*c,hw=h.size/2,r=Math.hypot(hw,hw);
+      for(var ix=Math.floor((hx-r)/HOLE_M);ix<=Math.floor((hx+r)/HOLE_M);ix++)
+        for(var iy=Math.floor((hy-r)/HOLE_M);iy<=Math.floor((hy+r)/HOLE_M);iy++){
+          var x=(ix+.5)*HOLE_M-hx,y=(iy+.5)*HOLE_M-hy;
+          if(Math.abs(x*ci-y*si)<=hw&&Math.abs(x*si+y*ci)<=hw&&within(b,ix,iy))out[ix+","+iy]=1;
+        }
+    });
+  });
+  placements.forEach(function(L){
+    var st=L.lift&&L.lift.stops;if(!st||st.length<2)return;
+    var low=Math.min.apply(null,st.map(function(q){return L.z+(+q[2])}));
+    var home=L.of?placements.filter(function(p){return p.uid===L.of})[0]:null,ground=home?home.z:L.z;
+    if(low>ground-2)return;
+    var s=SZ[L.model||"200_01_1"]||{},g=L.gamma||0,c=Math.cos(g),sn=Math.sin(g);
+    var mx=L.x+(s.cx||0)*c-(s.cy||0)*sn,my=L.y+(s.cx||0)*sn+(s.cy||0)*c;
+    var hw=(s.w||3.8)/2+0.2,hd=(s.d||3.8)/2+0.2,nx=Math.max(1,Math.ceil(2*hw/0.5)),ny=Math.max(1,Math.ceil(2*hd/0.5));
+    for(var i=0;i<=nx;i++)for(var j=0;j<=ny;j++){
+      var lx=-hw+2*hw*i/nx,ly=-hd+2*hd*j/ny;
+      out[Math.floor((mx+lx*c-ly*sn)/HOLE_M)+","+Math.floor((my+lx*sn+ly*c)/HOLE_M)]=1;
+    }
+  });
+  return Object.keys(out).map(function(k){var q=k.split(",");return [+q[0]*HOLE_M,+q[1]*HOLE_M,HOLE_M]});
+}
 // Where the game takes its own ground away - over a cellar, down a lift shaft,
 // at a tunnel's mouth (the level's DiscardTerrain squares, 16 or 32 m) - the
 // close-up has none either, so a basement opens as it does in the game: the
@@ -8303,8 +8379,8 @@ function terrain3d(o,R){
 // strictly inside a square are. An empty map is built without them
 // (studio/build/empty_map.py), and keeps its ground.
 function levelHoles(x0,y0,cell,w,h,hole){
-  var sq=MODE!=="empty"&&LEVEL&&LEVEL.terrainHoles;
-  if(!sq||!sq.length)return hole;
+  var sq=((MODE!=="empty"&&LEVEL&&LEVEL.terrainHoles)||[]).concat(placedHoles());
+  if(!sq.length)return hole;
   sq.forEach(function(s){
     var i0=Math.max(0,Math.floor((s[0]-x0)/cell)+1),i1=Math.min(w-1,Math.ceil((s[0]+s[2]-x0)/cell)-1);
     var j0=Math.max(0,Math.floor((s[1]-y0)/cell)+1),j1=Math.min(h-1,Math.ceil((s[1]+s[2]-y0)/cell)-1);
@@ -8417,7 +8493,7 @@ function open3dAt(x,y,R,keep){
   View3D.open({host:document.querySelector(".stage"),
     target:{key:"spot",name:"Shaped ground",sub:"the ground as the game will get it",type:"spot",model:null,x:x,y:y,z:z,
       rot:[0,0,0],head:2,headOff:0,lift:0,kind:"fixed",editable:false,own:false,cam:null,on:""},
-    objects:sceneAround(spot,reach3d(V3D.radius),true),terrain:terrain3d(spot,V3D.radius),splines:splines3d(spot,V3D.radius),
+    objects:sceneAround(spot,reach3d(V3D.radius),true),terrain:terrain3d(spot,V3D.radius),splines:splines3d(spot,reach3d(V3D.radius)),
     nav:nav3d(spot,reach3d(V3D.radius)),onAddNode:canEditQuiet()?addNode3d:null,explore:explore3d,
     onTest:Store&&!Store.local&&canEditQuiet()?function(p){testFromHere(p.x,p.y,p.z,p.gamma)}:null,
     onPaste:canEditQuiet()?paste3d:null,
@@ -8448,10 +8524,12 @@ function splines3d(o,R){
       pts.forEach(function(p,k){p.push(a.z+(b.z-a.z)*(n?k/n:0))});
       var P=s.points,c=[P[Math.max(0,i-1)],a,b,P[Math.min(P.length-1,i+2)]].map(function(q){return [q.x,q.y,q.z]});
       out.push({kind:look.rails?"rail":look.line?"line":"road",
-        width:z&&z.d>0.5?z.d:(look.line?0.25:4),pts:pts,model:seg,ctrl:c,linear:!!s.linear});
+        width:z&&z.d>0.5?z.d:(look.line?0.25:4),pts:pts,model:seg,ctrl:c,linear:!!s.linear,key:s.id+":"+i,
+        near:Math.hypot((a.x+b.x)/2-o.x,(a.y+b.y)/2-o.y)});
     }
   });
-  return out.slice(0,60);
+  // the nearest first, when there are more than the close-up lays
+  return out.sort(function(p,q){return p.near-q.near}).slice(0,120);
 }
 // The walkways round a spot, for the 3D close-up: the level's navmesh nodes and
 // links (as the plan leaves them), the mission's own, and the guard's patrol.
@@ -8551,6 +8629,45 @@ function toggle3d(on){
   open3d(p,false,"player");
   sync3dSwitch();
 }
+// Everything the 3D view draws for this level, fetched as soon as it is open:
+// the models of what stands in it, its railway and its lifts, and the
+// mission's own, then the pictures they wear - so the close-up opens whole
+// instead of filling in as it goes. A bar on the map says how far it has got.
+var PREP3D={level:null};
+function prepare3d(){
+  if(!SRV||!LEVEL)return;
+  if(!window.View3D||!View3D.prepare){PREP3D.level=null;return}      // view3d-ready starts it
+  var lv=LEVEL.level,ms={};
+  LEVEL.objects.forEach(function(o){if(o.model&&!o.cutscene&&!/^colbox/i.test(o.modelName||""))ms[o.model]=1});
+  if(MODE!=="empty"){
+    (LEVEL.splines||[]).forEach(function(sp){sp.points.forEach(function(q){if(q.seg)ms[q.seg]=1})});
+    (LEVEL.lifts||[]).forEach(function(l){if(l.model)ms[l.model]=1});
+  }
+  placements.forEach(function(q){if(q.model)ms[q.model]=1});
+  PREP3D.level=lv;
+  var bar=$("prep3d");
+  if(!bar){
+    bar=document.createElement("div");bar.id="prep3d";bar.className="prep3d";bar.hidden=true;bar.setAttribute("aria-live","polite");
+    bar.innerHTML='<span><b>Preparing 3D</b><em></em></span><div><i></i></div>';
+    cv.parentElement.appendChild(bar);
+  }
+  bar.hidden=false;bar.classList.remove("done");
+  var WORD={models:"models",pictures:"textures"};
+  View3D.prepare(lv,Object.keys(ms),function(stage,done,total){
+    if(PREP3D.level!==lv)return;
+    if(stage==="ready"){bar.querySelector("em").textContent="ready";bar.querySelector("i").style.width="100%";
+      bar.classList.add("done");setTimeout(function(){if(bar.classList.contains("done"))bar.hidden=true},500);return}
+    bar.querySelector("em").textContent=WORD[stage]+" "+done+" / "+total;
+    // models are the first half of the way, their pictures the second
+    bar.querySelector("i").style.width=((stage==="models"?0:50)+(total?done/total*50:50)).toFixed(1)+"%";
+  });
+}
+window.addEventListener("view3d-ready",function(){if(LEVEL&&PREP3D.level==null&&(M||READONLY))prepare3d()});
+// the building the close-up opens inside: the cut it sets is for this room
+function roomOf(b){
+  var s=MODELS&&MODELS.sizes&&MODELS.sizes[b.model];
+  return {x:b.x,y:b.y,r:(s&&s.w?Math.hypot(s.w,s.d)/2+Math.hypot(s.cx||0,s.cy||0):20)+2};
+}
 function open3d(o,keep,view){
   if(!o||o.x==null)return;
   if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
@@ -8561,10 +8678,10 @@ function open3d(o,keep,view){
   var fl=inb?floorAt(o.x,o.y,o.z):groundAt(o.x,o.y);
   t.floor=fl!=null?fl:o.z;
   V3D.key=t.key;V3D.spot=null;V3D.at=null;V3D.ver=planVer;V3D.lastAt={x:o.x,y:o.y,z:o.z};
-  View3D.open({host:document.querySelector(".stage"),target:t,objects:sceneAround(o,reach3d(R)),terrain:terrain3d(o,R),splines:splines3d(o,R),
+  View3D.open({host:document.querySelector(".stage"),target:t,objects:sceneAround(o,reach3d(R)),terrain:terrain3d(o,R),splines:splines3d(o,reach3d(R)),
     nav:nav3d(o,reach3d(R)),onAddNode:canEditQuiet()?addNode3d:null,explore:explore3d,
     onTest:Store&&!Store.local&&canEditQuiet()?function(p){testFromHere(p.x,p.y,p.z,p.gamma)}:null,
-    mesh:function(m){return MeshSprites.raw(m)},mapImage:mapPatch,radius:R,inside:!!inb,keepView:!!keep,view:view,
+    mesh:function(m){return MeshSprites.raw(m)},mapImage:mapPatch,radius:R,inside:!!inb,room:inb?roomOf(inb.o):null,keepView:!!keep,view:view,
     onRemove:canEditQuiet()?remove3d:null,onCopy:copy3d,onPaste:canEditQuiet()?paste3d:null,
     onDuplicate:canEditQuiet()?duplicate3d:null,
     level:SRV?(LEVEL?LEVEL.level:LV):0,
@@ -10445,7 +10562,7 @@ function loadLevel(n,then){
     BASE_LEVEL=n>14?1:n;   // a custom slot reuses a shipped level's labels
     wallCache=null;
     buildPalette();renderSide();fit(false);draw();
-    if(then)then();
+    if(then){then();prepare3d()}
   }).catch(function(){
     LEVEL={bounds:{minX:0,maxX:1,minY:0,maxY:1},objects:[],graphs:{}};GRAPHS={};
     draw();$("ro-hov").textContent="level data unavailable";

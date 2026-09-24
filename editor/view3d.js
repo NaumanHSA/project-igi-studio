@@ -116,7 +116,14 @@ function css() {
 .v3d-hint[hidden]{display:none}
 .v3d-hint b{display:block;font:600 17px "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--player)}
 .v3d-hint span{font-size:12px;color:var(--muted)}
-.v3d.editing canvas{cursor:default}`;
+.v3d.editing canvas{cursor:default}
+.v3d-load{position:absolute;left:50%;bottom:22px;width:min(420px,56%);transform:translateX(-50%);pointer-events:none}
+.v3d-load[hidden]{display:none}
+.v3d-load span{display:flex;justify-content:space-between;gap:12px;font:600 10px "IBM Plex Mono",monospace;
+  letter-spacing:.18em;color:#7fe08a;margin:0 0 4px 1px}
+.v3d-load em{font-style:normal;letter-spacing:.06em;color:var(--muted)}
+.v3d-load div{height:12px;border:1px solid #4fd062;background:rgba(3,18,6,.72);box-shadow:0 0 14px rgba(80,255,110,.22)}
+.v3d-load i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b8a31,#3ed85b);transition:width .25s ease}`;
   document.head.appendChild(st);
 }
 
@@ -153,7 +160,8 @@ function build(host) {
 <div class="v3d-read"></div>
 <div class="v3d-help"><div class="v3d-help-head"><span class="v3d-help-title">Keys</span>
   <button class="v3d-help-fold" aria-expanded="true" title="Hide the keys">−</button></div><div class="v3d-help-rows"></div></div>
-<div class="v3d-tip" hidden></div>`;
+<div class="v3d-tip" hidden></div>
+<div class="v3d-load" hidden aria-live="polite"><span><b>Loading</b><em></em></span><div><i></i></div></div>`;
   host.appendChild(el);
   const canvas = el.querySelector("canvas");
   let renderer;
@@ -266,6 +274,34 @@ function geometryOf(model) {
 }
 
 // ------------------------------------------------------------------ textures
+// What is on its way - models and their pictures - for the bar at the foot of
+// the close-up. It shows only when loading takes a moment, and counts up to
+// everything asked for since it last had nothing to do.
+const LOADS = { on: 0, done: 0, timer: 0 };
+function loadOne(p) {
+  LOADS.on++;
+  loadBar();
+  return p.finally(() => { LOADS.on = Math.max(0, LOADS.on - 1); LOADS.done++; loadBar(); });
+}
+function loadBar() {
+  const bar = S && S.el && S.el.querySelector(".v3d-load");
+  if (!LOADS.on) {
+    clearTimeout(LOADS.timer); LOADS.timer = 0; LOADS.done = 0;
+    if (bar) bar.hidden = true;
+    return;
+  }
+  if (!bar) return;
+  if (bar.hidden) {
+    if (!LOADS.timer) LOADS.timer = setTimeout(() => { LOADS.timer = 0; if (LOADS.on) { bar.hidden = false; loadBar(); } }, 300);
+    return;
+  }
+  const total = LOADS.on + LOADS.done;
+  bar.querySelector("em").textContent = LOADS.done + " / " + total;
+  bar.querySelector("i").style.width = (LOADS.done / total * 100).toFixed(1) + "%";
+}
+function texUrl(name, lv) {
+  return "api/texture?name=" + encodeURIComponent(name) + "&level=" + lv + "&size=512";
+}
 const TMODEL = new Map();       // model -> Promise of {geo, groups} | null
 const TEX = new Map();          // texture name -> THREE.Texture
 function b64(s) {
@@ -273,10 +309,10 @@ function b64(s) {
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
   return u.buffer;
 }
-function texturedModel(model) {
-  const key = model + "@" + (O.level || 0);
+function texturedModel(model, level) {
+  const lv = level != null ? level : (O && O.level) || 0, key = model + "@" + lv;
   if (TMODEL.has(key)) return TMODEL.get(key);
-  const p = fetch("api/model3d?name=" + encodeURIComponent(model) + "&level=" + (O.level || 0))
+  const p = loadOne(fetch("api/model3d?name=" + encodeURIComponent(model) + "&level=" + lv)
     .then(r => r.ok ? r.json() : null).then(j => {
       if (!j || !j.ok) return null;
       const m = j.model, g = new THREE.BufferGeometry();
@@ -288,14 +324,16 @@ function texturedModel(model) {
       g.computeBoundingSphere();
       g.userData.keep = true;
       return { geo: g, groups: m.groups };
-    }).catch(() => null);
+    }).catch(() => null));
   TMODEL.set(key, p);
   return p;
 }
 function textureOf(name) {
-  const key = name + "@" + (O.level || 0);
+  const lv = (O && O.level) || 0, key = name + "@" + lv;
   if (TEX.has(key)) return TEX.get(key);
-  const t = new THREE.TextureLoader().load("api/texture?name=" + encodeURIComponent(name) + "&level=" + (O.level || 0) + "&size=512");
+  let arrived;
+  loadOne(new Promise(r => { arrived = r; }));
+  const t = new THREE.TextureLoader().load(texUrl(name, lv), () => arrived(), undefined, () => arrived());
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.flipY = false;                  // the game's uvs start at the top row
@@ -303,6 +341,35 @@ function textureOf(name) {
   TEX.set(key, t);
   return t;
 }
+// Everything a level's close-up draws, fetched before it is asked for, so the
+// 3D view opens whole: each model (kept, as the close-up keeps them), then the
+// pictures they are drawn with (into the browser's cache, for the close-up to
+// find there). onProgress(stage, done, total) as it goes: "models", then
+// "pictures", then "ready". A newer call stops an older one.
+let PREP = 0;
+async function prepare(level, models, onProgress) {
+  const mine = ++PREP, lv = level || 0;
+  const list = [...new Set(models)].filter(Boolean), pics = [], seen = new Set();
+  const say = (stage, done, total) => { if (mine === PREP && onProgress) onProgress(stage, done, total); };
+  async function each(items, stage, work) {
+    let next = 0, done = 0;
+    say(stage, 0, items.length);
+    await Promise.all(Array.from({ length: 6 }, async () => {
+      while (next < items.length && mine === PREP) {
+        await work(items[next++]);
+        say(stage, ++done, items.length);
+      }
+    }));
+  }
+  await each(list, "models", async m => {
+    const t = await texturedModel(m, lv);
+    if (t) for (const g of t.groups) if (g[2] && !seen.has(g[2])) { seen.add(g[2]); pics.push(g[2]); }
+  });
+  if (mine !== PREP) return;
+  await each(pics, "pictures", n => fetch(texUrl(n, lv)).then(r => r.blob()).catch(() => null));
+  say("ready", list.length + pics.length, list.length + pics.length);
+}
+
 // the model's own look, once it has come: its textures, tinted for what it is
 function dress(mesh, it, isTarget) {
   if (!S.textured || !it.model || !O.level) return;
@@ -314,7 +381,7 @@ function dress(mesh, it, isTarget) {
       const m = new THREE.MeshLambertMaterial({ color: tint, side: THREE.DoubleSide, flatShading: true,
         map: gr[2] ? textureOf(gr[2]) : null, alphaTest: gr[3] ? 0.5 : 0 });
       if (isTarget) m.emissive = new THREE.Color(0x2a1c00);
-      else m.clippingPlanes = [S.cut];
+      else m.clippingPlanes = cutFor(it);
       return m;
     });
     const old = mesh.material;
@@ -367,7 +434,7 @@ function makeItem(it) {
   }
   const isTarget = it.key === O.target.key;
   const mat = material(colorOf(it), isTarget ? { emissive: 0x3a2a00 } : {});
-  if (!isTarget && it.type !== "terrain") mat.clippingPlanes = [S.cut];
+  if (!isTarget && it.type !== "terrain") mat.clippingPlanes = cutFor(it);
   const g = it.model ? geometryOf(it.model) : null;
   const body = new THREE.Group();
   body.position.z = it.lift || 0;
@@ -417,7 +484,7 @@ function gunOf(it, isTarget, ghostMat) {
   const gg = geometryOf(it.gun);
   if (!gg) return new THREE.Group();
   const q = it.grip, mat = ghostMat || material(COL.gun, isTarget ? { emissive: 0x2a1c00 } : {});
-  if (!ghostMat && !isTarget) mat.clippingPlanes = [S.cut];
+  if (!ghostMat && !isTarget) mat.clippingPlanes = cutFor(it);
   const gun = new THREE.Mesh(gg, mat);
   gun.matrixAutoUpdate = false;
   gun.matrix.set(q[3], q[4], q[5], q[0], q[6], q[7], q[8], q[1], q[9], q[10], q[11], q[2], 0, 0, 0, 1);
@@ -487,13 +554,17 @@ function ribbon(pts, width, lift) {
 // width across the way, its height up from it (an embankment hangs below the
 // rails it carries). Trainyard's embankment waypoints stand 130 m apart, the
 // length of the model itself; elsewhere the model is stretched to the stretch.
-// The curve is the map's own (Catmull-Rom through four waypoints), heights and all.
+// The curve is the map's own in plan (Catmull-Rom through four waypoints); the
+// height runs straight from one waypoint to the next. Smoothed like the plan, it
+// sagged: Trainyard's track by the player's start dipped 1.4 m into level
+// ground before the waypoint where the embankment begins, 19 m higher.
 function curveAt(c, t, out) {
   const p0 = c.ctrl[0], p1 = c.ctrl[1], p2 = c.ctrl[2], p3 = c.ctrl[3], t2 = t * t, t3 = t2 * t;
-  for (let k = 0; k < 3; k++)
+  for (let k = 0; k < 2; k++)
     out[k] = c.linear ? p1[k] + (p2[k] - p1[k]) * t
       : 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2
         + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3);
+  out[2] = p1[2] + (p2[2] - p1[2]) * t;
   return out;
 }
 function bentAlong(geo, c) {
@@ -522,6 +593,7 @@ function bentAlong(geo, c) {
   return g;
 }
 function splineMeshes(list) {
+  S.splineKeys = list.map(t => t.key).sort().join("|");
   const group = new THREE.Group();
   const mats = {}, fillId = S.fillId;
   for (const s of list) {
@@ -548,7 +620,7 @@ function splineMeshes(list) {
     texturedModel(s.model).then(t => {
       if (!t || fillId !== S.fillId || !group.parent) return;
       const ms = t.groups.map(gr => new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide,
-        flatShading: true, map: gr[2] ? textureOf(gr[2]) : null, alphaTest: gr[3] ? 0.5 : 0, clippingPlanes: [S.cut] }));
+        flatShading: true, map: gr[2] ? textureOf(gr[2]) : null, alphaTest: gr[3] ? 0.5 : 0 }));
       group.add(new THREE.Mesh(bentAlong(t.geo, s), ms));
       for (const m of strip) m.visible = false;
     });
@@ -765,7 +837,9 @@ function explore(now) {
     cutEl.value = 100;
     setCut(100);
   }
-  const got = O.explore(wx, wy, p.z + o[2], ground);
+  let got = null;
+  try { got = O.explore(wx, wy, p.z + o[2], ground); }
+  catch (e) { console.warn("the close-up could not gather round the camera:", e); }   // tried again as it moves
   if (!got) return;
   if (got.terrain) {
     O.terrain = got.terrain;
@@ -774,6 +848,15 @@ function explore(now) {
     S.root.add(terrainMesh(O.terrain));
   }
   update({ objects: got.objects, nav: got.nav });
+  if (got.splines) {
+    const keys = got.splines.map(t => t.key).sort().join("|");
+    if (keys !== S.splineKeys) {
+      if (S.splines) { S.root.remove(S.splines); drop(S.splines); }
+      O.splines = got.splines;
+      S.splines = got.splines.length ? splineMeshes(got.splines) : null;
+      if (S.splines) S.root.add(S.splines);
+    }
+  }
   sunOver(Math.round(p.x), Math.round(p.y), Math.round(p.z));
 }
 
@@ -1013,6 +1096,15 @@ function headingOf(it) {
   return it.head === 0 ? -rot[0] : rot[2];
 }
 
+// A cut set for the room the close-up opened in is for that room: what stands
+// round it is cut, and the rest of the level keeps its tops - a watchtower's
+// head, the floors of the building across the yard. Set by hand anywhere else,
+// the cut is the level's.
+function cutFor(it) {
+  const r = O && O.room;
+  if (!r || !it || it.x == null) return [S.cut];
+  return Math.hypot(it.x - r.x, it.y - r.y) <= r.r ? [S.cut] : [];
+}
 function setCut(v) {
   const el = S.el.querySelector(".v3d-cutv");
   if (v >= 100) {
@@ -1061,7 +1153,7 @@ function hits(ray, skipTarget, list) {
     const mm = h.object.material, mat = Array.isArray(mm) ? mm[h.face.materialIndex] : mm;
     if (mat && mat.alphaTest > 0 && it.key !== O.target.key) return false;
     // above the cut, nothing is there
-    if (S.cut.constant < 1e5 && h.point.z > S.cut.constant && it.key !== O.target.key && it.type !== "terrain") return false;
+    if (S.cut.constant < 1e5 && h.point.z > S.cut.constant && it.key !== O.target.key && it.type !== "terrain" && cutFor(it).length) return false;
     return true;
   }).map(h => {
     const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
@@ -1775,7 +1867,7 @@ function screenOf(x, y, z) {
   return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height];
 }
 
-window.View3D = { open, close, isOpen, follow, update, screenOf, setPlacing, target: () => O && O.target,
+window.View3D = { open, close, isOpen, follow, update, screenOf, setPlacing, prepare, target: () => O && O.target,
   cam: () => S ? [S.camera.position.x, S.camera.position.y, S.camera.position.z] : null,
   walking: () => !!(S && S.walking), navCount: () => (S && S.nav ? S.nav.children.length : 0),
   // what a step forward meets - for the tests
