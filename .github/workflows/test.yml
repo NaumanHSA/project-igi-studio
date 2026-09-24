@@ -1,0 +1,40 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Run regression tests
+        run: python -m unittest discover -v
+
+      - name: Check Python syntax
+        run: python -m compileall -q studio tests
+
+      - name: Install desktop app tools
+        working-directory: app
+        run: npm ci
+
+      - name: Build bundled server
+        working-directory: app
+        run: npm run server

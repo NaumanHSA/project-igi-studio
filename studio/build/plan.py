@@ -16,6 +16,7 @@
 import base64, binascii, collections, heapq, json, math, os, pathlib, re, struct, sys
 from studio import paths
 from studio.qvm import source as qvm_source
+from studio.build.objects import set_soldier_team
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.build.plan), do not import it. The guard below
 # turns an accidental import into a clear error instead of a surprise.
@@ -3022,6 +3023,8 @@ for e in EDITS:
             warnings.append("%s: camera settings in a layout this editor does not rewrite - kept" % e["ref"])
     seg = h.group(1) + "%s, %s, %s%s, \"%s\"" % (x, y, z, nums, model) + rest
     if e.get("type") == "soldier":
+        if e.get("team") is not None:
+            seg = set_soldier_team(seg, model, e["team"])
         if e.get("weapon"):
             seg = re.sub(r'("Gun\w*", "", ")WEAPON_ID_[A-Z0-9_]+(")', r"\g<1>%s\g<2>" % e["weapon"], seg, count=1)
         if e.get("ai"):
