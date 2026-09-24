@@ -767,17 +767,29 @@ view never ends at a cliff.
   onto the generator below instead of a sheet of soil across it, and the
   tunnels of Eagle's Nest are not blocked by snow. An empty map keeps its
   ground, since it is built without them.
-- **A building of yours opens the ground the game opens for it.** Each
-  building's kit carries the squares its home level takes away (a cellar's
-  stairs, a lift's shaft: the underground security building one 16 m square,
-  the power building two), and Apply opens them again wherever you put it -
-  in the terrain's finest cubes, 8 m, since the game's 16 and 32 m squares
-  are laid on a grid of their own and would open ground beside the building
-  wherever it stands off that grid. Only the 8 m squares inside the
-  building's footprint are opened, and every square over a lift shaft of
-  yours that goes below the ground; the close-up shows the same squares. (The
-  game's own levels never use the 8 m cubes; they are the leaves the terrain
-  is made of.)
+- **A building of yours opens the ground the game opens for it, and stands
+  on the game's ground grid to do it.** Each building's kit carries the
+  squares its home level takes away (a cellar's stairs, a lift's shaft: the
+  underground security building one 16 m square, the power building two).
+  The game opens ground only a whole octree cube at a time and draws it that
+  way: its levels use 16 m cubes (LOD 15) and 32 m ones (LOD 14), each on a
+  grid of its own, and its buildings stand where those squares fall under
+  their walls. A smaller cube does not do: the terrain's 8 m leaves can be
+  opened, and walked through, but every cube carries a mesh of its own and
+  the 16 m one's is still drawn over them - soil over the stairs. So a
+  building that opens the ground is set on the grid the way the game's copy
+  of it stands: placing it lands it there, dragging it moves it freely and
+  lets go onto the grid, turning or moving it anywhere else keeps it there,
+  and a mission made before this has such buildings moved on once as it
+  opens (a banner says which and how far; each is an ordinary move in the
+  change log, and undo takes it back). Every opening is laid in 16 m cubes -
+  a 32 m square is four - so the grid is 16 m and a building moves at most
+  8 m each way to sit on it. Apply opens the game's own squares for it, and a
+  lift of yours going below the ground has its shaft opened where no square
+  of its building covers it already. One turned off the square cannot sit on
+  the grid: it gets the 8 m leaves wholly inside its squares and its
+  footprint, walkable with the soil still drawn, and the check says so. The
+  close-up shows exactly the openings Apply makes.
 - **Roads and the railway are the game's own models:** each stretch of a
   spline is laid with the model its waypoint names, bent along the curve from
   one waypoint to the next and fitted to the stretch, as the game lays it
@@ -1177,7 +1189,12 @@ floor there, not on the ground, so upper floors take doors too.
   player, opening when the cabin reaches that floor (`Elevator_N.vFloor == k`)
   and shutting when any of its buttons is pressed. Which doors those are is not
   guessed - the game's own wiring says so, and that is kept with the door, so an
-  ordinary door beside a shaft still opens by hand.
+  ordinary door beside a shaft still opens by hand. Which floor a door opens at
+  is the floor at its own height: the number the game wires it with counts the
+  floors of the copy of the building it was read from, and copies run their
+  lift's path either way - Eagle's Nest's lift building has one counting from
+  the bottom and one from the top, and a door read from one opened at the top
+  while the cabin of the other stood at the bottom, onto the empty shaft.
 - **A shaft that runs below the ground opens the ground over it**
   (`DiscardTerrain`, as the game does where its own lifts go down), so the cabin
   is not stopped by the terrain. A lift between the floors of a building leaves

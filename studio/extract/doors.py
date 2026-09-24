@@ -481,6 +481,13 @@ def build(game, data_dir, levels=range(1, 15), log=print):
             e["props"] = props
         if out_holes.get(model):
             e["holes"] = out_holes[model]
+        # a lift's doors are numbered by the floor they stand at, counted as this
+        # kit's lift counts them: the doors and the lift can come from copies of
+        # the building whose lift paths run opposite ways
+        stops = [st[2] for st in ((out_lifts.get(model) or [{}])[0].get("stops") or [])]
+        for d in e.get("doors") or []:
+            if d.get("liftFloor") is not None and stops:
+                d["liftFloor"] = min(range(len(stops)), key=lambda k: abs(stops[k] - d["dz"]))
         every[model] = e
     return {"v": 2, "models": models, "buildings": every}
 

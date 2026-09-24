@@ -4836,6 +4836,10 @@ function isRemoved(o){
 // one way to change any object, yours or shipped
 function setProp(o,fields){
   if(!canEdit())return;
+  if(o.own&&holesOf(o)&&("x" in fields||"y" in fields||"gamma" in fields)){
+    var hg=onHoleGrid(o,"x" in fields?fields.x:o.x,"y" in fields?fields.y:o.y,"gamma" in fields?fields.gamma:o.gamma);
+    fields=Object.assign({},fields,{x:hg.x,y:hg.y});
+  }
   // a move takes what rests on it (and hangs on it) along
   var d=null,riders=[];
   if("x" in fields||"y" in fields||"z" in fields){
@@ -8326,11 +8330,48 @@ function terrain3d(o,R){
   return {x0:x0,y0:y0,cell:cell,w:w,h:h,z:z,shade:shade,rgb:rgb,tile:tile,mat:tex?mat:null,tex:tex,
     hole:levelHoles(x0,y0,cell,w,h,openBelow(x0,y0,cell,w,h,z))};
 }
+// The game opens ground only a whole octree cube at a time, and draws it that
+// way: 16 m squares (LOD 15) or 32 m (LOD 14), each on a grid of its own size.
+// A smaller cube's opening can be walked through, but the soil over it is
+// still drawn - every cube carries a mesh of its own, the coarser ones over
+// the finer. The game's buildings stand where their squares fall under their
+// walls, and a building of yours that opens the ground (its kit's "holes": a
+// cellar's stairs, a lift's shaft) is set down the same way - moved to the
+// nearest place where its squares land on the grid, as the game's copy of it
+// stands, and kept there as it moves and turns. Every opening is laid in 16 m
+// cubes (a 32 m square is four of them), so it needs only the 16 m grid: a
+// building moves at most 8 m each way to sit on it.
+var HOLE_TOL=0.25,HOLE_GRID=16;
+function holesOf(o){
+  var k=o&&o.type==="building"&&DOORS&&DOORS.buildings&&DOORS.buildings[o.model];
+  return k&&k.holes&&k.holes.length?k.holes:null;
+}
+function holeCentres(o,x,y,g){
+  var hs=holesOf(o);if(!hs)return null;
+  g=g==null?(o.gamma||0):g;var c=Math.cos(g),sn=Math.sin(g);
+  return hs.map(function(h){return {x:x+h.dx*c-h.dy*sn,y:y+h.dx*sn+h.dy*c,s:h.size}});
+}
+function squareTurn(g){var q=Math.PI/2,r=((g%q)+q)%q;return Math.min(r,q-r)<0.02}
+// how far a square's corner lies from the nearest line of the grid
+function gridOff(v){return v-Math.floor(v/HOLE_GRID+0.5)*HOLE_GRID}
+// where o would stand for its squares' corners to fall on the grid (all of
+// them do together once it is turned square: the game's copy stood so)
+function onHoleGrid(o,x,y,g){
+  var cs=holeCentres(o,x,y,g);if(!cs)return {x:x,y:y};
+  var h=cs[0];
+  return {x:+(x-gridOff(h.x-h.s/2)).toFixed(3),y:+(y-gridOff(h.y-h.s/2)).toFixed(3)};
+}
+function holesAligned(o){
+  var cs=holeCentres(o,o.x,o.y);if(!cs)return true;
+  return squareTurn(o.gamma||0)&&cs.every(function(h){
+    return Math.abs(gridOff(h.x-h.s/2))<HOLE_TOL&&Math.abs(gridOff(h.y-h.s/2))<HOLE_TOL});
+}
 // The ground a building of yours opens, laid as Apply lays it
-// (studio/build/plan.py, HOLE_LOD): the game's own squares for that building,
-// in the terrain's 8 m leaves whose middle is inside them and which lie inside
-// the building's footprint, and the leaves over the shaft of each lift of
-// yours that goes below the ground. As [x, y, size] squares, like the level's.
+// (studio/build/plan.py, the ground a building opens): on the grid, the game's
+// own squares for it; off it (turned off the square), the terrain's 8 m leaves
+// wholly inside those squares and its footprint, which open the way but still
+// show the soil; and the leaves over the shaft of a lift of yours that goes
+// below the ground where no square of its building covers it. As [x, y, size].
 var HOLE_M=8;
 function placedHoles(){
   var out={},SZ=MODELS&&MODELS.sizes,KB=DOORS&&DOORS.buildings;
@@ -8344,15 +8385,28 @@ function placedHoles(){
     }
     return true;
   }
+  var covered={},cells={};                         // buildings whose squares open their shafts
   placements.forEach(function(b){
-    var hs=b.type==="building"&&KB&&KB[b.model]&&KB[b.model].holes;if(!hs)return;
-    var g=b.gamma||0,c=Math.cos(g),sn=Math.sin(g),ci=Math.cos(-g),si=Math.sin(-g);
-    hs.forEach(function(h){
-      var hx=b.x+h.dx*c-h.dy*sn,hy=b.y+h.dx*sn+h.dy*c,hw=h.size/2,r=Math.hypot(hw,hw);
-      for(var ix=Math.floor((hx-r)/HOLE_M);ix<=Math.floor((hx+r)/HOLE_M);ix++)
-        for(var iy=Math.floor((hy-r)/HOLE_M);iy<=Math.floor((hy+r)/HOLE_M);iy++){
-          var x=(ix+.5)*HOLE_M-hx,y=(iy+.5)*HOLE_M-hy;
-          if(Math.abs(x*ci-y*si)<=hw&&Math.abs(x*si+y*ci)<=hw&&within(b,ix,iy))out[ix+","+iy]=1;
+    var cs=holeCentres(b,b.x,b.y);if(!cs)return;
+    if(holesAligned(b)){
+      cs.forEach(function(h){
+        var x0=Math.floor((h.x-h.s/2)/HOLE_GRID+0.5)*HOLE_GRID,y0=Math.floor((h.y-h.s/2)/HOLE_GRID+0.5)*HOLE_GRID;
+        var n=Math.max(1,Math.round(h.s/HOLE_GRID));
+        for(var i=0;i<n;i++)for(var j=0;j<n;j++)cells[(x0+i*HOLE_GRID)+","+(y0+j*HOLE_GRID)]=1;
+      });
+      covered[b.uid]=cs;return;
+    }
+    var g=b.gamma||0,ci=Math.cos(-g),si=Math.sin(-g);
+    cs.forEach(function(h){
+      var hw=h.s/2,r=Math.hypot(hw,hw);
+      for(var ix=Math.floor((h.x-r)/HOLE_M);ix<=Math.floor((h.x+r)/HOLE_M);ix++)
+        for(var iy=Math.floor((h.y-r)/HOLE_M);iy<=Math.floor((h.y+r)/HOLE_M);iy++){
+          var inside=true;                             // the whole leaf inside the square
+          for(var ax=0;ax<2&&inside;ax++)for(var ay=0;ay<2&&inside;ay++){
+            var x=(ix+ax)*HOLE_M-h.x,y=(iy+ay)*HOLE_M-h.y;
+            if(Math.abs(x*ci-y*si)>hw+0.01||Math.abs(x*si+y*ci)>hw+0.01)inside=false;
+          }
+          if(inside&&within(b,ix,iy))out[ix+","+iy]=1;
         }
     });
   });
@@ -8361,15 +8415,19 @@ function placedHoles(){
     var low=Math.min.apply(null,st.map(function(q){return L.z+(+q[2])}));
     var home=L.of?placements.filter(function(p){return p.uid===L.of})[0]:null,ground=home?home.z:L.z;
     if(low>ground-2)return;
+    var cv=home&&covered[home.uid];
+    if(cv&&cv.some(function(h){return Math.abs(L.x-h.x)<=h.s/2&&Math.abs(L.y-h.y)<=h.s/2}))return;
     var s=SZ[L.model||"200_01_1"]||{},g=L.gamma||0,c=Math.cos(g),sn=Math.sin(g);
     var mx=L.x+(s.cx||0)*c-(s.cy||0)*sn,my=L.y+(s.cx||0)*sn+(s.cy||0)*c;
     var hw=(s.w||3.8)/2+0.2,hd=(s.d||3.8)/2+0.2,nx=Math.max(1,Math.ceil(2*hw/0.5)),ny=Math.max(1,Math.ceil(2*hd/0.5));
     for(var i=0;i<=nx;i++)for(var j=0;j<=ny;j++){
       var lx=-hw+2*hw*i/nx,ly=-hd+2*hd*j/ny;
-      out[Math.floor((mx+lx*c-ly*sn)/HOLE_M)+","+Math.floor((my+lx*sn+ly*c)/HOLE_M)]=1;
+      var lix=Math.floor((mx+lx*c-ly*sn)/HOLE_M),liy=Math.floor((my+lx*sn+ly*c)/HOLE_M);
+      if(!home||within(home,lix,liy))out[lix+","+liy]=1;     // never ground beside its building
     }
   });
-  return Object.keys(out).map(function(k){var q=k.split(",");return [+q[0]*HOLE_M,+q[1]*HOLE_M,HOLE_M]});
+  return Object.keys(cells).map(function(k){var q=k.split(",");return [+q[0],+q[1],HOLE_GRID]})
+    .concat(Object.keys(out).map(function(k){var q=k.split(",");return [+q[0]*HOLE_M,+q[1]*HOLE_M,HOLE_M]}));
 }
 // Where the game takes its own ground away - over a cellar, down a lift shaft,
 // at a tunnel's mouth (the level's DiscardTerrain squares, 16 or 32 m) - the
@@ -8416,6 +8474,7 @@ function lowTris(model){
   }
   return (LOWTRI[model]=out);
 }
+var OPEN_DEEP=6;           // metres: deeper than this under the ground, a room is underground
 function openBelow(x0,y0,cell,w,h,z){
   if(!window.MeshSprites||!MeshSprites.ready())return null;
   var x1=x0+(w-1)*cell,y1=y0+(h-1)*cell,top=null,any=false;
@@ -8451,7 +8510,9 @@ function openBelow(x0,y0,cell,w,h,z){
   });
   if(!any||!top)return null;
   var hole=null;
-  for(var q=0;q<w*h;q++)if(top[q]>-Infinity&&top[q]<z[q]-0.3){if(!hole)hole=new Uint8Array(w*h);hole[q]=1}
+  // a ramp or a sunken yard is a few metres down; a room far below (the lift
+  // building's tunnel, 25 m under Eagle's Nest) is roofed by the ground itself
+  for(var q=0;q<w*h;q++)if(top[q]>-Infinity&&top[q]<z[q]-0.3&&top[q]>z[q]-OPEN_DEEP){if(!hole)hole=new Uint8Array(w*h);hole[q]=1}
   return hole;
 }
 // what an inventory item looks like in hand in the close-up, or null (routes,
@@ -10562,7 +10623,7 @@ function loadLevel(n,then){
     BASE_LEVEL=n>14?1:n;   // a custom slot reuses a shipped level's labels
     wallCache=null;
     buildPalette();renderSide();fit(false);draw();
-    if(then){then();prepare3d()}
+    if(then){then();try{prepare3d()}catch(e){console.warn("3D not prepared:",e)}}
   }).catch(function(){
     LEVEL={bounds:{minX:0,maxX:1,minY:0,maxY:1},objects:[],graphs:{}};GRAPHS={};
     draw();$("ro-hov").textContent="level data unavailable";
@@ -10903,10 +10964,30 @@ function openMission(id){
       // mission looked changed each time it opened
       if(!SRV||(Store&&Store.local))settleAll();
       seedObjectives();heightsSoon();
+      try{gridExisting()}catch(e){console.warn("buildings not set onto the ground grid:",e)}
       if(m.base.kind==="empty"&&!placements.length)
         banner("<b>An empty map.</b> "+esc(baseLabel(m.base))+": terrain, sky and weather, with nothing built. Place buildings, guards and pickups from the left.");
     });
   }).catch(function(e){toast("Could not open it: "+e.message);showLibrary()});
+}
+// Buildings placed before the grid mattered: moved onto it once, as the mission
+// opens, each an ordinary move (the change log shows it, undo takes it back),
+// its doors, lift and furniture going with it.
+function gridExisting(){
+  if(!canEditQuiet())return;
+  var moved=[];
+  placements.forEach(function(b){
+    if(!b.own||!holesOf(b)||holesAligned(b))return;
+    var to=onHoleGrid(b,b.x,b.y),d=Math.hypot(to.x-b.x,to.y-b.y);
+    if(d<0.01)return;
+    lastChangeAt=0;
+    setProp(b,{x:to.x,y:to.y});
+    moved.push(displayName(b)+" "+d.toFixed(1)+" m");
+  });
+  if(!moved.length)return;
+  renderSide();draw();
+  banner("<b>Set onto the ground grid:</b> "+esc(moved.join(", "))+". The game opens the ground under a cellar or a lift shaft "+
+    "in 16 m squares on a grid of its own, as its own buildings stand; off it, the opening showed beside the building. Undo takes it back.");
 }
 function viewBuiltin(level){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
@@ -11192,7 +11273,11 @@ function bind(){
       }
     }
     if(mouse.drag&&mouse.panned&&mouse.drag.type==="graphnode")renderNavSection();
-    else if(mouse.drag&&mouse.panned&&mouse.drag.type!=="navnode")settle(mouse.drag,true);
+    else if(mouse.drag&&mouse.panned&&mouse.drag.type!=="navnode"){
+      // dragged freely; let go, a building with a cellar settles onto the ground grid
+      if(mouse.drag.own&&holesOf(mouse.drag))setProp(mouse.drag,{x:mouse.drag.x,y:mouse.drag.y});
+      settle(mouse.drag,true);
+    }
     mouse.down=false;mouse.drag=null;cv.classList.remove("panning");
   });
   cv.addEventListener("wheel",function(e){
@@ -12189,6 +12274,9 @@ function placementPose(wx,wy){
   var g=tool.gamma!=null?tool.gamma:(tool.group==="ai"?Math.PI:0);
   var pose={x:wx,y:wy,gamma:g};
   if(tool.group!=="obj")return pose;
+  if(holesOf({type:"building",model:tool.id})){         // onto the ground grid, as the game's stand
+    var hg=onHoleGrid({type:"building",model:tool.id},wx,wy,g);pose.x=hg.x;pose.y=hg.y;return pose;
+  }
   var seg=segInfo(tool.id);if(!seg)return pose;
   var start=tool.chain;
   if(start&&Math.hypot(wx-start[0],wy-start[1])>seg.len*3)start=null;   // wandered off: new run
