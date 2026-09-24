@@ -1466,6 +1466,9 @@ function footprint(o){
   if(s.w<1.6&&s.d<1.6)return null;   // too small to read as a shape - use an icon
   return s;
 }
+// a soldier on team 0 fights on your side: the game's own friendlies (the
+// driver in Trainyard), and any this mission turns over
+function isAlly(o){return !!o&&o.type==="soldier"&&o.team===0}
 // what stays a symbol on the map rather than its model from above
 var ICON_ONLY=/^(tree|bush|lamp|pole|computer|camera|switch)$/;
 // something you can't go into: not a building, and not flat (a runway, a pad)
@@ -1474,7 +1477,7 @@ function styleFor(o){
   var icon=window.PlanIcons?PlanIcons.iconFor(o):"dot";
   var own=fresh(o);                  // yours and not in the game yet
   var c=own?css("--accent")
-    :o.type==="player"?css("--player"):o.type==="soldier"?css("--enemy")
+    :o.type==="player"?css("--player"):o.type==="soldier"?css(isAlly(o)?"--player":"--enemy")
     :o.type==="building"||o.type==="door"?css("--build")
     :o.type==="pickup"||o.type==="terminal"?css("--pickup"):css("--prop");
   if(o.type==="camera")return {c:own?css("--accent"):css("--enemy"),r:1,icon:"camera",kind:"camera",fp:null,pal:own?"own":"green"};
@@ -5141,7 +5144,8 @@ function objectInspector(el){
   bindDoorSection(o);
   if($("i-ai"))$("i-ai").addEventListener("change",function(){setProp(o,{ai:$("i-ai").value});renderSide();draw()});
   if($("i-team"))$("i-team").addEventListener("change",function(){
-    var v=Number($("i-team").value);if(!Number.isInteger(v)||v<0)return;
+    var v=Number($("i-team").value);
+    if(!Number.isInteger(v)||v<0){$("i-team").value=(o.team!=null?o.team:1);return}
     setProp(o,{team:v});renderSide();draw();
   });
   if($("i-wp"))$("i-wp").addEventListener("change",function(){setProp(o,{weapon:$("i-wp").value});renderSide()});
@@ -9938,7 +9942,7 @@ function legendRows(){
   function bump(k){count[k]=(count[k]||0)+1}
   var seenIcon={},seenWeapon={},meshN=0,fpN=0,solidN=0;
   objs.forEach(function(o){
-    if(o.type==="soldier"){bump(o.own?"own":"s:"+PlanIcons.soldierIcon(o.ai))}
+    if(o.type==="soldier"){bump(isAlly(o)?"ally":o.own?"own":"s:"+PlanIcons.soldierIcon(o.ai))}
     else if(o.type==="camera")bump(o.own?"camOwn":"cam");
     else if(o.type==="player")bump("player");
     else if(o.type==="pickup"){var wi=PlanIcons.weaponIcon(o.pickupId||o.model);seenWeapon[wi]=(seenWeapon[wi]||0)+1}
@@ -9955,6 +9959,7 @@ function legendRows(){
   function row(group,sw,label,n){rows.push({group:group,sw:sw,label:label,n:n})}
   if(count.player)row("People",function(){return markerSwatch("player","player",css("--player"),20)},"Player start",count.player);
   if(count.own)row("People",function(){return markerSwatch("soldier","contact",acc,20)},"Your guards",count.own);
+  if(count.ally)row("People",function(){return markerSwatch("soldier","contact",css("--player"),20)},"Fights on your side",count.ally);
   ["contact","sniper","heavy","officer","civilian"].forEach(function(k){
     if(count["s:"+k])row("People",function(){return markerSwatch("soldier",k,red,20)},SOLDIER_NAMES[k],count["s:"+k]);
   });

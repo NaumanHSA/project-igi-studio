@@ -1780,6 +1780,15 @@ takes these from the shipped soldiers: skeleton 6 for the two models that ship
 with it (015_01_1 and 012_01_1), 1 for every other model. The team is 1
 (enemy) unless the placement sets another.
 
+**Which side a soldier is on** is that team, and the panel shows it for any
+soldier - yours or one the level ships: 0 fights on your side, 1 is the enemy,
+and another number makes a side of its own. Changing it on a shipped soldier
+is an edit like any other: undo puts it back, and Apply writes the number into
+the level's own `HumanSoldier` task, leaving its model, skeleton and its
+nested tasks alone. A soldier on team 0 is drawn in the player's green on the
+map, counted on its own line in the legend, and left out of the guards the
+sight layer watches with.
+
 A model that is missing from the level's `models/levelN.res` gives an
 invisible guard with a floating rifle. **Model import** packs every soldier
 model a mission uses from other levels. Spetnaz 018_01_1 was still invisible

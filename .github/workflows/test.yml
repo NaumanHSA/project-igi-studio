@@ -1,3 +1,9 @@
+# The studio's own tests, on every push and pull request.
+#
+# This checks the Python that builds a mission - quick, so it can run on every
+# commit. The bundled server, the installer and the portable zip are built by
+# release.yml when a tag is pushed; repeating that whole build here would take
+# tens of minutes for no more certainty.
 name: Test
 
 on:
@@ -10,8 +16,8 @@ permissions:
 
 jobs:
   test:
-    runs-on: windows-latest
-    timeout-minutes: 30
+    runs-on: windows-latest          # where the studio runs, and where its paths are tested
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -19,22 +25,8 @@ jobs:
         with:
           python-version: '3.14'
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Run regression tests
+      - name: Run the tests
         run: python -m unittest discover -v
 
-      - name: Check Python syntax
+      - name: Check every module still compiles
         run: python -m compileall -q studio tests
-
-      - name: Install desktop app tools
-        working-directory: app
-        run: npm ci
-
-      - name: Build bundled server
-        working-directory: app
-        run: npm run server
