@@ -847,6 +847,16 @@ goes on it as it is. `studio/extract/meshes.py` writes where each character
 holds it (`grips` in the level data's `meshes.json`). Change his weapon and the
 gun in his hands changes with it.
 
+**The weapons offered are the ones the game arms a soldier with** - the
+thirteen its own levels hand out, from the AK-47 to the RPG-18. A knife, a
+flashbang, a proximity mine or the dual Uzi never goes to a soldier who
+fights: the game's only two knife-carriers stand in cutscenes, and a guard
+given one holds it like a rifle and never uses it, so the panel does not
+offer them and the AI designer is refused when it asks for one. This is read
+from the catalogue, which records how the game itself uses each weapon
+(`as: ["guard"]`), not from a list kept here. A guard who already carries one
+keeps it, marked *he can't use it*.
+
 The models come from the game files: `meshes.bin` in the level data (built by
 `studio/extract/meshes.py`, now with the characters on their skeletons and the
 weapons from the location's shared archive), and textured, on demand, from the

@@ -4862,10 +4862,24 @@ function weaponLabel(id){
   return w?w.label:String(id||"").replace(/^(WEAPON|AMMO)_ID_/,"");
 }
 function enemyInfo(ai){return (CATALOG&&CATALOG.enemies||[]).filter(function(x){return x.id===ai})[0]||null}
+// What the game arms a soldier with. The catalogue keeps how the game uses
+// each weapon, and no soldier who fights carries a knife, a flashbang, a mine
+// or the dual Uzi - the only two knives it hands out are held by characters
+// standing in a cutscene. Given one, a guard holds it like a rifle and can do
+// nothing with it, so it is not offered. One already carrying one keeps it.
+function armsForGuards(){
+  var all=(CATALOG&&CATALOG.weapons)||[];
+  var arms=all.filter(function(w){return (w.as||[]).indexOf("guard")>=0});
+  return arms.length?arms:all.filter(function(w){return w.group!=="ammo"&&w.group!=="items"});
+}
+function guardCanCarry(id){return armsForGuards().some(function(w){return w.id===id})}
 function guardFields(o){
   var enemies=((CATALOG&&CATALOG.enemies)||[]).map(function(e){return {id:e.id,label:e.label,g:e.special?"special":"soldiers"}});
-  var arms=((CATALOG&&CATALOG.weapons)||[]).filter(function(w){return w.group!=="ammo"&&w.group!=="items"})
-    .map(function(w){return {id:w.id,label:w.label,group:w.group}});
+  var arms=armsForGuards().map(function(w){return {id:w.id,label:w.label,group:w.group}});
+  if(o.weapon&&!guardCanCarry(o.weapon)){        // one already holding a knife keeps it, and is told
+    var w0=((CATALOG&&CATALOG.weapons)||[]).filter(function(w){return w.id===o.weapon})[0];
+    arms.unshift({id:o.weapon,label:(w0?w0.label:o.weapon)+" · he can't use it",group:"weapons"});
+  }
   var info=enemyInfo(o.ai),lm=levelModels();
   var models=((info&&info.models)||[]).slice();
   if(o.model&&models.indexOf(o.model)<0)models.unshift(o.model);
@@ -13665,7 +13679,7 @@ var AIB=(function(){
     if(k==="guards")out=((CATALOG&&CATALOG.enemies)||[]).filter(function(e){return hit(e.id+" "+e.label)}).map(function(e){
       return {type:e.id,label:e.label,weapons:e.weapons,models:(e.models||[]).slice(0,8),story_character:!!e.special||undefined}});
     else if(k==="weapons"||k==="items"||k==="pickups")out=((CATALOG&&CATALOG.weapons)||[]).filter(function(w){return hit(w.id+" "+w.label+" "+w.group)}).map(function(w){
-      return {item:w.id,label:w.label,group:w.group}});
+      return {item:w.id,label:w.label,group:w.group,pickup_only:guardCanCarry(w.id)?undefined:true}});
     else if(k==="structures")out=((CATALOG&&CATALOG.structures)||[]).filter(function(s){return hit(s.name+" "+s.cat+" "+(s.raw||"")+" "+s.model)}).map(function(s){
       // where its box sits from its origin, when that matters for fitting parts together
       var z=MODELS&&MODELS.sizes&&MODELS.sizes[s.model],o={model:s.model,name:s.name,category:s.cat,size_m:[r1(s.w),r1(s.d),r1(s.h)],in_this_level:lm.has(s.model)};
@@ -13726,6 +13740,7 @@ var AIB=(function(){
     var ai=a.type||"AITYPE_GUARD_AK",e=enemyInfo(ai);
     if(!e)return fail("No guard type "+ai+". list_catalog with kind guards gives the types.");
     if(a.weapon&&!weaponInfo(a.weapon))return fail("No weapon "+a.weapon+". list_catalog with kind weapons gives them.");
+    if(a.weapon&&!guardCanCarry(a.weapon))return fail(a.weapon+" is a pickup, not something a soldier fights with: he would hold it like a rifle and never use it.");
     var lm=levelModels(),model=(e.models||[]).filter(function(m){return lm.has(m)})[0]||(e.models||[])[0]||"003_01_1";
     var weapon=a.weapon||(e.weapons||[])[0]||"WEAPON_ID_AK47",spots=[],w=null;
     var pos=Array.isArray(a.positions)?a.positions.filter(function(p){return Array.isArray(p)&&isFinite(+p[0])&&isFinite(+p[1])}):[];
@@ -13775,7 +13790,8 @@ var AIB=(function(){
     var o=byId(a.id);if(!o||o.type!=="soldier")return fail("No guard has the id "+a.id+".");
     var f={};
     if(a.type){var e=enemyInfo(a.type);if(!e)return fail("No guard type "+a.type+".");f.ai=a.type;if((e.models||[]).indexOf(o.model)<0){var lm=levelModels();f.model=(e.models||[]).filter(function(m){return lm.has(m)})[0]||(e.models||[])[0]||o.model}if(!a.weapon)f.weapon=(e.weapons||[])[0]||o.weapon}
-    if(a.weapon){if(!weaponInfo(a.weapon))return fail("No weapon "+a.weapon+".");f.weapon=a.weapon}
+    if(a.weapon){if(!weaponInfo(a.weapon))return fail("No weapon "+a.weapon+".");
+      if(!guardCanCarry(a.weapon))return fail(a.weapon+" is a pickup, not something a soldier fights with.");f.weapon=a.weapon}
     if(a.sees_m!=null)f.sees=a.sees_m?Math.max(10,Math.min(200,Math.round(+a.sees_m))):null;
     if(a.view_deg!=null)f.fov=a.view_deg?Math.max(20,Math.min(360,Math.round(+a.view_deg))):null;
     if(a.name&&o.own)f.name=String(a.name).slice(0,60);
@@ -14493,7 +14509,7 @@ var AIB=(function(){
       parts:{type:"array",items:{type:"object",properties:{model:{type:"string"},dx:{type:"number"},dy:{type:"number"},dz:{type:"number"},facing_deg:{type:"number"}},required:["model","dx","dy"]}},
       guards:{type:"array",items:{type:"object",properties:{type:{type:"string"},weapon:{type:"string"},dx:{type:"number"},dy:{type:"number"},dz:{type:"number"},facing_deg:{type:"number"},name:{type:"string"}},required:["dx","dy"]}},
       pickups:{type:"array",items:{type:"object",properties:{item:{type:"string"},dx:{type:"number"},dy:{type:"number"},dz:{type:"number"},count:{type:"integer"}},required:["item","dx","dy"]}}},["name"])},
-    {name:"design_character",design:true,description:"Design a character for the user's inventory: a guard type with a model of its kind (list_catalog guards gives the models), a weapon and sight of its own. New weapon types can't be made (the game defines them for every mission at once); any existing weapon can be given. The user sees it in 3D and adds it. Works in Ideas mode too.",parameters:P(Object.assign({
+    {name:"design_character",design:true,description:"Design a character for the user's inventory: a guard type with a model of its kind (list_catalog guards gives the models), a weapon and sight of its own. New weapon types can't be made (the game defines them for every mission at once); any weapon the game arms a soldier with can be given (list_catalog kind weapons, the ones without pickup_only). The user sees it in 3D and adds it. Works in Ideas mode too.",parameters:P(Object.assign({
       name:{type:"string"},description:{type:"string"},type:{type:"string"},model:{type:"string"},weapon:{type:"string"},
       sees_m:{type:"number"},view_deg:{type:"number"}}),["name","type"])},
     {name:"place_design",description:"Place a design (from design_structure, design_character, or list_catalog designs) on the map, centred on a point.",parameters:P(Object.assign(withXY({id:{type:"string"}}),FACE),["id"])},
