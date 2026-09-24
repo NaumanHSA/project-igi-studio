@@ -4756,7 +4756,7 @@ var edits={}, removeRefs=[];
 // (studio/build/textures.py). Name is the texture's, as the model names it.
 var MTEX=[];
 function texOwn(name){return MTEX.filter(function(x){return x.name===name})[0]||null}
-var EDIT_KEYS=["x","y","z","gamma","model","weapon","ai","patrol","patrolCmds","settle","interior","cam","alarmId","exact","lock","pick","openOn","sees","fov"];
+var EDIT_KEYS=["x","y","z","gamma","model","weapon","ai","team","patrol","patrolCmds","settle","interior","cam","alarmId","exact","lock","pick","openOn","sees","fov"];
 function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v))}
 function objByRef(ref){
   if(!LEVEL||!ref)return null;
@@ -4861,6 +4861,7 @@ function guardFields(o){
   models=models.map(function(m){return {id:m,label:m+(lm.has(m)?"":" · imported on Apply")}});
   return '<div style="display:grid;gap:7px;margin-top:11px">'+
     '<div class="field"><span class="lbl">Type</span><select id="i-ai">'+optionList(enemies,o.ai,"g")+'</select></div>'+
+    '<div class="field"><span class="lbl">Team</span><input type="number" id="i-team" step="1" min="0" value="'+(o.team!=null?o.team:1)+'" aria-label="Team ID"'+(canEditQuiet()?'':' disabled')+'><p class="hint" style="margin:3px 0 0">0 is friendly · 1 is enemy · other IDs create another team.</p></div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'+
     '<div class="field"><span class="lbl">Weapon</span><select id="i-wp">'+optionList(arms,o.weapon,"group")+'</select></div>'+
     '<div class="field"><span class="lbl">Model</span><select id="i-md">'+optionList(models,o.model)+'</select></div></div>'+
@@ -5139,6 +5140,10 @@ function objectInspector(el){
   bindAlarmSection(o);
   bindDoorSection(o);
   if($("i-ai"))$("i-ai").addEventListener("change",function(){setProp(o,{ai:$("i-ai").value});renderSide();draw()});
+  if($("i-team"))$("i-team").addEventListener("change",function(){
+    var v=Number($("i-team").value);if(!Number.isInteger(v)||v<0)return;
+    setProp(o,{team:v});renderSide();draw();
+  });
   if($("i-wp"))$("i-wp").addEventListener("change",function(){setProp(o,{weapon:$("i-wp").value});renderSide()});
   if($("i-md"))$("i-md").addEventListener("change",function(){setProp(o,{model:$("i-md").value});renderSide();draw()});
   [["i-sees","sees"," m"],["i-fov","fov","°"]].forEach(function(f){

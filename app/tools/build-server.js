@@ -15,7 +15,8 @@ const APP = path.resolve(__dirname, '..');
 const ROOT = path.resolve(APP, '..');
 const WORK = path.join(APP, 'build-server');
 const VENV = path.join(WORK, '.venv');
-const PY = path.join(VENV, 'Scripts', 'python.exe');
+const WINDOWS = process.platform === 'win32';
+const PY = path.join(VENV, WINDOWS ? 'Scripts' : 'bin', WINDOWS ? 'python.exe' : 'python');
 const OUT = path.join(APP, 'dist-server');
 // pinned, so a release builds the same server wherever it is built
 const PYINSTALLER = 'pyinstaller==6.22.3';
@@ -28,7 +29,7 @@ function run(cmd, args, opts) {
 
 if (!fs.existsSync(PY)) {
   fs.mkdirSync(WORK, { recursive: true });
-  run(process.env.STUDIO_PYTHON || 'python', ['-m', 'venv', VENV]);
+  run(process.env.STUDIO_PYTHON || (WINDOWS ? 'python' : 'python3'), ['-m', 'venv', VENV]);
 }
 run(PY, ['-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', PYINSTALLER]);
 
@@ -36,8 +37,10 @@ run(PY, ['-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', PYINS
 // as code signing requires them: the same version as the app around it.
 const v = pkg.version.split(/[.-]/).slice(0, 3).map(Number);
 const quad = '(' + v.concat([0]).join(', ') + ')';
-const versionFile = path.join(WORK, 'version.txt');
-fs.writeFileSync(versionFile, `VSVersionInfo(
+let versionFile;
+if (WINDOWS) {
+  versionFile = path.join(WORK, 'version.txt');
+  fs.writeFileSync(versionFile, `VSVersionInfo(
   ffi=FixedFileInfo(filevers=${quad}, prodvers=${quad}, mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
@@ -53,8 +56,9 @@ fs.writeFileSync(versionFile, `VSVersionInfo(
   ]
 )
 `);
+}
 
-const sep = ';';                        // PyInstaller's --add-data separator on Windows
+const sep = path.delimiter;
 const data = [
   [path.join(ROOT, 'editor'), 'editor'],
   [path.join(ROOT, 'studio', 'extract', 'model_names.json'), 'studio/extract'],
@@ -65,18 +69,17 @@ const data = [
 const args = [
   '-m', 'PyInstaller', '--noconfirm', '--clean', '--log-level', 'WARN',
   '--name', 'studio-server', '--onedir', '--console',
-  '--icon', path.join(APP, 'build', 'icon.ico'),
-  '--version-file', versionFile,
   '--distpath', OUT, '--workpath', path.join(WORK, 'work'), '--specpath', WORK,
   '--paths', ROOT,
   // the studio runs most of its modules by name, which PyInstaller cannot see
   '--collect-submodules', 'studio',
 ];
+if (WINDOWS) args.push('--icon', path.join(APP, 'build', 'icon.ico'), '--version-file', versionFile);
 for (const [src, dst] of data) args.push('--add-data', src + sep + dst);
 args.push(path.join(__dirname, 'server_entry.py'));
 run(PY, args);
 
-const exe = path.join(OUT, 'studio-server', 'studio-server.exe');
+const exe = path.join(OUT, 'studio-server', WINDOWS ? 'studio-server.exe' : 'studio-server');
 if (!fs.existsSync(exe)) throw new Error('PyInstaller did not produce ' + exe);
 // it has to run a module by name (how the studio calls its builder); the key
 // store's self-test does that, and proves Windows' encryption works bundled
