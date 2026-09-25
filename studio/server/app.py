@@ -519,33 +519,46 @@ def _data_url_png(u):
 
 def mission_cleanup(cfg, mid):
     """What to tidy in a mission's plan: placed objects hovering above the bare
-    ground under them, and objects placed twice in exactly the same spot."""
+    ground under them, and objects placed twice in exactly the same spot.
+
+    The ground is the level as the mission leaves it (_PlanWorld): an empty map
+    without the level's buildings, and the mission's own buildings in it, each
+    object measured against everything but itself. A desk on the floor of a
+    barracks the mission placed stands on that floor; measured against the bare
+    level it seemed to hover as high as the floor (0.58 m), and so did the
+    doors in its doorways, with nothing to be done about it."""
     m = MS.load(mid)
-    lv = int(m["base"]["level"])
-    surf = surface_for(cfg, lv)
-    sizes = surf._sizes
-    placements = (m.get("plan") or {}).get("placements") or []
+    plan = m.get("plan") or {}
+    placements = plan.get("placements") or []
+    body = {"level": int(m["base"]["level"]), "empty": (m.get("base") or {}).get("kind") == "empty",
+            "removeRefs": plan.get("removeRefs") or [],
+            "edits": [e for e in (plan.get("edits") or []) if isinstance(e, dict) and e.get("x") is not None],
+            "objects": [{"model": p.get("model"), "name": p.get("name"), "x": p["x"], "y": p["y"], "z": p["z"],
+                         "gamma": p.get("gamma") or 0, "ref": "own:%s" % p.get("uid")}
+                        for p in placements if p.get("type") == "building" and p.get("model")]}
     floating, seen, dups = [], {}, []
-    for p in placements:
-        if p.get("type") not in ("building", "pickup"):
-            continue
-        key = (p.get("type"), p.get("model") or p.get("pickupId"), round(p["x"], 2), round(p["y"], 2),
-               round(p["z"], 2), round(p.get("gamma") or 0, 3))
-        if key in seen:
-            dups.append({"uid": p.get("uid"), "name": p.get("name"), "type": p["type"], "x": p["x"], "y": p["y"],
-                         "sameAs": seen[key]})
-            continue
-        seen[key] = p.get("uid")
-        src, z = surf.height(p["x"], p["y"], p["z"], reach_up=0.02)
-        if z is None or src != "terrain":
-            continue                       # only bare ground is certain enough to act on
-        s = sizes.get(p.get("model")) or {}
-        z0 = s.get("z0", 0.0) if p["type"] != "pickup" else 0.0
-        rest = z - (z0 if z0 < -0.1 else 0.0) + (0.5 if p["type"] == "pickup" else 0.0)
-        gap = p["z"] - rest
-        if 0.05 < gap < 0.6:
-            floating.append({"uid": p.get("uid"), "name": p.get("name"), "type": p["type"],
-                             "x": p["x"], "y": p["y"], "z": p["z"], "rest": round(rest, 3), "gap": round(gap, 3)})
+    with _PlanWorld(cfg, body) as surf:
+        sizes = surf._sizes
+        for p in placements:
+            if p.get("type") not in ("building", "pickup"):
+                continue
+            key = (p.get("type"), p.get("model") or p.get("pickupId"), round(p["x"], 2), round(p["y"], 2),
+                   round(p["z"], 2), round(p.get("gamma") or 0, 3))
+            if key in seen:
+                dups.append({"uid": p.get("uid"), "name": p.get("name"), "type": p["type"], "x": p["x"], "y": p["y"],
+                             "sameAs": seen[key]})
+                continue
+            seen[key] = p.get("uid")
+            src, z = surf.height(p["x"], p["y"], p["z"], reach_up=0.02, skip="own:%s" % p.get("uid"))
+            if z is None or src != "terrain":
+                continue                       # only bare ground is certain enough to act on
+            s = sizes.get(p.get("model")) or {}
+            z0 = s.get("z0", 0.0) if p["type"] != "pickup" else 0.0
+            rest = z - (z0 if z0 < -0.1 else 0.0) + (0.5 if p["type"] == "pickup" else 0.0)
+            gap = p["z"] - rest
+            if 0.05 < gap < 0.6:
+                floating.append({"uid": p.get("uid"), "name": p.get("name"), "type": p["type"],
+                                 "x": p["x"], "y": p["y"], "z": p["z"], "rest": round(rest, 3), "gap": round(gap, 3)})
     return {"floating": sorted(floating, key=lambda r: -r["gap"]), "duplicates": dups}
 
 

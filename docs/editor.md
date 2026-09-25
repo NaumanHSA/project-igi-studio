@@ -557,6 +557,22 @@ buttons.
 - **Fences and walls chain:** each click adds a panel that starts where the last
   one ended and points at the cursor, in 15° steps (hold **Alt** for any angle).
   A new run snaps onto the end of a fence nearby. **C** starts a new run.
+- **Or drag a run:** press and drag with a fence or wall in hand. The run
+  starts where you press (on a fence end within 1.5 m if there is one, or at
+  the end of the run in hand if you press near it), and a panel is laid each
+  time the pointer gets a panel's length past the last one, pointing the way
+  the drag goes in 15° steps (**Alt** for any angle), for as long as the drag
+  goes (up to 24 panels a movement, so a fast sweep keeps up). The whole run
+  is one undo step. Letting go ends the drag, not the run: press near its end
+  to carry it on, **C** to start a new one. A press without a drag lays one
+  panel, as a click always has. The middle button still moves the map
+  meanwhile.
+- **Fences, walls, gates and small things come on their own.** Only one of
+  the game's real buildings brings the doors, lift and furniture it has in the
+  levels (see *Doors* below). A fence panel came with an electricity pole and
+  doors, a wall with doors: things that stood near those panels in the level
+  they were read from. A panel, a gate, a crate, a pole, a sign, a lamp, a
+  vehicle, a tree is placed alone.
 
 ## Terrain
 
@@ -1257,6 +1273,9 @@ floor there, not on the ground, so upper floors take doors too.
   33 things, an office 21, a warehouse 26) - taken from one real copy of it, up
   to 40 things. They are ordinary placements: move them, take them out, or keep
   them.
+- **A gate on its own:** the inventory has it beside the gateway, *Gate on its
+  own*: both leaves and the switch that opens them, with no fence panels, for a
+  gap you have walled already or a wall of another kind.
 - **A gate is a whole gateway.** A gate in the game is one leaf, half a way in.
   Placing one (304_01_1, or `place_object` with that model) lays the whole
   thing: both leaves meeting in the middle and sliding back behind their posts,
@@ -1611,6 +1630,15 @@ PUT to rename or re-categorise, DELETE); without the server, in the browser.
   `kit`, and placed from Your items it comes with the doors, lift and
   furniture the game gives it, as from the inventory; the level's own things
   inside it are left out, not to be there twice.
+- **An area of a level's** keeps what makes it work, made yours: its gates and
+  doors (they can't be selected, as they don't move, so the ones among what is
+  selected come along by themselves, and are placed as doors of yours that
+  open), its cameras (cameras of yours, sweeping as they did, on the nearest
+  alarm system), its alarm buttons (alarm buttons of yours, on the nearest
+  system) and the look of its other switches (a gate's or a lift's switch
+  opens things of the level's, so only the switch box comes). The player start
+  and the machine guns stay behind: a mission has one start, and a gun works
+  only with its gunner. A lift's own doors stay with the lift.
 - **Placing:** pick it, turn it with **R**, click to stamp it (patrols follow
   copied nodes and buildings, as a paste does). An alarm system or an event it
   names that this mission does not have falls back to the automatic: the
@@ -1654,7 +1682,25 @@ Check mission…** shows the same list at any time. It has three groups:
 
 Every row has **Show** (select it and fly there). Where there is an obvious
 fix, it also has one: remove the stop, remove the node, set it down, remove
-the copy. The list refreshes after each fix.
+the copy, remove a thing of a model no level ships. The list refreshes after
+each fix. A problem the build's dry run names that another row already lists
+with its fix is listed once, by that row.
+
+- **A switch kept from a level before 25 September 2026** carried the level's
+  switch expression, `"1"`, as its model, and Apply refused the mission ("no
+  level ships model 1"). Its row gives it its look back: **Give it its look**
+  makes it the switch box every level's switches wear (`202_01_1`).
+- **Hovering is measured on the ground as the mission leaves it:** the
+  mission's own buildings are in it, so a desk on the floor of a barracks of
+  yours stands on that floor. It was measured against the bare level, and every
+  fitting of a building of yours seemed to hover as high as the floor, with
+  nothing to be done about it.
+- **A ground area that changes nothing keeps nothing:** a *Level* area at the
+  height the ground already has (the AI designer levels a flat map before it
+  builds) no longer says the ground can't change under everything on it.
+- **The AI designer sees this list:** its `check_mission` gives every row, the
+  server's included, with the id its tools take and the list's own fix, and
+  **Fix with the AI designer** hands it the same.
 
 Before it builds, the dialogue also lists **what goes into the game**: what
 is placed, changed, removed, the navigation it touches and the objectives the

@@ -2042,7 +2042,20 @@ function interiorGraph(o,t){
 // the game like the game's own.
 var DOORS=null;
 function doorInfo(model){return (DOORS&&DOORS.models&&DOORS.models[model])||null}
+// Only a building brings what the game gives it. A fence, a wall, a gate, a
+// crate, a desk, a light, a road or a vehicle is placed on its own: the levels
+// hold kits for them too (the doors and poles standing along a fence, the
+// crates round a crate), and a fence came with a pole and doors.
+var NO_KIT_CATS={crates:1,doors:1,fences:1,furniture:1,lights:1,roads:1,signs:1,vehicles:1,nature:1},KIT_OK={};
+function kitAllowed(model){
+  if(model in KIT_OK)return KIT_OK[model];
+  var c=((CATALOG&&CATALOG.structures)||[]).filter(function(x){return x.model===model})[0];
+  var ok=!(c&&NO_KIT_CATS[c.cat])&&!segInfo(model)&&!doorInfo(model)&&realBuilding(model);
+  if(CATALOG&&MODELS&&DOORS)KIT_OK[model]=ok;           // kept once everything it asks is loaded
+  return ok;
+}
 function buildingKit(model){
+  if(!kitAllowed(model))return {doors:[],lifts:[],props:[]};
   var e=DOORS&&DOORS.buildings&&DOORS.buildings[model];
   if(!e)return {doors:[],lifts:[]};
   return Array.isArray(e)?{doors:e,lifts:[],props:[]}                                 // v1 was a list of doors
@@ -4021,7 +4034,7 @@ function addPlacement(wx,wy){
   if(tool.group==="prefab"){pasteData(tool.data,wx,wy,tool.gamma||0);return}
   if(tool.group==="camera"){addCamera(wx,wy);return}
   if(tool.group==="alarm"){addAlarmPart(wx,wy);return}
-  lastChangeAt=0;           // each placement is its own undo step
+  if(!tool.joinStep)lastChangeAt=0;         // each placement is its own undo step; a dragged run's panels one
   var g0=groundAt(wx,wy),z=g0!=null?g0:guessZ(wx,wy),o;
   if(tool.group==="nav"){
     if(g0==null){
@@ -4050,10 +4063,11 @@ function addPlacement(wx,wy){
     o={uid:uid(),own:true,type:"pickup",kind:"pickup",pickupId:tool.id,
        name:tool.label,x:wx,y:wy,z:z,gamma:tool.gamma||0,count:tool.count||null};
   else if(tool.group==="obj"&&tool.id===GATE_LEAF&&!mouse.alt){
-    var gp=placementPose(wx,wy),kit=addGateKit(gp.x,gp.y,gp.gamma);
+    var gp=placementPose(wx,wy),kit=addGateKit(gp.x,gp.y,gp.gamma,!!tool.alone);
     if(!kit){toast("The gate model is not in this level's data");return}
     sel=kit[0];multi=kit;tool.chain=null;
-    toast("A gateway: both leaves, the switch that opens them and a fence panel each side. Hold Alt to place a single leaf");
+    toast(tool.alone?"A gate on its own: both leaves and the switch that opens them. Hold Alt to place a single leaf"
+      :"A gateway: both leaves, the switch that opens them and a fence panel each side. Hold Alt to place a single leaf");
     renderSide();draw();
     return;
   }
@@ -4186,7 +4200,7 @@ function syncDoorsOf(b){
 // posts, the switch that opens them, and a fence panel in line on each side, so
 // a run of fence carries straight on from either end. The panels are set out
 // the way a fence run is (each model's own ends, segInfo), so nothing overlaps.
-function addGateKit(wx,wy,gamma){
+function addGateKit(wx,wy,gamma,alone){
   var leaf=segInfo(GATE_LEAF),fence=segInfo(GATE_FENCE);
   if(!leaf)return null;
   var th=gamma,ux=Math.cos(th),uy=Math.sin(th),L=leaf.len,made=[];
@@ -4209,7 +4223,7 @@ function addGateKit(wx,wy,gamma){
     o.door={kind:"gate",stop:[w[1]*(L-0.4),0],slider:0,head:2,fixed:[0,0],switch:sw.uid};
   });
   // a fence panel in line on each side, starting where the gateway ends
-  if(fence)[-(L+fence.len),L].forEach(function(d){put(GATE_FENCE,fence,along(d),"Fence")});
+  if(fence&&!alone)[-(L+fence.len),L].forEach(function(d){put(GATE_FENCE,fence,along(d),"Fence")});
   // the switch on the gate post, at hand height, as level 10 has its gate switch
   var px=wx+ux*(L-0.25)-uy*0.35,py=wy+uy*(L-0.25)+ux*0.35,gz=groundAt(px,py);
   sw.x=+px.toFixed(3);sw.y=+py.toFixed(3);sw.z=+(((gz!=null?gz:guessZ(px,py))||0)+1.06).toFixed(3);
@@ -5389,7 +5403,12 @@ function displayName(o){
   if(!o)return "";
   if(o.own&&o.name)return o.name;
   if(o.type==="camera")return "Security camera"+(o.id>=0?" #"+o.id:"");
-  if(o.type==="switch")return "Alarm button"+(o.id>=0?" #"+o.id:"");
+  if(o.type==="switch"){
+    // an alarm button when an alarm system listens to it; the level's others open
+    // a gate, a lift or a door (level 8's radar gates) and go by their own name
+    if(o.own||alarmOf(o))return "Alarm button"+(o.id>=0?" #"+o.id:"");
+    return (o.name&&!/^\d+$/.test(o.name)?o.name.replace(/([a-z])([A-Z])/g,"$1 $2"):"Switch")+(o.id>=0?" #"+o.id:"");
+  }
   if(o.type==="siren")return "Siren"+(o.id>=0?" #"+o.id:"");
   if(o.type==="alarmlight")return "Alarm light";
   if(o.type==="alarmctl")return "Alarm system";
@@ -5833,7 +5852,7 @@ function buildPalette(){
   function item(parent,t,thumb,name,meta,tip){
     var b=document.createElement("button");
     b.className="item";b.type="button";
-    b.setAttribute("aria-pressed",String(!!(tool&&t&&tool.group===t.group&&tool.id===t.id)));
+    b.setAttribute("aria-pressed",String(!!(tool&&t&&tool.group===t.group&&tool.id===t.id&&!!tool.alone===!!t.alone)));
     if(tip)b.title=tip;
     var th=document.createElement("span");th.className="thumb";th.appendChild(thumb);
     var tx=document.createElement("span");tx.className="t";
@@ -5962,6 +5981,14 @@ function buildPalette(){
         (packed?"":". Not packed in "+lvName+": applying copies the model and its textures in."));
       it.addEventListener("mouseenter",function(){hoverCard(it,r)});
       it.addEventListener("mouseleave",function(){hoverCard(null)});
+      if(r.model===GATE_LEAF){
+        // the gate is placed as a whole gateway, fence panels and all; and on its own
+        var ga=item(b,{group:"obj",id:r.model,label:"Gate on its own",alone:true},thumbFor(r.model,r.kind,r.raw),"Gate on its own",
+          "both leaves and their switch, no fence panels · "+esc(r.model),
+          "The gate's two leaves and the switch that opens them, with no fence panels either side: for a gap you have already walled.");
+        ga.addEventListener("mouseenter",function(){hoverCard(ga,r)});
+        ga.addEventListener("mouseleave",function(){hoverCard(null)});
+      }
     });
   }
   if(!q){
@@ -6907,6 +6934,18 @@ function groupData(list){
   list.slice().forEach(function(o){
     if(o.own&&o.type==="building"&&o.uid)placements.forEach(function(p){if(p.of===o.uid&&list.indexOf(p)<0)list.push(p)});
   });
+  // the level's doors and gates among what is selected come along: they can't
+  // be selected themselves (they don't move), and a compound kept without its
+  // gate had a gap in its wall. A lift's own doors stay with the lift.
+  var lvl=list.filter(function(o){return !o.own&&o.type!=="navnode"});
+  if(lvl.length&&LEVEL){
+    var bx=[1e9,-1e9,1e9,-1e9,1e9,-1e9];
+    lvl.forEach(function(o){bx=[Math.min(bx[0],o.x),Math.max(bx[1],o.x),Math.min(bx[2],o.y),Math.max(bx[3],o.y),Math.min(bx[4],o.z),Math.max(bx[5],o.z)]});
+    LEVEL.objects.forEach(function(o){
+      if(o.type!=="door"||!o.ref||o.cutscene||isRemoved(o)||/^505_/.test(o.model||"")||list.indexOf(o)>=0)return;
+      if(o.x>=bx[0]-1&&o.x<=bx[1]+1&&o.y>=bx[2]-1&&o.y<=bx[3]+1&&o.z>=bx[4]-3&&o.z<=bx[5]+12)list.push(o);
+    });
+  }
   // one of the level's comes back with the doors, lift and furniture the game gives
   // it (placed as they are from the inventory): the level's own things inside it
   // are left out, so they are not there twice
@@ -6922,10 +6961,26 @@ function groupData(list){
     if(o.type==="navnode"){nodes.push({old:o.uid,graph:o.graph,dx:o.x-c.x,dy:o.y-c.y,z:o.z});return}
     var p;
     if(o.own){p=JSON.parse(JSON.stringify(o));p.old=o.uid;delete p.uid;delete p._gq}
-    else if(o.type==="soldier")p={type:"soldier",kind:"soldier",ai:o.ai,model:o.model,weapon:o.weapon,
+    else if(o.type==="player"||o.fixed)return;      // the start is the mission's; a machine gun works only with its gunner
+    else if(o.type==="soldier"){p={type:"soldier",kind:"soldier",ai:o.ai,model:o.model,weapon:o.weapon,
       name:displayName(o),graph:o.graph!=null?String(o.graph):null,patrol:(o.patrol||[]).filter(function(n){return typeof n==="number"})};
+      if(o.team!=null)p.team=o.team}
     else if(o.type==="pickup")p={type:"pickup",kind:"pickup",pickupId:o.model,name:displayName(o)};
-    else if(o.model){p={type:"building",kind:"object",model:o.model,name:displayName(o)};if(kitted.indexOf(o)>=0)p.kit=true}
+    // a camera of the level's: a camera of yours, sweeping as it did
+    else if(o.type==="camera")p={type:"camera",qtype:"SCamera",kind:"camera",model:CAM_MODELS.holder,modelName:"CAMERA",
+      name:displayName(o),cam:Object.assign({pitch:0,pan:0,right:0,left:0,speed:0,delay:0,fovV:90,fov:60,range:30},o.cam||{},{on:"1"}),
+      alarm:true,mount:""};
+    // a switch: its "model" is the level's expression ("1"); what it looks like is its mesh.
+    // An alarm button of the level's is an alarm button of yours; the others
+    // (a gate's, a lift's) open things that don't come along, so only their look does
+    else if(o.type==="switch"){
+      var ab=alarmOf(o);
+      p=ab?{type:"switch",kind:"switch",model:(alarmKind("ALARM_BUTTON")||{}).model||"234_01_1",name:"Alarm button",mount:""}
+        :{type:"building",kind:"object",model:o.mesh||"202_01_1",name:o.name&&!/^\d+$/.test(o.name)?o.name.replace(/([a-z])([A-Z])/g,"$1 $2"):"Switch"};
+    }
+    // a door or a gate of the level's: one of yours that opens
+    else if(o.type==="door")p={type:"building",kind:"object",model:o.model,name:displayName(o),door:true};
+    else if(o.model&&!/^\d+$/.test(o.model)){p={type:"building",kind:"object",model:o.model,name:displayName(o)};if(kitted.indexOf(o)>=0)p.kit=true}
     else return;
     p.own=true;p.dx=o.x-c.x;p.dy=o.y-c.y;p.z=o.z;p.gamma=o.gamma||0;
     delete p.x;delete p.y;
@@ -6971,6 +7026,7 @@ function pasteData(d,x,y,gamma){
     if(o.of){var nb=map["t:"+o.of];if(nb)o.of=nb.slice(2);else{delete o.of;delete o.slot}}
     if(o.alarmId&&o.alarmId.indexOf("own:")===0&&map["t:"+o.alarmId.slice(4)])o.alarmId="own:"+map["t:"+o.alarmId.slice(4)].slice(2);
     if(o.kit){delete o.kit;kits.push(o)}
+    if(o.door===true){delete o.door;asDoor(o)}
     o.x=+(x+p.dx*cs-p.dy*sn).toFixed(3);o.y=+(y+p.dx*sn+p.dy*cs).toFixed(3);o.z=(p.z||0)+dz;
     o.gamma=+(((p.gamma||0)+gamma)%(Math.PI*2)).toFixed(5);
     if(o.type==="soldier"){
@@ -6994,6 +7050,8 @@ function pasteData(d,x,y,gamma){
   // again (the nearest system), or at the start
   out.forEach(function(o){
     if(o.alarmId&&!alarmByKey(o.alarmId))o.alarmId=null;
+    // an alarm part with none joins the nearest system, as one placed by hand does
+    if(!o.alarmId&&/^(camera|switch|siren|alarmlight)$/.test(o.type)&&o.alarm!==false){var na=nearestAlarm(o.x,o.y);if(na)o.alarmId=na.key}
     if(o.arriveOn&&!events.some(function(v){return v.uid===o.arriveOn})){delete o.arriveOn;delete o.arriveTimes}
   });
   kits.forEach(function(b){addBuildingDoors(b)});
@@ -7638,6 +7696,20 @@ function brushCells(c,kfAt){
     var dz=v-h0[k];h[k]=dz>SHAPE_MAX?h0[k]+SHAPE_MAX:dz<-SHAPE_MAX?h0[k]-SHAPE_MAX:v;
   }
 }
+// would this area move the ground under o at all? One that levels the ground
+// at the height it already has leaves it where it is (the AI levels the ground
+// of a flat map before it builds on it): nothing is kept from a change that is
+// not made, and the check list said "the ground can't change" under all of it
+function areaMovesUnder(a,o){
+  if(a.mode==="smooth"||!TERR||!TERR.h0)return true;
+  var s=MODELS&&MODELS.sizes&&MODELS.sizes[o.model],pts=[[0,0]];
+  if(s&&s.body)s.body.forEach(function(r){pts.push([r[0],r[1]],[r[0]+r[2],r[1]],[r[0],r[1]+r[3]],[r[0]+r[2],r[1]+r[3]])});
+  var g=o.gamma||0,c=Math.cos(g),sn=Math.sin(g);
+  return pts.some(function(q){
+    var x=o.x+q[0]*c-q[1]*sn,y=o.y+q[0]*sn+q[1]*c,z=zOn(TERR.h0,x,y);
+    return z==null||Math.abs(shapeZ(a,z,1,x,y,null,0)-z)>=0.03;
+  });
+}
 // what stands on the shaped ground: its ground is kept (keepList), and the panel
 // says so, area by area. Guards are counted apart: their walkways move.
 function countRiders(){
@@ -7647,7 +7719,7 @@ function countRiders(){
   function inArea2(a,x,y){return areaDist(a,x,y)<=(a.blend||0)*0.5}
   LEVEL.objects.concat(placements).forEach(function(o){
     if(o.x==null||o.cutscene)return;
-    var hitA=groundEdits.filter(function(a){return inArea2(a,o.x,o.y)});
+    var hitA=groundEdits.filter(function(a){return inArea2(a,o.x,o.y)&&areaMovesUnder(a,o)});
     var inB=(bb&&o.x>=bb[0]&&o.x<=bb[1]&&o.y>=bb[2]&&o.y<=bb[3]&&Math.abs(brushAt(o.x,o.y))>0.02)||Math.abs(sculptAt(o.x,o.y))>0.02;
     if(!hitA.length&&!inB)return;
     if(o.type==="soldier"){GRIDE.guards++;return}
@@ -11377,6 +11449,20 @@ function bind(){
       var mg=mouse.garea;mg.a.x+=w[0]-mg.last[0];mg.a.y+=w[1]-mg.last[1];mg.last=[w[0],w[1]];
       mouse.panned=true;present();return;
     }
+    if(mouse.down&&mouse.run&&tool&&!mouse.mid){
+      var sg=segInfo(tool.id);
+      for(var k=0;sg&&tool.chain&&k<24;k++){
+        if(Math.hypot(w[0]-tool.chain[0],w[1]-tool.chain[1])<sg.len)break;   // not a whole panel on yet
+        var nb=placements.length;
+        tool.joinStep=mouse.run.n>0;               // the whole run is one undo step
+        if(tool.joinStep)lastChangeAt=Date.now();
+        addPlacement(w[0],w[1]);
+        if(tool)tool.joinStep=false;
+        if(placements.length===nb)break;         // refused here: Alt lays it anyway
+        mouse.run.n++;
+      }
+      mouse.panned=true;present();return;
+    }
     if(mouse.down&&mouse.box){mouse.box.x1=mouse.x;mouse.box.y1=mouse.y;mouse.panned=true;present();return}
     if(mouse.down&&mouse.drag&&mouse.drag.group){
       moveGroup(w[0]-mouse.drag.last[0],w[1]-mouse.drag.last[1]);
@@ -11464,6 +11550,21 @@ function bind(){
       GDRAW={x0:mouse.wx,y0:mouse.wy,x1:mouse.wx,y1:mouse.wy,sx:mouse.x,sy:mouse.y};
       return;
     }
+    // a fence or wall in hand: a drag lays a run from where it is pressed, a
+    // panel each time the pointer gets a panel's length on, each pointing the
+    // way the drag goes; a click lays one as before. The run starts at the end
+    // of the one in hand when pressed near it, else at a fence end nearby, else
+    // where it is pressed (the middle button moves the map meanwhile)
+    if(tool&&tool.group==="obj"&&tool.id!==GATE_LEAF&&segInfo(tool.id)&&!e.shiftKey&&!patrolMode){
+      if(!canEdit())return;
+      var ch=tool.chain;
+      if(ch&&Math.hypot(mouse.wx-ch[0],mouse.wy-ch[1])>segInfo(tool.id).len*3)ch=null;   // wandered off: a new run
+      mouse.run={n:0,x:mouse.wx,y:mouse.wy,was:tool.chain};
+      tool.chain=ch||snapEndpoint(mouse.wx,mouse.wy)||[mouse.wx,mouse.wy];
+      tool.running=true;
+      present();
+      return;
+    }
     // Shift: a box (drag) or add/drop one (click)
     if(e.shiftKey&&!tool&&!patrolMode){mouse.box={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y,shipped:e.altKey||READONLY};return}
     if(!tool&&!patrolMode){
@@ -11481,6 +11582,16 @@ function bind(){
   });
   window.addEventListener("mouseup",function(){
     if(mouse.mid){mouse.mid=false;mouse.down=false;cv.classList.remove("panning");return}
+    if(mouse.run){
+      var rn=mouse.run;mouse.run=null;mouse.down=false;
+      if(tool){
+        tool.running=false;
+        // a click, or a drag too short for a panel: one panel, laid as a click lays it
+        if(!rn.n){tool.chain=rn.was;addPlacement(rn.x,rn.y)}
+      }
+      if(rn.n>1)toast(rn.n+" panels laid. Press again to carry the run on, C to start a new one");
+      renderPlaceBar();present();return;
+    }
     if(SKETCH&&SKETCH.cur){SKETCH.cur=null;mouse.down=false;present();return}
     if(AIPICK&&AIPICK.d){
       var ad=AIPICK.d,aclick=Math.hypot(mouse.x-ad.sx,mouse.y-ad.sy)<6;AIPICK.d=null;mouse.down=false;
@@ -12539,7 +12650,7 @@ function placementPose(wx,wy){
   }
   var seg=segInfo(tool.id);if(!seg)return pose;
   var start=tool.chain;
-  if(start&&Math.hypot(wx-start[0],wy-start[1])>seg.len*3)start=null;   // wandered off: new run
+  if(start&&!tool.running&&Math.hypot(wx-start[0],wy-start[1])>seg.len*3)start=null;   // wandered off: new run
   var snapped=false;
   if(!start){start=snapEndpoint(wx,wy);snapped=!!start}
   if(!start)return pose;
@@ -12569,8 +12680,9 @@ function renderPlaceBar(){
     (tool.group==="prefab"&&GROUPS.some(function(g){return g.id===tool.id})?'<span class="sep"></span><button class="btn" id="pb-edgrp" title="Rename it, move it to another category, or delete it">Edit this item…</button>':'')+
     (seg?'<span class="sep"></span>'+(tool.chain
         ?'<span class="chain on">Chained: the next panel continues the run</span><button class="btn" id="pb-break" title="C">Break (C)</button>'
-        :'<span class="chain">Click to start a run. It snaps to fence ends nearby</span>'):'')+
-    '<span class="sep"></span><span class="k">Click to place · R rotate · Esc done</span>';
+        :'<span class="chain">Click, or drag to lay a run. It snaps to fence ends nearby</span>'):'')+
+    '<span class="sep"></span><span class="k">'+(seg?'Click or drag to lay panels · middle-drag moves the map · R rotate · Esc done'
+      :'Click to place · R rotate · Esc done')+'</span>';
   b.querySelectorAll("[data-pr]").forEach(function(x){
     x.addEventListener("click",function(){rotateBy(parseFloat(x.getAttribute("data-pr")))});
   });
@@ -12775,6 +12887,24 @@ function localChecks(){
   if(!any)add("info","Mission","No changes yet: the game gets "+(M&&M.base&&M.base.kind==="empty"?"the empty map":"the base mission")+" as it is");
   return rows;
 }
+// the server's half of the check list, on the plan as it is now (saved first)
+function serverCheckRes(){
+  if(!Store||Store.local||!M||READONLY)return Promise.resolve(null);
+  if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
+  return Store.save(M.id,{plan:planOf(),name:MISSION}).then(function(s){refreshOpen(s);return Store.check(M.id)})
+    .catch(function(e){return {error:String(e.message||e)}});
+}
+// The whole check list: the editor's checks and the server's. A model no level
+// ships is named by the build's dry run and by the server's row, which can show
+// the thing and remove it: it is listed once, by the row that can.
+function allChecks(res){
+  var srv=serverChecks(res),gone={};
+  srv.forEach(function(r){var m=/^No level ships model (\S+?)(:|$)/.exec(r.text);if(m)gone[m[1]]=1});
+  return localChecks().filter(function(r){
+    var m=r.group==="Build"&&/uses model (\S+), which no level ships/.exec(r.text);
+    return !(m&&gone[m[1]]);
+  }).concat(srv);
+}
 function serverChecks(res){
   var rows=[];
   if(!res)return rows;
@@ -12793,7 +12923,18 @@ function serverChecks(res){
   var im=res.imports;
   if(im&&im.models&&im.models.length){
     im.models.forEach(function(r){
-      if(!r.source)rows.push({level:"error",group:"Models",text:"No level ships model "+r.model});
+      if(r.source)return;
+      // no level has it: nothing can bring it in. A level's switch kept before
+      // 2026-09-25 carried its expression, "1", as its model: it gets the switch
+      // box back. Anything else goes
+      var bad=placements.filter(function(p){return p.model===r.model});
+      var sw=r.model==="1"&&bad.length&&bad.every(function(p){return /switch|alarm button/i.test(p.name||"")});
+      rows.push({level:"error",group:"Models",text:"No level ships model "+r.model+(bad.length?": "+bad.slice(0,3).map(displayName).join(", ")+(bad.length>3?" and "+(bad.length-3)+" more":""):"")+
+          (sw?". A switch kept from a level before 25 September 2026 took the level's expression for its model: it gets its look back as a plain switch box":""),
+        o:bad[0]||null,fix:!bad.length?null:sw?{label:"Give it its look",fn:function(){
+          bad.forEach(function(p){p.model="202_01_1";p.name="Switch";delete p.modelName})}}
+        :{label:bad.length>1?"Remove them":"Remove it",fn:function(){
+          placements=placements.filter(function(p){return bad.indexOf(p)<0});if(bad.indexOf(sel)>=0)sel=null;multi=[]}}});
     });
     var ok=im.models.filter(function(r){return r.source});
     if(ok.length)rows.push({level:"info",group:"Models",
@@ -12868,13 +13009,8 @@ function showChecks(thenApply){
   if(!canEdit())return;
   var title=(thenApply?"Before applying “":"Check “")+MISSION+"”";
   sheet(title,'<p class="empty">Checking the mission…</p>');
-  if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
-  var srv=Store&&!Store.local&&M
-    ?Store.save(M.id,{plan:planOf(),name:MISSION}).then(function(s){refreshOpen(s);return Store.check(M.id)})
-        .catch(function(e){return {error:String(e.message||e)}})
-    :Promise.resolve(null);
-  srv.then(function(res){
-    var all=localChecks().concat(serverChecks(res)),AS=appliedState(),inGameN=AS.ix?AS.n:0;
+  serverCheckRes().then(function(res){
+    var all=allChecks(res),AS=appliedState(),inGameN=AS.ix?AS.n:0;
     // what is already in the game was looked at when it went in: errors always show,
     // the rest only for what this Apply adds or changes
     var rows=all.filter(function(r){
@@ -12964,14 +13100,18 @@ function repairWithAI(rows){
   if(!window.AIPanel)return;
   if(AIPanel.busy()){toast("The AI designer is still working. Wait for it, or stop it first");return}
   function lines(l){
-    var out=l.slice(0,25).map(function(r){return "- "+r.text+(r.meta?" ("+r.meta+")":"")});
+    var out=l.slice(0,25).map(function(r){
+      var id=r.o&&AIB.idOf(r.o);
+      return "- "+r.text+(r.meta?" ("+r.meta+")":"")+(id?" [id "+id+"]":"")+(r.fix?" [the list's own fix: "+r.fix.label+"]":"")});
     if(l.length>25)out.push("- and "+(l.length-25)+" more like these");
     return out.join("\n");
   }
   var errs=rows.filter(function(r){return r.level==="error"}),warns=rows.filter(function(r){return r.level==="warn"});
   var msg="Repair the mission: fix the problems the check list finds, below. Keep every guard, camera and building: "+
     "lay walkways where a guard has none, stand a guard on a building's floor or a tower's platform, move or re-point what is wrong. "+
-    "Remove something only if nothing else can work, and say so if you do. Run check_mission when you are done."+
+    "Remove something only if nothing else can work, and say so if you do: a thing whose model no level ships can't be built, so it goes. "+
+    "A warning about a choice rather than a fault (a ground area kept flat under a building, a model copied from another level) can stay: say why. "+
+    "Run check_mission when you are done."+
     (errs.length?"\n\nMust fix before applying:\n"+lines(errs):"")+
     (warns.length?"\n\nWorth a look:\n"+lines(warns):"");
   $("sheet").hidden=true;
@@ -14243,12 +14383,13 @@ var AIB=(function(){
   };
   H.check_mission=function(){
     // with the build's own verdict: a dry run of Apply on the plan as it is now
-    return checkLinks(navNodes).then(function(){return freshVerdict()}).then(function(bv){
-      var rows=localChecks(),bad=function(r){return r.level==="bad"||r.level==="error"};
+    var bv=null;
+    return checkLinks(navNodes).then(function(){return freshVerdict()}).then(function(v){bv=v;return serverCheckRes()}).then(function(res){
+      var rows=allChecks(res),bad=function(r){return r.level==="bad"||r.level==="error"};
       rows.sort(function(a,b){return (bad(b)?1:0)-(bad(a)?1:0)});
       var out={ok:true,problems:rows.filter(bad).length,warnings:rows.filter(function(r){return r.level==="warn"}).length,
         build:bv?(bv.ok?"a dry run of Apply goes through":"Apply would refuse this plan: fix the Build problems first"):"the dry run of Apply could not be had just now",
-        list:rows.slice(0,40).map(function(r){var x={level:bad(r)?"problem":r.level,group:r.group,text:r.text};if(r.o)x.id=idOf(r.o);return x})};
+        list:rows.slice(0,40).map(function(r){var x={level:bad(r)?"problem":r.level,group:r.group,text:r.text};if(r.o)x.id=idOf(r.o);if(r.fix)x.list_fix=r.fix.label;return x})};
       return out;
     });
   };

@@ -5,8 +5,8 @@ section is also that release's notes on GitHub.
 
 ## Unreleased
 
-Your items in the inventory, a repair button for the AI designer, and fixes
-for a mission that stopped the game.
+Your items in the inventory, a repair button for the AI designer, fences laid
+by dragging, and fixes for a mission that stopped the game.
 
 ### New
 
@@ -30,9 +30,28 @@ for a mission that stopped the game.
 - **The level's machine guns are on their stands** on the map and in 3D: the
   gun itself was never read, only its stand (the level data is read again
   once, version 6).
+- **Fences by dragging.** With a fence or wall in hand, press and drag: a panel
+  is laid each time the pointer gets a panel's length on, end to end, as far as
+  the drag goes - one undo step for the whole run. A click still lays one.
+- **A gate on its own** in the inventory, beside the gateway: both leaves and
+  the switch that opens them, with no fence panels either side.
 
 ### Changed
 
+- **Fences, walls, gates and small things are placed on their own.** Only a
+  real building brings the doors, lift and furniture the game gives it: a fence
+  panel came with an electricity pole and doors, a wall with doors.
+- **An area kept from a level keeps its gates and doors**, as doors of yours
+  that open, its cameras and alarm buttons (joined to the nearest alarm system)
+  and the look of its other switches. The player start and the machine guns
+  stay behind.
+- **The level's switches are named for what they do:** an alarm button only
+  when an alarm system listens to it; a gate's, a lift's or a door's switch by
+  its own name, or *Switch*. Every one of them was called an alarm button.
+- **The AI designer sees the check list you see:** its check includes the
+  server's rows (hovering, placed twice, models no level ships), each with the
+  id its tools take and the list's own fix, and so does *Fix with the AI
+  designer*.
 - **Trying to change a built-in mission says so where it can't be missed:**
   the banner at the top turns amber with a warning and a *New mission from
   this* button, instead of a toast. Looking at one no longer shows the
@@ -66,6 +85,15 @@ for a mission that stopped the game.
 - **Buildings beside walkways the mission laid got no floor nodes** ("no
   navmesh within 40 m"): the mission's own new walkway points count now, and
   doorways link to them.
+- **Warnings nothing could fix:** things on the floor of a building of yours
+  were said to hover as high as the floor (the check measured them against the
+  bare level), and a ground area levelling the ground at the height it already
+  has was said to keep it from changing under everything on it.
+- **"No level ships model 1":** a switch kept from a level took the level's
+  switch expression for its model, and Apply refused the mission. The check
+  list gives it its look back (*Give it its look*); anything else of a model no
+  level ships has a *Remove* button. The dry run and the check no longer list
+  the same problem twice.
 - **A copied building left its doors behind:** the doors, lift and furniture
   that came with a building follow its copy when it is pasted or placed from
   Your items, and an alarm or event the copy names that the mission lacks falls
