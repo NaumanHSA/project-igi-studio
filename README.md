@@ -21,7 +21,7 @@ shape the ground, or just ask the AI designer. Then apply it and play it in the 
 <img alt="Game files shipped: none" src="https://img.shields.io/badge/game%20files%20shipped-0-ffd24a?style=flat-square&labelColor=0e2a12">
 
 <p>
-<a href="#whats-new-in-10">What's new</a> ·
+<a href="#whats-new">What's new</a> ·
 <a href="#whats-in-the-box">What's in the box</a> ·
 <a href="#get-started">Get started</a> ·
 <a href="#how-it-works">How it works</a> ·
@@ -32,21 +32,24 @@ shape the ground, or just ask the AI designer. Then apply it and play it in the 
 
 </div>
 
-## What's new in 1.0
+## What's new
 
-The first public release. The studio is now **one Windows installer** that needs
-nothing else: no Python, no IGI ToolKit, no manual steps.
+- **Soldiers on your side** (1.0.5). Any soldier, yours or the level's, can fight for
+  you, for the enemy, or on a side of its own.
+- **Buildings that work as the game's do** (1.0.4, 1.0.5). A building brings its doors,
+  its lift and the things inside it, and one with a cellar or a lift shaft stands on
+  the game's own ground grid, so the ground opens over it as it does in the game.
+- **A team of AI agents** (1.0.4). *Ideas*, a *Mission* builder that plans a whole
+  mission and builds it area by area, *Edit*, a *Workshop* for new things to place,
+  and *Review*. Save as many models as you like, local ones included.
+- **Ground of any height** (1.0.3). Mountains, valleys, a freehand brush, and the
+  level's light and shade redone over the new ground.
+- **The 3D view as the game draws it** (1.0.5). Open cellars and tunnels, the game's
+  own lifts, the real railway track, ready as soon as a mission opens.
+- **Your own textures** (1.0.4). Swap any model's picture for a PNG of yours.
 
-- **Its own compiler.** The game's mission scripts are read and written by the studio
-  itself. All 884 of them round-trip byte for byte, so the third party toolkit is gone.
-- **A first run that sets itself up.** It finds your game, checks the build, keeps a
-  checked reference copy of the levels, and reads everything the editor needs.
-- **Your game stays safe.** The 14 original missions are never written; your missions
-  go into slots of their own, 15 and up.
-- **Updates itself.** An installed studio fetches new versions and installs them when
-  you close it. Settings, Updates turns it off.
-
-Everything else is in the [changelog](CHANGELOG.md).
+1.0 was the first public release: one Windows installer, with its own compiler and
+nothing else to install. Everything since is in the [changelog](CHANGELOG.md).
 
 ## What's in the box
 
@@ -60,7 +63,7 @@ Design on the green map you know from the game: contours, buildings seen from ab
 <td width="50%" valign="top">
 <img src="docs/assets/icons/guards.svg" width="52" align="left" alt="">
 <b>Guards that patrol</b><br>
-Soldiers, snipers and officers, their routes drawn on the walkways, how far they see and how hard they fight. Sight lines show what they cover.
+Soldiers, snipers and officers, against you or on your side, their routes drawn on the walkways, how far they see and how hard they fight. Sight lines show what they cover.
 </td>
 </tr>
 <tr>
@@ -79,12 +82,12 @@ Security cameras with their sweep drawn on the map, alarm panels, sirens, and wh
 <td valign="top">
 <img src="docs/assets/icons/ground.svg" width="52" align="left" alt="">
 <b>Ground and buildings</b><br>
-Raise, flatten and paint the terrain, place buildings, fences, towers and trees, and see it all in a 3D close-up before you play.
+Mountains and valleys of any height, painted ground, and nearly 300 buildings, towers and props, the buildings with their doors, lifts and furniture. See it all in 3D before you play.
 </td>
 <td valign="top">
 <img src="docs/assets/icons/ai.svg" width="52" align="left" alt="">
-<b>An AI designer</b><br>
-Say what you want in plain words. It reads the map, places the guards, writes the objectives, and lists every change for you to keep or undo.
+<b>A team of AI designers</b><br>
+Say what you want in plain words. One agent plans and builds a whole mission area by area; others edit it, design new things to place, and review it. Every change is yours to keep or undo.
 </td>
 </tr>
 <tr>
@@ -133,8 +136,8 @@ The originals are never touched. Every mission is built from a checked reference
    originals or start from a blank map, place your guards, press **Apply**, and play it.
 
 **You need** Windows 10 or 11 (64-bit), your own installed copy of *Project I.G.I.: I'm Going In*, and about 650 MB
-of disk space, plus 300 MB in the game's folder for each mission you put in. An OpenAI key is optional, for the AI
-designer only.
+of disk space, plus 300 MB in the game's folder for each mission you put in. An OpenAI key, or a model running on
+your own computer, is optional, for the AI designer only.
 
 ## How it works
 
@@ -219,6 +222,12 @@ with the log from **Help, Open the log folder**.
 Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md), and security problems are reported
 privately, as [SECURITY.md](SECURITY.md) says.
 
+Thanks to everyone who has helped build it:
+
+<a href="https://github.com/NaumanHSA/project-igi-studio/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NaumanHSA/project-igi-studio" alt="The people who have contributed to Project IGI Studio">
+</a>
+
 If the studio gave you a mission worth playing, a star helps other players find it.
 
 ## Credits
@@ -238,8 +247,7 @@ If the studio gave you a mission worth playing, a star helps other players find 
 <td><a href="https://github.com/NaumanHSA"><img src="https://github.com/NaumanHSA.png?size=160" width="80" alt="Nouman Ahsan"></a></td>
 <td>
 <b>Nouman Ahsan</b> · <a href="https://github.com/NaumanHSA">@NaumanHSA</a> · <a href="https://nomihsa965.me">nomihsa965.me</a><br>
-The map computer, the compiler, the AI designer, the installer and the site: one person, the long way.
-By day, an AI engineer building agentic and generative AI systems.
+Built the studio, the long way. By day, an AI engineer.
 </td>
 </tr>
 </table>
