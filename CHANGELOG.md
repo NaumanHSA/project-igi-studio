@@ -3,6 +3,93 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## 1.0.5
+
+Soldiers on your side, buildings whose cellars, lifts and doors work the way
+the game's own do, and a 3D view that shows the levels as the game draws them.
+
+### New
+
+- **A soldier can fight on your side.** Every soldier - yours or one the level
+  ships - has a *Side*: the enemy, fights on your side, or a side of its own,
+  the three the game itself uses; *Another side* takes any other team number.
+  A friendly is drawn in the player's green on the map and counted on its own
+  line in the legend. Contributed by @heaven-hm (#10, closing #8).
+- **The 3D view is ready when you open it.** Opening a mission or a built-in
+  level fetches every model the 3D view draws and the textures they wear, with
+  a bar on the map as it goes (level 9: 82 models and 341 textures in about
+  three seconds).
+- **Cellars, lift shafts and tunnels are open in 3D** where the game opens
+  them. The levels' own `DiscardTerrain` squares are read, so the generator
+  room's floor and Eagle's Nest's tunnels are no longer hidden under a sheet of
+  ground (#4).
+- **The game's own lifts** stand in the 3D view where each level starts them,
+  Eagle's Nest's cable car among them.
+- **Railways and roads are the game's own models in 3D** - ballast, sleepers
+  and rails along the curve, the embankment on its slopes, the track across the
+  bridge - and they come along as you move, like everything else (#4).
+- **A building's cellar comes with it:** the underground security building
+  brings its cell doors, its metal door and its beds with the rest.
+
+### Changed
+
+- **A building with a cellar or a lift shaft stands on the game's ground
+  grid.** The game opens the ground only in whole squares, 16 or 32 m, on a
+  grid of their own, and its buildings stand where those squares fall under
+  their walls; yours now do too - placed there, settling onto it when you let go of
+  a drag, kept there as they turn. A mission made before moves such a building
+  once as it opens (a banner says which and how far; undo takes it back). No
+  building moves more than 8 m each way.
+- **A soldier is offered the weapons the game arms its soldiers with**, the
+  thirteen of them. The knife, the flashbang, the proximity mine and the dual
+  Uzi are gone from that list: a guard given one held it like a rifle and
+  never used it. The AI designer is refused them too, and a guard who already
+  carries one keeps it, marked as something he can't use.
+- **A thing is called by its model when its level's name for it belongs to
+  another model:** a water tower swapped for a radar tower in an editor keeps
+  the task name "WaterTower", and is now "Radar Tower" (#2). The inventory
+  names models by the same rule.
+- **Tests run on every push and pull request**, from @heaven-hm's #10.
+- The level data is rebuilt once after updating (version 5).
+
+### Fixed
+
+- **A lift's doors open where the cabin is.** They could open onto the empty
+  shaft while the cabin stood below, and stay shut when it arrived: a
+  building's doors and its lift could come from two copies of it whose lift
+  paths run opposite ways. A door now opens at the floor at its own height,
+  also for missions made before, on their next Apply.
+- **Door leaves slide as their own doorway's do.** The lift doorway never
+  shut - its inner leaves slid apart as the outer ones closed - because every
+  door a building brought slid as its model most often does; 67 of the 202
+  doors buildings bring slide otherwise.
+- **No pit round a building of yours that opens the ground.** Its lift shaft
+  was opened in 16 m squares laid off the building, up to 32 m across round
+  it, where you could fall through beside the wall.
+- **An imported model wears its own textures** (#7). In the game, a model
+  brought into a level that had a texture of the same name with another
+  picture wore the level's - the sniper `001_01_1` in Eagle's Nest wore the
+  level's pale camouflage; 86 of the ways a guard can be imported were hit. It
+  now gets its own copy, and models imported before are put right on the next
+  Apply. In the studio, an imported model's textures were looked up in the
+  wrong archive, and a texture's picture was cached by its name alone, so the
+  first level to show it showed it in every level after.
+- **Parts of the 3D view went missing** as you moved: the railway was gathered
+  once and never again, past the edge of a level's ground nothing new came at
+  all, and a cut set for one room took every watchtower's head off.
+- **Trainyard's track sank into the ground** in 3D before its embankment.
+- **The level's guards no longer float in 3D:** they are drawn where the game
+  stands them, on their walkway (level 6's buyers and scientist).
+- **The map's red names** no longer pile up on an empty map, and go with the
+  building they name when a mission takes it out.
+- **Opening another mission closes the 3D view** of the last one.
+- **Collision boxes** are no longer drawn as brown blocks in 3D.
+- **A building's doors are its own:** some were given to a desk or a plank
+  standing beside them, and a lift building's lift doors went missing.
+- **The Textures section's header** read "undefined".
+- **A first data build guessed every guard's patrol** and missed the alarm he
+  answers; it reads their AI scripts now (88 guards answer one).
+
 ## 1.0.4
 
 A team of agents in the AI designer, buildings that come with everything
