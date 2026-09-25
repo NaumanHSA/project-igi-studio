@@ -29,6 +29,8 @@ STEPS = [
     ("catalog", "studio.extract.catalog", None, "the inventory of things to place", []),
     # a 1 m grid: the editor places things, and snaps them to the ground, by the metre
     ("terrain", "studio.extract.terrain", "reference", "the height of the ground", ["--cell", "1"]),
+    # how deep each model stands in that ground, as the levels have it (a barracks' foundation)
+    ("seats", "studio.extract.seats", None, "how each model stands on the ground", []),
     ("ground", "studio.extract.ground", "game", "what the ground is made of", []),
     ("meshes", "studio.extract.meshes", "game", "the buildings, seen from above", []),
     ("navtemplates", "studio.build.navtemplates", "reference", "the walkways inside buildings", []),
@@ -43,9 +45,10 @@ REQUIRED = (["index.json", "models.json", "catalog.json", "meshes.bin", "meshes.
             + ["graphs%d.json" % n for n in range(1, 15)])
 
 STAMP = "data.json"
-VERSION = 7          # bump when an extractor's output changes, so data is rebuilt (2: the ground's colour tiles; 3: splines; 4: doors;
+VERSION = 8          # bump when an extractor's output changes, so data is rebuilt (2: the ground's colour tiles; 3: splines; 4: doors;
                      # 5: the ground the game takes away, and guards' patrols read from their AI scripts on a fresh build;
-                     # 6: the machine guns on their stands, StationaryGun; 7: how each door and switch works, its wiring)
+                     # 6: the machine guns on their stands, StationaryGun; 7: how each door and switch works, its wiring;
+                     # 8: how each model stands on the ground, its seat)
 
 
 def _run(module, args, log):

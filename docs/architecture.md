@@ -46,6 +46,7 @@ project-igi-studio/
 │   │   ├── models.py       model footprints, map labels, per-level model availability
 │   │   ├── meshes.py       every structure's render mesh, for drawing it from above
 │   │   ├── terrain.py      each level's terrain as a 1 m height grid for the editor
+│   │   ├── seats.py        how deep each model stands in the ground, as the levels have it
 │   │   ├── ground.py       what the ground is made of, from the level's texture masks
 │   │   ├── catalog.py      inventory: every structure, weapon and enemy type in the game
 │   │   ├── doors.py        every Door and Elevator task in the game: how each door
@@ -200,7 +201,8 @@ In order: the levels' objects (with the patrol and the alarm each guard's AI
 script gives him - the scripts are decompiled first, so a first build reads
 them too - the ground the game takes away, and its lifts), the walkways, every
 model's size and name, the
-inventory, the ground's height (on a 1 m grid), what the ground is made of, the
+inventory, the ground's height (on a 1 m grid), how deep each model stands in
+that ground (a barracks' cellar is in the earth), what the ground is made of, the
 buildings seen from above, the walkways inside buildings, and the missions'
 names and covers. Most of it is read from the reference copy; the shared model
 archive, the terrain textures and the menu's covers are only in the game and

@@ -94,6 +94,33 @@ by dragging, and fixes for a mission that stopped the game.
 
 ### Fixed
 
+- **An area from Your items came with problems.** Its guards had no walkways
+  where they were pasted ("stands 4.1 m below or above his walkways"), things
+  that stood together in the level were warned about as overlapping (the
+  crates in a warehouse), and Apply refused walkway points the editor had
+  joined up. An area now brings its walkways and its guards' patrols on them,
+  joined to the map's walkways by a way on foot round its walls, through its
+  gates, and to every doorway of its buildings; a guard with no walkway on his
+  floor is put on the nearest; a building with a cellar lands on the game's
+  ground grid; cameras brought where the mission has no alarm system bring
+  one, which the guards answer; and what was pasted together is not an
+  overlap. Areas round the guards of all fourteen missions were kept and
+  pasted to check it.
+- **Barracks, power buildings and other big buildings stood metres in the
+  air.** Apply set every model down on its lowest point, and these reach far
+  below the ground (a barracks' cellar is 11 m deep): it now sets each down as
+  the game's levels do, with the level data read again once (version 8). The
+  big warehouse stands in the ground as it does in the game, its floor level
+  with the yard, and its doorways are no longer 3 m up its walls.
+- **A door or gate of yours closed off the walkways through it** when Apply
+  laid new ones, where the game's own doors never do.
+- **A pickup on a floor rose half a metre every time the mission changed**:
+  the build took its own height for the floor under it, and the editor took
+  the build's heights over. And a pickup put on a building's floor lies as
+  the build lays it, asked of the build's own surfaces.
+- **Rooms under the ground got no walkways**, and their guards were refused:
+  level 13's tunnels and rooms, pasted, stood 31-51 m below the walkways on
+  the ground. They join the nearest walkways now, as a tower's platform does.
 - **A mission with cameras and no alarm stopped the game** ("Too few
   parameters in line 0 of file ...objects.qsc"): the alarm made for its
   cameras was written one parameter short. It is written whole now, and every

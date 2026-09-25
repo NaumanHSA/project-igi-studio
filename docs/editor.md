@@ -625,7 +625,10 @@ buttons.
   levels (see *Doors* below). A fence panel came with an electricity pole and
   doors, a wall with doors: things that stood near those panels in the level
   they were read from. A panel, a gate, a crate, a pole, a sign, a lamp, a
-  vehicle, a tree is placed alone.
+  vehicle, a tree is placed alone. Nor is a building with a cellar that stood
+  inside another's footprint that one's furniture: level 12's fortress ruins
+  (128 x 170 m) had a guard HQ and a security building in them, which came
+  off the game's ground grid their cellars need.
 
 ## Terrain
 
@@ -1098,14 +1101,34 @@ Where things rest:
   the collision meshes (see *Inside buildings* below).
 - **Items on furniture:** a pickup rests right on a desk, crate or bed top,
   as the shipped ones do (median +0.03 m over 52 of them). On open ground it
-  sits +0.5 m up, like the shipped ground pickups.
+  sits +0.5 m up, like the shipped ground pickups, and so it does on a floor
+  of walkways in a building; on a floor the building's own model makes (a
+  barracks') it lies on it, as on a desk. The editor asks the server, which
+  asks the build's own surfaces, and the build looks for the floor from half a
+  metre under the pickup: asked from the pickup itself, under a roof it took
+  the pickup's own height for the floor, and a pickup the editor took the
+  build's height for rose half a metre with every dry run.
 - **Lying down:** weapons and items are turned onto their side the way the
   shipped ones are: orientation `alpha = heading, beta = 1.57`. With
   `0, 0, heading` a Dragunov stands on its end, half through the desk.
   Grenades and ammo boxes sit as they are, and mines lie with `alpha = 1.57`.
   Pickups placed by an earlier Apply are laid down on the next one.
 
-Models rest on their lowest point, ignoring base plates under 10 cm.
+**Models rest as the levels set them.** How high a model's origin stands above
+the lowest ground under its footprint is read from the fourteen levels: every
+copy of it on open, level ground (not in or on something, not on a slope), and
+where most of them agree, that is its seat (`seat` in `models.json`, from
+`studio/extract/seats.py`; the build and the editor's pads use it,
+`surface.py seat_of`). A barracks, a power building, a garage or a watchtower
+has its origin at the ground, and what is below it - a barracks' 11 m cellar,
+a lift's 30 m shaft - in the earth; the big warehouse stands 3.2 m into the
+ground, so its floor is the yard's; a tank has its origin in its middle. Set
+down by their lowest point, a barracks stood 11 m in the air, a power building
+8 m, and the warehouse's doorways 3 m up its walls. A model no level stands on
+the ground, and walls, fences, furniture, crates, lights, signs, roads and
+plants (a level sinks a tall wall to make a low one), rest on their lowest
+point, ignoring base plates under 10 cm. (The level data is read again once
+for it, version 8.)
 
 Navigation nodes lie on the terrain to within 3 mm, but blending nearby nodes
 lifted objects off bare ground next to concrete aprons. That was the "slightly
@@ -1703,6 +1726,11 @@ PUT to rename or re-categorise, DELETE); without the server, in the browser.
   of yours, on the nearest system) and the look of its other switches. The
   player start and the machine guns stay behind: a mission has one start, and
   a gun works only with its gunner. A lift's own doors stay with the lift.
+  Brought where the mission has no alarm system at all (an empty map has
+  none), its cameras and alarm buttons bring one: an alarm system of yours at
+  the middle of the paste, which they raise and its guards answer, as in the
+  level. The build had given cameras with no system an alarm of their own that
+  no guard answers, and warned.
 - **Its doors work as they did in the level.** Each keeps its own slide,
   times, sounds, whether its lock can be picked and in how long, and its
   locked, open and close expressions word for word (the level data has every
@@ -1719,6 +1747,107 @@ PUT to rename or re-categorise, DELETE); without the server, in the browser.
   kept) is dropped: the door opens by hand, and closes a while after; the
   check list and Apply say so. Before, kept doors opened by hand and closed
   after 6 s, and the inner gate's switch came as a box that did nothing.
+- **Its walkways come too.** The level's own walkway points among what is
+  kept - on the ground, and on the floors of a kept building the build has no
+  plan of (its walkways inside are the level's) - are kept with it, each with
+  its height above the ground, and its guards' patrol stops point at them
+  (`lv:<graph>:<node>` in the item). A kept building whose floors the build
+  lays (a navigation template: the village houses, the watchtowers) gets them
+  from the build, where its layout has a point; where it has none (the bottom
+  of level 14's main elevator) the level's own points stay. A point in a
+  building left behind, or up where one used to be
+  (an empty map keeps the walkways of the buildings it took away), stays.
+  Pasted, they are points of the mission's own in one graph of the map - the
+  one whose walkways on the ground are nearest - and a guard walks them as he
+  did. Before, pasted guards had only the map's own walkways where they landed:
+  level 4's village guards pasted onto level 10's empty map stood 4 m from
+  them, and Apply refused them.
+- **They are joined to the map's walkways round the walls.** A new point links
+  to the graph, or to new points already joined to it, within 15 m on its floor,
+  and not through a wall (the build tests every link against what the mission
+  builds: `surface.py`). Once everything pasted is down, the editor asks the
+  server about every link its points could have (`/api/links`), lays them again
+  in an order in which each links to one before it, and where some cannot
+  reach the graph - a yard walled in by the area's houses and walls - lays a
+  way on foot to them: the walk grid's way, every 2.5 m step of it asked of the
+  build's own test, a step through a wall (a gap the grid's metre cells see
+  that a wall panel closes) taken out of the grid and the way sought again. A
+  point no way reaches is remembered and the next one tried (the nearest five
+  points of a yard of level 11 were in a house, tried round after round, and
+  the forty in the open beside it never were). A point still walled off on
+  every side is left out, and a patrol stop at it; the message says so. The walk grid draws masonry walls in as lines (a panel
+  is thinner than a cell of the obstacle grid), and opens the cells a door's or
+  gate's leaf stands in (a wall piece with a doorway has its lintel over them).
+- **A door or gate of yours is a way through,** as the level's are: the build
+  does not count one as a wall between walkway points (`surface.py blocked`,
+  `plan.py`), nor does the server's test. A walled yard kept from level 4 was
+  sealed off from the map by its own gates, and its points were left out.
+- **The map's walkway points a pasted building stands over are not joined to.**
+  The build takes out a level point under the lowest floor of a building whose
+  floors it lays, and one inside a building all of whose links leave it (cut at
+  its walls, it has none left; a link to the building's own points, or to one
+  just outside its walls, is its own and stays) - unless a patrol of the
+  level's walks it. The editor has the same rule (`buriedLevelNodes`), so a
+  pasted point is never joined only to one of those: Apply refused such points.
+- **Its buildings' doorways are reached.** A building whose floors the build
+  lays joins its doorways to walkway points within 12 m it can walk to; with
+  none, its guards can't walk out. Pasted, each of its doorways gets a point a
+  step outside it (1.5 m past the wall, on the ground there; doorways within
+  6 m of each other as one, at most four a building) where none of the area's
+  walkways comes, joined to the rest like them.
+- **A building with a cellar lands on the game's ground grid.** The ground
+  over a cellar opens only in whole 16 m squares, and the game's buildings
+  stand where those fall; a paste moves by the few metres that takes (at most
+  8 m each way), all of it, so what came with it stays round it - by the move
+  that puts the most of them on the grid. *Duplicate* puts the copy a square
+  along. Two that were not on one grid in their own level (level 13's lift
+  and barracks) cannot both be: Apply opens the ground over the other in the
+  terrain's 8 m pieces, walkable, with the soil still drawn, and says so.
+- **From a level with no ground** (level 14 is all indoors) what is kept keeps
+  its heights as they stand to one another, from the lowest floor anyone
+  stands on (`rel`, `rigid` in the item), and that floor is set on the ground
+  where it is pasted. Its heights over the ground were taken from the nearest
+  walkways, on any floor, and its guards came 14 m off their own floor's.
+  (Level 14's main elevator hall still does not paste onto open ground: the
+  hall walls in its floor's walkways, and Apply takes no walkways joined to
+  nothing.)
+- **What stands in a kept building stays with it, and what it stands on comes.**
+  A building of the level's that comes with its doors and furniture (its kit)
+  leaves out only what the kit brings - the level's doors, furniture and lift
+  buttons inside it; the guards in it, the weapons on its floors, its cameras
+  and alarm buttons stay (a barracks kept from level 1 came without its
+  guards). And the level's building a kept thing stands on or in comes too,
+  however far its middle is outside the box (a guard on the upper floor of
+  level 12's fortress ruins was pasted standing in the air).
+- **Its guards stand on walkways.** The walkway a guard walks to is the
+  nearest, height and all - the editor's check and the build's (`plan.py
+  nearest_node`), as the game walks a guard to his graph: one on a barracks'
+  ground floor goes to a point on his floor, not to the one above his head. A
+  pasted guard with no walkway on his floor within 30 m once the walkways are
+  laid (on crates, or on a platform the build has no plan of) is put on the
+  nearest point of his floor within 15 m, else the nearest below him, and the
+  message says how many.
+- **The floors of a pasted building join the graph the build joins them to**:
+  the one it names, else the one with a point nearest its base (by distance
+  plus three times the height between, within 40 m: the level's points the
+  build keeps, the mission's own, and the floors of the buildings before it).
+  The editor looked at the height of its lowest floor and left out points on
+  other floors, and gave the big warehouse, whose floor is 3.3 m up its model,
+  no graph at all: its guards were said to be 3.3 m off their walkways.
+- **What came together is not an overlap.** Everything one paste puts down is of
+  one batch (`batch` on each placement), and the check list does not warn that
+  two of one batch overlap: the crates and the forklift in level 4's warehouse
+  were thirty-six *overlaps warehouse* warnings. Nor are a building's own
+  fittings (its doors and furniture) overlaps of it, nor a gap between two
+  fence panels of one paste a gap to close: it was in the level.
+- **As deep in the ground as it stood.** Each building, wall or crate keeps how
+  high it stood over the lowest ground under its footprint (`seat` in the
+  item); where that is not how its model sits (see *Models rest as the levels
+  set them*, below) - a wall a level sank to make a low one of it - it is set
+  there and kept (`exact`). The rest is set down as the build sets it down,
+  before its doors and furniture are fitted to it: a machine gun post came
+  2.5 m up from the middle height of what was kept, its sandbags with it, and
+  the walkways laid round them were asked about there.
 - **What stood above the ground keeps its height above the ground:** a switch
   on a gate post (1.1 m), a keypad on a wall, a camera on a pole, a guard on a
   tower's platform (a guard more than 2 m up). It is set once the rest is
@@ -1994,6 +2123,15 @@ heights. The result is `navtemplates.json` in the level data.
     need a graph within 40 m of the base, and on an empty map, away from the
     level's own walkways, the platform got no nodes and its sniper stood
     11.6 m above his walkways, which Apply refuses.
+  - **Rooms under the ground** - level 13's tunnels and rooms, reached by a
+    lift, their highest floor more than a storey below the ground over them -
+    join the nearest graph however far too, as nodes of their own; their
+    doorways join the next room's. Their guards stood 31-51 m below the
+    walkways on the ground. Whether a building's doorways reach anything is
+    asked once every building's floors are laid, so the first room of a run
+    of tunnels, joined by the next, is not called shut in.
+  - A lift of yours going below the ground has the ground over its shaft
+    opened; the build says so in its notes.
 - **A shipped building you move** takes its interior nodes with it. One you
   remove takes its floor nodes away, except nodes a patrol still uses.
 - **Floors:** a guard or item dropped inside a building lands on its lowest

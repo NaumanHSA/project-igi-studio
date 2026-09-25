@@ -1982,17 +1982,53 @@ var GRAPH_MAX=999;              // studio/build/graphs.py grow(): 1000 slots, id
 // The nearest walkway point of a guard's graph: the level's own, the mission's
 // new ones, and the ones Apply lays inside a building whose interior joins that
 // graph. {d (metres away), dz (height difference), n} or null.
+// the walkway point a guard walks to when the mission starts: the nearest to
+// him, height and all (plan.py nearest_node) - a guard on a barracks' ground
+// floor walks to one on his floor, not to the one above his head
 function guardWalkway(p,gid){
-  var best=null;
+  var best=null,gone=buriedLevelNodes();
   function look(n){
     if(n==null||n.x==null)return;
-    var d=Math.hypot(n.x-p.x,n.y-p.y),dz=Math.abs(n.z-p.z);
-    if(!best||d<best.d)best={d:d,dz:dz,n:n};
+    var d=Math.hypot(n.x-p.x,n.y-p.y),dz=Math.abs(n.z-p.z),d3=Math.hypot(d,dz);
+    if(!best||d3<best.d3)best={d:d,dz:dz,d3:d3,n:n};
   }
-  nodesOf(gid).forEach(look);
+  nodesOf(gid).forEach(function(n){if(!gone[gid+":"+n.id])look(n)});
   navNodes.forEach(function(n){if(String(n.graph)===gid)look(n)});
   interiors().forEach(function(it){if(String(it.gid)===gid)it.nodes.forEach(look)});
   return best;
+}
+// The walkways a guard walks by, as the check list reads them: the graph of the
+// building he stands in when the build lays its floors, else his own
+function guardGraphOf(p){
+  var bi=buildingAt(p.x,p.y,p.z);
+  return String((bi&&bi.it&&bi.it.gid)||p.graph||graphOf(p)||"");
+}
+// A guard pasted where nothing of his floor is walkway - on crates, a roof, a
+// platform the build has no plan of, or on a floor whose points are further
+// than one above his head - is put where they are, as the check asks: onto the
+// nearest walkway point of his floor within 15 m, else onto the nearest below
+// him. True when he was moved.
+function standOnWalkways(o){
+  var g=guardGraphOf(o),near=g?guardWalkway(o,g):null;
+  if(near&&near.dz<=SAME_FLOOR&&near.d<=30)return false;
+  var gone=buriedLevelNodes(),best=null,low=null;
+  function look(n,gid){
+    if(n==null||n.x==null)return;
+    var d=Math.hypot(n.x-o.x,n.y-o.y),dz=n.z-o.z;
+    if(d>15)return;
+    if(Math.abs(dz)<=SAME_FLOOR-0.3){if(!best||d<best.d)best={d:d,n:n,g:gid}}
+    else if(dz<0){var d3=Math.hypot(d,dz);if(!low||d3<low.d3)low={d3:d3,n:n,g:gid}}
+  }
+  Object.keys(GRAPHS||{}).forEach(function(gid){nodesOf(gid).forEach(function(n){if(!gone[gid+":"+n.id])look(n,gid)})});
+  navNodes.forEach(function(n){if(nodeLinks(n).length)look(n,String(n.graph))});
+  interiors().forEach(function(it){it.nodes.forEach(function(n){look(n,String(it.gid))})});
+  var to=best||low;if(!to)return false;
+  o.x=+to.n.x.toFixed(3);o.y=+to.n.y.toFixed(3);o.z=+to.n.z.toFixed(3);delete o.exact;
+  // the graph of the walkway he now stands on (a building's floors: that building's)
+  var bi=buildingAt(o.x,o.y,o.z);
+  o.graph=String((bi&&bi.it&&bi.it.gid)||to.g);
+  if((o.patrol||[]).length&&!o.patrol.every(function(n){var q=typeof n==="string"?planNode(n):null;return q&&String(q.graph)===String(o.graph)})){o.patrol=[];delete o.patrolCmds}
+  return true;
 }
 function graphCapacity(gid){
   var g=GRAPHS&&GRAPHS[gid];if(!g)return null;
@@ -2051,6 +2087,31 @@ function inBody(o,wx,wy,margin){
   return s.body.some(function(r){
     return mx>=r[0]-margin&&mx<=r[0]+r[2]+margin&&my>=r[1]-margin&&my<=r[1]+r[3]+margin});
 }
+// How high a model's origin stands above the lowest ground under its footprint:
+// as the game's levels stand it (extract/seats.py: a barracks has its origin at
+// the ground and 11 m of foundation below it; the big warehouse stands 3.2 m
+// into the ground, its floor the yard's), else on its lowest point, a base
+// plate of a few cm aside (surface.py seat_of).
+function seatOf(model){
+  var s=(MODELS&&MODELS.sizes&&MODELS.sizes[model])||{};
+  if(s.seat!=null)return +s.seat;
+  var z0=s.z0||0;return z0<-0.1?-z0:0;
+}
+// the lowest ground under a model's footprint, sampled as the build samples it
+// (surface.py under_footprint), or null off the terrain
+function footLow(model,x,y,gamma){
+  var s=MODELS&&MODELS.sizes&&MODELS.sizes[model];
+  if(!s||!s.body||!s.body.length||!TERR)return null;
+  var c=Math.cos(gamma||0),sn=Math.sin(gamma||0),low=null;
+  s.body.forEach(function(r){
+    var nx=Math.max(1,Math.ceil(r[2]/1.5)),ny=Math.max(1,Math.ceil(r[3]/1.5));
+    for(var i=0;i<=nx;i++)for(var j=0;j<=ny;j++){
+      var mx=r[0]+r[2]*i/nx,my=r[1]+r[3]*j/ny,z=terrainZ(x+mx*c-my*sn,y+mx*sn+my*c);
+      if(z!=null&&(low==null||z<low))low=z;
+    }
+  });
+  return low;
+}
 function withinHeight(o,wz){
   var s=(MODELS&&MODELS.sizes&&MODELS.sizes[o.model])||{},dz=wz-o.z,z0=s.z0||0;
   return dz>=z0-0.6&&dz<=z0+(s.h||0)+0.5;
@@ -2069,26 +2130,36 @@ function hasInterior(o){
   return ownInteriorNodes(o)>=Math.max(1,Math.floor(inner/2));
 }
 // the graph a building joins: the one with a node nearest its ground floor
-function graphNear(x,y,z,far){
-  var best=null,bd=far?1e12:40;
+// The graph with a walkway point nearest a building's base, as the build finds
+// it (plan.py graph_near): by distance plus three times the height between,
+// within `radius`. The level's points the build keeps count, and so do the
+// mission's own (Apply adds them before the buildings) and the floors of the
+// buildings it laid before this one (`before`, interiors in the build's order).
+function graphJoin(x,y,z,radius,before){
+  var best=null,bd=radius,gone=buriedLevelNodes();
   function look(gid,n){
-    if(!far&&Math.abs(n.z-z)>SAME_FLOOR)return;      // another floor, or a building that is gone
     var d=Math.hypot(n.x-x,n.y-y)+3*Math.abs(n.z-z);
-    if(d<bd){bd=d;best=gid}
+    if(d<=bd&&(best===null||d<bd)){bd=d;best=gid}
   }
-  for(var gid in (GRAPHS||{}))nodesOf(gid).forEach(function(n){look(gid,n)});
-  // the mission's own new points count too: Apply adds them before the buildings
-  navNodes.forEach(function(n){if(n.graph!=null&&GRAPHS&&GRAPHS[String(n.graph)])look(String(n.graph),n)});
+  for(var gid in (GRAPHS||{}))nodesOf(gid).forEach(function(n){if(!gone[gid+":"+n.id])look(gid,n)});
+  navNodes.forEach(function(n){if(n.graph!=null&&GRAPHS&&GRAPHS[String(n.graph)]&&nodeLinks(n).length)look(String(n.graph),n)});
+  (before||[]).forEach(function(it){if(it.gid)it.nodes.forEach(function(n){if(!n.reuse)look(String(it.gid),n)})});
   return best;
 }
-// The graph a building's floors join on Apply (studio/build/plan.py, graph_near):
-// the one nearest its base. A platform with no way in - a watchtower's - joins
-// the nearest graph however far, as nodes of its own: the game gives each tower
-// sniper a graph of his own up there, linked to nothing below.
-function interiorGraph(o,t){
-  var low=Math.min.apply(null,t.floors.map(function(f){return f[0]}));
-  var platform=!t.exits.length&&low>=1.5;
-  return graphNear(o.x,o.y,platform?o.z:o.z+low)||(platform?graphNear(o.x,o.y,o.z,true):null);
+// The graph a building's floors join on Apply (plan.py): the one it names, else
+// the one nearest its base - measured from the base, so the big warehouse,
+// whose floor is 3.3 m up its model, joins the yard it stands in. A building
+// with no way in - a watchtower's platform - joins the nearest graph however
+// far, as nodes of its own: the game gives each tower sniper a graph of his
+// own up there, linked to nothing below. So does a room under the ground,
+// reached by a lift (level 13's tunnels and rooms), or one high over it (level
+// 14's, pasted as they stood on one another): every floor more than a storey
+// from the ground over its middle.
+function interiorGraph(o,t,before){
+  if(o.graph!=null&&GRAPHS&&GRAPHS[String(o.graph)])return String(o.graph);
+  var tz=terrainZ(o.x,o.y),fl=t.floors.map(function(f){return o.z+f[0]});
+  var off=tz!=null&&(Math.max.apply(null,fl)<tz-3||Math.min.apply(null,fl)>tz+3);
+  return graphJoin(o.x,o.y,o.z,40,before)||(!t.exits.length||off?graphJoin(o.x,o.y,o.z,1e12,before):null);
 }
 // The game's own doors, read out of its levels (studio/extract/doors.py):
 // what each door model does when it opens, and which doors a building has. A
@@ -2117,7 +2188,15 @@ function buildingKit(model){
 }
 function doorSlots(model){return buildingKit(model).doors}
 function liftSlots(model){return buildingKit(model).lifts}
-function propSlots(model){return buildingKit(model).props||[]}
+// its furniture - not a building with a cellar that stood inside it (level
+// 12's fortress ruins, 128 x 170 m, had a guard HQ and a security building in
+// it, which as furniture came off the game's ground grid their cellars need)
+function propSlots(model){
+  return (buildingKit(model).props||[]).filter(function(sl){
+    var k=DOORS&&DOORS.buildings&&DOORS.buildings[sl.model];
+    return !(k&&!Array.isArray(k)&&(k.holes||[]).length);
+  });
+}
 // a placement of a door model becomes a door that works: the model's own slide,
 // angles, times and sounds travel with it
 function asDoor(o,kind){
@@ -2136,22 +2215,22 @@ function interiors(){
   placements.forEach(function(p){
     if(p.type!=="building"||p.interior===false)return;
     var t=templateFor(p.model);
-    if(t)list.push(makeInterior(p.uid,p,t,true));
+    if(t)list.push(makeInterior(p.uid,p,t,true,list));
   });
   Object.keys(edits).forEach(function(ref){
     if(!edits[ref].interior)return;
     var o=objByRef(ref),t=o&&templateFor(o.model);
-    if(t&&!isRemoved(o))list.push(makeInterior(ref,o,t,false));
+    if(t&&!isRemoved(o))list.push(makeInterior(ref,o,t,false,list));
   });
   intCache={v:v,src:LEVEL,list:list};
   return list;
 }
-function makeInterior(key,o,t,own){
+function makeInterior(key,o,t,own,before){
   var nodes=t.nodes.map(function(n,i){
     var w=toWorld(o,n);
     return {ref:"t:"+key+":"+i,i:i,x:w.x,y:w.y,z:w.z,c:n[6]||"",porch:!!n[7]};
   });
-  var gid=interiorGraph(o,t);
+  var gid=interiorGraph(o,t,before);
   var it={key:key,o:o,t:t,own:own,nodes:nodes,gid:gid,exits:[],
           floors:floorsOf({o:o,t:t,it:own?{}:null})};
   // on a level building, floors that already have nodes keep them - Apply only adds the rest
@@ -2280,27 +2359,39 @@ function floorAt(wx,wy,near){
 // floor, a platform) instead of dropping from just above the ground.
 // the player's start stands on the ground the way a guard does
 var PLAYER_LIFT=0.94;
+// a pickup on open ground, or on a floor of walkways, lies half a metre up, as
+// the shipped ones do and the build lays it (plan.py PICKUP_RISE): the floor
+// under one is looked for from that far below it
+var PICKUP_RISE=0.5;
 function kindOf(o){return o.type==="soldier"||o.type==="player"?"soldier":o.type==="pickup"?"pickup":"building"}
 function planContext(){
   return {level:LV,empty:MODE==="empty",removeRefs:removeRefs,
     edits:Object.keys(edits).map(function(r){return edits[r]}).filter(function(e){return e.x!=null}),
-    objects:placements.filter(function(p){return p.type==="building"})
+    // a door or gate of yours opens, as the level's do: not a wall to walk through
+    objects:placements.filter(function(p){return p.type==="building"&&!(p.door&&typeof p.door==="object")})
       .map(function(p){return {model:p.model,name:p.name,x:p.x,y:p.y,z:p.z,gamma:p.gamma||0}})};
 }
 function settle(o,explicit){
   if(!SRV||!o||READONLY||!M||!canMove(o))return;
   // the player's start stands at hip height, as the game's own do (apply_plan.py PLAYER_LIFT)
-  var lift=o.type==="player"?PLAYER_LIFT:0;
+  var lift=o.type==="player"?PLAYER_LIFT:0,near=explicit?o.z-lift:null;
   // inside a building its floors decide, not the ground under it
   var b=buildingAt(o.x,o.y,explicit?o.z:null);
   if(b&&o.type!=="building"){
-    var fz=floorAt(o.x,o.y,explicit?o.z-lift:null);
-    if(fz!=null&&Math.abs(fz+lift-o.z)>0.005)setZ(o,+(fz+lift).toFixed(3));
-    return;
+    var fz=floorAt(o.x,o.y,explicit?o.z-(o.type==="pickup"?PICKUP_RISE:lift):null);
+    if(o.type!=="pickup"){
+      if(fz!=null&&Math.abs(fz+lift-o.z)>0.005)setZ(o,+(fz+lift).toFixed(3));
+      return;
+    }
+    // a pickup: how high over that floor it lies is the build's to say - half
+    // a metre over a floor of walkways, right on one the building's model
+    // makes (a barracks'); the server asks the build's own surfaces
+    if(fz==null)return;
+    near=fz;
   }
   var x0=o.x,y0=o.y,seq=(o._gq=(o._gq||0)+1);
   var pt={kind:kindOf(o),x:o.x,y:o.y,model:kindOf(o)==="building"?o.model:null,ref:o.own?null:o.ref};
-  if(explicit)pt.z=o.z-lift;
+  if(near!=null)pt.z=near;
   var body=planContext();body.points=[pt];
   if(o.type==="building")body.objects=body.objects.filter(function(q){return !(q.x===o.x&&q.y===o.y&&q.model===o.model)});
   return fetch("api/ground",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
@@ -2543,8 +2634,50 @@ function nodeLinks(pn){
   LINKC.map.set(pn,res);
   return res;
 }
+// The level's walkway points a building of the mission's stands over: the build
+// takes them out before it adds points of the mission's own (plan.py), so
+// nothing of the mission's may link to them - a point pasted beside one was
+// refused by Apply for it. As the build has it: a point under the lowest floor
+// of a building whose floors it lays, or one inside a building all of whose
+// links leave it - cut at its walls, it is left with none. A link to the
+// building's own points, or to one just outside its walls (its porch,
+// navtemplates.py interior), is its own and not cut; a point a patrol of the
+// level's walks stays. {graph:id: true}, kept while the buildings and the
+// walkways stay as they are.
+var BURIED={sig:"",set:{}};
+function buriedLevelNodes(){
+  var sig=buildingSig()+"#"+nodeVer;
+  if(BURIED.sig===sig)return BURIED.set;
+  var set={},solid=placements.filter(function(p){
+    var z=MODELS&&MODELS.sizes&&MODELS.sizes[p.model];
+    return p.type==="building"&&!(p.door&&typeof p.door==="object")&&z&&z.body;
+  }).map(function(b){
+    var z=MODELS.sizes[b.model],r=0,t=templateFor(b.model);
+    z.body.forEach(function(q){[[q[0],q[1]],[q[0]+q[2],q[1]],[q[0],q[1]+q[3]],[q[0]+q[2],q[1]+q[3]]].forEach(function(c){r=Math.max(r,Math.hypot(c[0],c[1]))})});
+    var low=t?Math.min.apply(null,t.floors.map(function(f){return f[0]})):null;
+    return {b:b,r:r+0.5,low:low!=null&&low<=1.5&&b.interior!==false?low:null};
+  });
+  BURIED={sig:sig,set:set};
+  if(solid.length)Object.keys(GRAPHS||{}).forEach(function(gid){
+    nodesOf(gid).forEach(function(n){
+      var hit=solid.some(function(q){
+        var b=q.b;
+        if(Math.hypot(n.x-b.x,n.y-b.y)>q.r||!inBody(b,n.x,n.y,0.3)||!withinHeight(b,n.z))return false;
+        if(q.low!=null&&n.z-b.z<q.low-0.15&&inBody(b,n.x,n.y,0))return true;
+        var nb=neighboursOf(gid,n.id);
+        return nb.length>0&&nb.every(function(id){
+          var m=nodeById(gid,id);
+          return m&&!(inBody(b,m.x,m.y,0.3)&&withinHeight(b,m.z))&&!(inBody(b,m.x,m.y,2.5)&&Math.abs(m.z-n.z)<=1.5);
+        });
+      });
+      if(hit&&!nodeUsers(gid,n.id).length)set[gid+":"+n.id]=true;
+    });
+  });
+  return set;
+}
 function nodeLinksNow(pn){
-  var cands=nodesOf(pn.graph).map(function(n){return {x:n.x,y:n.y,z:n.z,id:n.id}});
+  var gone=buriedLevelNodes();
+  var cands=nodesOf(pn.graph).filter(function(n){return !gone[pn.graph+":"+n.id]}).map(function(n){return {x:n.x,y:n.y,z:n.z,id:n.id}});
   for(var i=0;i<navNodes.length&&navNodes[i]!==pn;i++){
     var q=navNodes[i];
     if(String(q.graph)===String(pn.graph)&&nodeLinks(q).length)cands.push({x:q.x,y:q.y,z:q.z,id:"n:"+q.uid});
@@ -4005,6 +4138,8 @@ function placeCheck(o){
       for(var k=0;k<others.length&&!hit;k++){
         var q=others[k],qs=MODELS.sizes[q.model];
         if(!qs||!qs.body||qs.h<1.5||segInfo(q.model))continue;
+        if(o.batch&&q.batch===o.batch)continue;       // kept together from a level: as the game has them
+        if((o.of&&(q.uid===o.of||q.of===o.of))||(q.of&&q.of===o.uid))continue;   // a building and what came with it
         var qr=Math.hypot(qs.w,qs.d)/2+Math.hypot(qs.cx||0,qs.cy||0);
         if(Math.hypot(q.x-o.x,q.y-o.y)>reach+qr)continue;
         for(var t=0;t<pts.length;t++)if(inBody(q,pts[t][0],pts[t][1],-0.4)){hit=q;break}
@@ -4294,7 +4429,7 @@ function guardGraph(wx,wy,wz){
     // a floor with no nodes yet: Apply adds them to the graph around the building's base
     var fl=floorsOf(b),cur=fl[0];
     fl.forEach(function(f){if(Math.abs(f.z-wz)<Math.abs(cur.z-wz))cur=f});
-    if(cur.missing){var gn=graphNear(b.o.x,b.o.y,b.o.z);if(gn)return String(gn)}
+    if(cur.missing){var gn=graphJoin(b.o.x,b.o.y,b.o.z,40,interiors());if(gn)return String(gn)}
   }
   // no walkways he can stand on: none, rather than whichever graph is biggest
   // (the build says so too, and picks the nearest one it can)
@@ -7011,6 +7146,16 @@ function groupData(list){
   list.slice().forEach(function(o){
     if(o.own&&o.type==="building"&&o.uid)placements.forEach(function(p){if(p.of===o.uid&&list.indexOf(p)<0)list.push(p)});
   });
+  // what a kept thing of the level's stands on, or in, comes too: a guard on the
+  // upper floor of level 12's fortress ruins, whose middle is outside the box,
+  // was kept and pasted standing in the air
+  list.slice().forEach(function(o){
+    if(o.own||o.type==="navnode"||o.type==="building"||o.x==null||!LEVEL)return;
+    LEVEL.objects.forEach(function(b){
+      if(b.type!=="building"||b.cutscene||list.indexOf(b)>=0||isRemoved(b)||segInfo(b.model))return;
+      if(inBody(b,o.x,o.y,0.3)&&withinHeight(b,o.z))list.push(b);
+    });
+  });
   // the level's doors and gates among what is selected come along: they can't
   // be selected themselves (they don't move), and a compound kept without its
   // gate had a gap in its wall. A lift's own doors stay with the lift.
@@ -7030,17 +7175,30 @@ function groupData(list){
     if(o.own||o.type!=="building"||!o.model)return false;
     var k=buildingKit(o.model);return k.doors.length+k.lifts.length+(k.props||[]).length>0;
   });
+  // - only what the kit brings: its doors, its furniture, its lift's buttons. The
+  // guards in it, the weapons on its floors, its cameras and alarm buttons stay
+  // (a barracks kept from level 1 came without its guards)
+  function kitBrings(o){return o.type==="door"||o.type==="prop"||(o.type==="switch"&&!alarmOf(o))}
   if(kitted.length)list=list.filter(function(o){
-    return o.own||o.type==="navnode"||kitted.indexOf(o)>=0||!kitted.some(function(b){return inBody(b,o.x,o.y,0)&&withinHeight(b,o.z)});
+    return o.own||o.type==="navnode"||kitted.indexOf(o)>=0||!kitBrings(o)||
+      !kitted.some(function(b){return inBody(b,o.x,o.y,0)&&withinHeight(b,o.z)});
   });
-  var c=groupCentre(list),items=[],nodes=[],kept=keptTasks(list);
+  var c=groupCentre(list),items=[],nodes=[],kept=keptTasks(list),wkeys=areaWalkways(list,c,nodes);
+  // a guard's patrol stops at the level's own points: at the ones that came along
+  function keptPatrol(o){
+    return (o.patrol||[]).map(function(n){
+      if(typeof n!=="number")return n;
+      var k="lv:"+o.graph+":"+n;
+      return wkeys[k]?"n:"+k:null;
+    }).filter(function(n){return n!=null});
+  }
   list.forEach(function(o){
     if(o.type==="navnode"){nodes.push({old:o.uid,graph:o.graph,dx:o.x-c.x,dy:o.y-c.y,z:o.z});return}
     var p;
-    if(o.own){p=JSON.parse(JSON.stringify(o));p.old=o.uid;delete p.uid;delete p._gq}
+    if(o.own){p=JSON.parse(JSON.stringify(o));p.old=o.uid;delete p.uid;delete p._gq;delete p.batch;if(p.type==="soldier")p.patrol=keptPatrol(o)}
     else if(o.type==="player"||o.fixed)return;      // the start is the mission's; a machine gun works only with its gunner
     else if(o.type==="soldier"){p={type:"soldier",kind:"soldier",ai:o.ai,model:o.model,weapon:o.weapon,
-      name:displayName(o),graph:o.graph!=null?String(o.graph):null,patrol:(o.patrol||[]).filter(function(n){return typeof n==="number"})};
+      name:displayName(o),graph:o.graph!=null?String(o.graph):null,patrol:keptPatrol(o)};
       if(o.team!=null)p.team=o.team}
     else if(o.type==="pickup")p={type:"pickup",kind:"pickup",pickupId:o.model,name:displayName(o)};
     // a camera of the level's: a camera of yours, sweeping as it did
@@ -7067,9 +7225,239 @@ function groupData(list){
     // what the kept doors name it by, and how high above the ground it stood
     if(!o.own&&o.id>=0&&kept[o.id])p.old="lv:"+o.id;
     var g0=groundAt(o.x,o.y);if(g0!=null)p.up=+(o.z-g0).toFixed(3);
+    // and a building, a wall or a crate: how high it stood over the lowest ground
+    // under it (seatOf), for one the level set deeper or higher than its model sits
+    if(p.type==="building"&&!p.of){var fl=footLow(o.model,o.x,o.y,o.gamma);if(fl!=null)p.seat=+(o.z-fl).toFixed(3)}
     items.push(p);
   });
-  return {v:1,level:LV,base:BASE_LEVEL,z:list.reduce(function(a,o){return a+o.z},0)/list.length,items:items,nodes:nodes};
+  // A level with no ground (level 14 is all indoors): what is kept keeps its
+  // heights as they stand to one another, from the lowest floor anyone stands
+  // on - there "the ground" was the nearest walkways, on any floor, and its
+  // guards came 14 m off the walkways of their own floor
+  var rigid=!TERR||terrainZ(c.x,c.y)==null;
+  if(rigid){
+    var zs=items.filter(function(p){return p.type==="soldier"}).map(function(p){return p.z}).concat(nodes.map(function(n){return n.z}));
+    if(!zs.length)zs=items.map(function(p){return p.z});
+    var zref=zs.length?Math.min.apply(null,zs):0;
+    items.forEach(function(p){p.rel=+(p.z-zref).toFixed(3);delete p.up;delete p.seat});
+    nodes.forEach(function(n){n.rel=+(n.z-zref).toFixed(3);delete n.up});
+  }
+  return {v:1,level:LV,base:BASE_LEVEL,z:list.reduce(function(a,o){return a+o.z},0)/list.length,items:items,nodes:nodes,rigid:rigid||undefined};
+}
+// The walkways of an area being kept, into nodes: the level's own points on the
+// ground among the things kept, and those on the floors of a kept building the
+// build has no plan of (its walkways inside are the level's), each with its
+// height above the ground. A kept building whose floors the build lays (a
+// template: the village houses, the watchtowers) gets them from it; a point in
+// a building left behind, or up where one used to be (an empty map keeps the
+// walkways of the buildings it took away), stays. Pasted, they are the guards'
+// walkways as they were, and their patrols point at them. {key: true} of those taken.
+function areaWalkways(list,c,nodes){
+  var keys={},things=list.filter(function(o){return o.type!=="navnode"&&o.x!=null});
+  if(!things.length||!GRAPHS||!LEVEL)return keys;
+  var wb=[1e9,-1e9,1e9,-1e9];
+  things.forEach(function(o){wb=[Math.min(wb[0],o.x),Math.max(wb[1],o.x),Math.min(wb[2],o.y),Math.max(wb[3],o.y)]});
+  function hasBody(o){var z=MODELS&&MODELS.sizes&&MODELS.sizes[o.model];return !!(z&&z.body)}
+  var keptB=things.filter(function(o){return o.type==="building"&&!segInfo(o.model)&&hasBody(o)});
+  var mx=(wb[0]+wb[1])/2,my=(wb[2]+wb[3])/2;
+  var leftB=LEVEL.objects.concat(placements).filter(function(q){
+    return q.type==="building"&&q.x!=null&&!q.cutscene&&list.indexOf(q)<0&&!isRemoved(q)&&!segInfo(q.model)&&hasBody(q)&&
+      Math.abs(q.x-mx)<(wb[1]-wb[0])/2+60&&Math.abs(q.y-my)<(wb[3]-wb[2])/2+60});
+  Object.keys(GRAPHS).forEach(function(gid){
+    nodesOf(gid).forEach(function(n){
+      if(n.x<wb[0]-3||n.x>wb[1]+3||n.y<wb[2]-3||n.y>wb[3]+3)return;
+      var inK=keptB.filter(function(b){return inBody(b,n.x,n.y,0.3)&&withinHeight(b,n.z)})[0];
+      // what the build lays in it (its layout's floors, and its stairs) it
+      // has; on a floor its layout does not have (the bottom of level 14's main
+      // elevator, where its guards stand) the level's own points stay
+      if(inK&&inK.own)return;
+      var tk=inK&&templateFor(inK.model);
+      if(tk){
+        var g=inK.gamma||0,cg=Math.cos(g),sg=Math.sin(g),ddx=n.x-inK.x,ddy=n.y-inK.y;
+        var lx=ddx*cg+ddy*sg,ly=-ddx*sg+ddy*cg,lz=n.z-inK.z;
+        if(tk.floors.some(function(f){return Math.abs(f[0]-lz)<=0.6})||
+           tk.nodes.some(function(q){return Math.hypot(q[0]-lx,q[1]-ly)<=1.5&&Math.abs(q[2]-lz)<=0.6}))return;
+      }
+      if(leftB.some(function(b){return inBody(b,n.x,n.y,0)&&withinHeight(b,n.z)}))return;
+      var g0=groundAt(n.x,n.y),up=g0!=null?n.z-g0:0;
+      if(!inK&&Math.abs(up)>1.5)return;
+      var k="lv:"+gid+":"+n.id;keys[k]=true;
+      nodes.push({old:k,graph:String(gid),dx:n.x-c.x,dy:n.y-c.y,z:n.z,up:+up.toFixed(2)});
+    });
+  });
+  return keys;
+}
+// a walkway point in the open: on the ground, and not inside a building - one a
+// paste has put a building over (the village over level 10's) is walled in
+function openWalkway(n){return onSurface(n)&&!buildingAt(n.x,n.y,n.z)}
+// Which of these links (pairs of points) pass through a wall, by the build's own
+// test (/api/links, surface.py): what is in the way, or null, for each. The
+// answers are kept (linkCut), so the points laid on them link as they will.
+function askCuts(pairs){
+  if(!SRV||!pairs.length)return Promise.resolve(pairs.map(function(){return null}));
+  var sig=buildingSig();
+  if(LINKCUT.sig!==sig){LINKCUT={sig:sig,map:{}}}
+  var body=planContext();
+  body.pairs=pairs.map(function(q){return [q[0].x,q[0].y,q[0].z,q[1].x,q[1].y,q[1].z]});
+  return fetch("api/links",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(function(j){
+      if(!j.ok)return pairs.map(function(){return null});
+      pairs.forEach(function(q,i){LINKCUT.map[pairKey(q[0],q[1])]=j.cut[i]||null});
+      nodeVer++;
+      return j.cut;
+    }).catch(function(){return pairs.map(function(){return null})});
+}
+// A way on foot a chain of walkway points can link along, from a to b: the walk
+// grid's way, every step of it asked of the server; a step through a wall - a
+// gap the grid's metre cells see that a wall panel, a gate leaf or a house's
+// corner closes - is taken out of the grid, and the grid asked again. Points
+// 2.5 m apart, from a to b, or null.
+function checkedWay(a,b){
+  var block={},tries=0,m=TERR&&TERR.meta;
+  if(!m)return Promise.resolve(null);
+  function attempt(){
+    var path=walkPath(a,b,block);
+    // the grid's own way must end at b, not at the nearest cell it can walk to
+    // (across a wall from b, for a point that hugs one)
+    if(!path||path.length<3||Math.hypot(path[path.length-2][0]-b.x,path[path.length-2][1]-b.y)>1.6)return Promise.resolve(null);
+    var pts=resampleClimb(path,2.5).map(function(q){var z=groundAt(q[0],q[1]);return {x:q[0],y:q[1],z:z!=null?z:a.z}});
+    pts[0]={x:a.x,y:a.y,z:a.z};pts[pts.length-1]={x:b.x,y:b.y,z:b.z};
+    var pairs=[];for(var i=1;i<pts.length;i++)pairs.push([pts[i-1],pts[i]]);
+    return askCuts(pairs).then(function(cut){
+      var bad=pairs.filter(function(q,i){return cut[i]});
+      if(!bad.length)return pts;
+      if(++tries>6)return null;
+      bad.forEach(function(q){
+        var L=Math.hypot(q[1].x-q[0].x,q[1].y-q[0].y),n=Math.max(1,Math.ceil(L/0.5));
+        for(var k=1;k<n;k++){
+          var x=q[0].x+(q[1].x-q[0].x)*k/n,y=q[0].y+(q[1].y-q[0].y)*k/n;
+          block[Math.round((y-m.y0)/m.cell)*m.w+Math.round((x-m.x0)/m.cell)]=1;
+        }
+      });
+      return attempt();
+    });
+  }
+  return attempt();
+}
+// Join points cut off from graph g by a way on foot to the nearest of them it
+// can reach, from the nearest walkway of g in the open (the graph's own, or
+// points already joined to it). The new points of the way, in the order walked,
+// or none. `failed` keeps the points no way reached, from round to round: the
+// nearest five of a yard were in a house, tried round after round, and the
+// forty in the open beside it were never tried.
+function joinChain(targets,g,failed){
+  failed=failed||{};
+  var gone=buriedLevelNodes();
+  var from=nodesOf(g).filter(function(n){return !gone[g+":"+n.id]&&openWalkway(n)}).concat(navNodes.filter(function(n){
+    return String(n.graph)===String(g)&&targets.indexOf(n)<0&&nodeLinks(n).length&&openWalkway(n)}));
+  var pairs=[];
+  targets.filter(openWalkway).forEach(function(t){from.forEach(function(q){pairs.push([Math.hypot(q.x-t.x,q.y-t.y),q,t])})});
+  pairs.sort(function(x,y){return x[0]-y[0]});
+  var picks=[],seen={};
+  for(var i=0;i<pairs.length&&picks.length<8;i++){
+    var k=pairs[i][2].uid;if(seen[k]||failed[k])continue;seen[k]=1;picks.push(pairs[i]);
+  }
+  var tried=0;
+  function next(){
+    if(tried>=picks.length)return Promise.resolve([]);
+    var pk=picks[tried++];
+    return checkedWay(pk[1],pk[2]).then(function(way){
+      if(!way){failed[pk[2].uid]=true;return next()}
+      var made=[];
+      for(var j=1;j<way.length-1;j++){
+        var x=way[j].x,y=way[j].y,z=way[j].z;
+        if(navNodes.concat(nodesOf(g)).some(function(n){return Math.hypot(n.x-x,n.y-y)<1.2&&Math.abs(n.z-z)<=SAME_FLOOR}))continue;
+        var o={uid:uid(),own:true,type:"navnode",x:+x.toFixed(2),y:+y.toFixed(2),z:+z.toFixed(2),graph:String(g)};
+        navNodes.push(o);made.push(o);
+      }
+      return made;
+    });
+  }
+  return next();
+}
+// The walkways a paste brought, laid again once the server has said which of
+// their links pass through a wall - a building of the area between two points,
+// as the build tests them (surface.py; linkCut). Laid at once they were joined
+// as if no wall stood anywhere, and Apply refused the ones a building of the
+// area cut off. Each point is added after one it links to without a wall in
+// between; where the area's points cannot reach the graph, a chain along the
+// way on foot is laid to the nearest of them, and asked about in turn. What is
+// still cut off is left out. Resolves to the points left out.
+var PASTE_WALK=Promise.resolve([]);
+// every link these points could make - among themselves as well as with what
+// is placed already - asked at once: checkLinks asks about the points placed,
+// and a point laid after another still waiting could link to it unasked
+function checkPts(pts){
+  var add=pts.filter(function(n){return navNodes.indexOf(n)<0});
+  add.forEach(function(n){navNodes.push(n)});
+  return checkLinks(pts).then(function(r){
+    add.forEach(function(n){var i=navNodes.indexOf(n);if(i>=0)navNodes.splice(i,1)});
+    nodeVer++;
+    return r;
+  });
+}
+function relayWalkways(pts,home){
+  if(!SRV||!pts.length||!home)return Promise.resolve([]);
+  var tries=0,failed={};
+  function lay(){
+    pts.forEach(function(n){var i=navNodes.indexOf(n);if(i>=0)navNodes.splice(i,1)});
+    nodeVer++;
+    var rest=pts.slice(),more=true;
+    while(rest.length&&more){
+      more=false;
+      for(var i=0;i<rest.length;i++){
+        navNodes.push(rest[i]);
+        if(nodeLinks(rest[i]).length){rest.splice(i,1);i--;more=true}
+        else navNodes.pop();
+      }
+    }
+    return rest;
+  }
+  function round(){
+    var rest=lay();
+    if(!rest.length||tries>=6)return rest;
+    tries++;
+    return joinChain(rest,home,failed).then(function(ch){
+      if(!ch.length)return round();          // on to the ones not tried yet
+      // the new way's points first, in the order walked, then the area's
+      pts=ch.concat(pts.filter(function(n){return ch.indexOf(n)<0}));
+      return checkPts(pts).then(round);
+    });
+  }
+  return checkPts(pts).then(function(ok){return ok?round():[]});
+}
+// A step out of the doorways of a building (its layout's exits, which the build
+// joins to walkway points within 12 m it can walk to): 1.5 m past the wall each
+// is in, on the ground there, doorways within 6 m of each other as one, at
+// most four. Where the ground there is not the doorway's floor (a door up a
+// wall), or something else stands there, none. [{x,y,z}]
+function doorwaySteps(b){
+  var t=templateFor(b.model),s=MODELS&&MODELS.sizes&&MODELS.sizes[b.model],out=[];
+  if(!t||!t.exits||!t.exits.length||!s||!s.body)return out;
+  function within(mx,my,m){return s.body.some(function(r){return mx>=r[0]-m&&mx<=r[0]+r[2]+m&&my>=r[1]-m&&my<=r[1]+r[3]+m})}
+  t.exits.forEach(function(k){
+    var n=t.nodes[k],mx=n[0],my=n[1],cands=[];
+    s.body.forEach(function(r){
+      // each wall of each part: [where it stands, its outward direction]
+      [[r[0],-1,0],[r[0]+r[2],1,0],[r[1],0,-1],[r[1]+r[3],0,1]].forEach(function(e){
+        var nx=e[1],ny=e[2],vert=nx!==0;
+        if(vert?(my<r[1]-0.6||my>r[1]+r[3]+0.6):(mx<r[0]-0.6||mx>r[0]+r[2]+0.6))return;
+        var past=vert?(mx-e[0])*nx:(my-e[0])*ny;          // how far out past that wall the doorway is
+        if(past<-4||past>3)return;
+        cands.push([Math.abs(past),mx+nx*(1.5-past),my+ny*(1.5-past)]);
+      });
+    });
+    cands.sort(function(p,q){return p[0]-q[0]});
+    var c=cands.filter(function(c){return !within(c[1],c[2],0.3)})[0];
+    if(!c)return;
+    var w=toWorld(b,[c[1],c[2],n[2]]),g=groundAt(w.x,w.y);
+    if(g==null||Math.abs(g-w.z)>1.2)return;
+    if(out.some(function(q){return Math.hypot(q.x-w.x,q.y-w.y)<6}))return;
+    if(buildingAt(w.x,w.y,g)||placements.some(function(q){
+      return q!==b&&q.type==="building"&&!(q.door&&typeof q.door==="object")&&inBody(q,w.x,w.y,0.3)&&withinHeight(q,g)}))return;
+    out.push({x:w.x,y:w.y,z:g});
+  });
+  return out.slice(0,4);
 }
 // The level's doors among what is kept, and the switches they name, by task id:
 // what a kept door's expressions can go on naming ("door" or "switch")
@@ -7129,19 +7517,43 @@ function pasteData(d,x,y,gamma){
   lastChangeAt=0;
   gamma=gamma||0;
   var cs=Math.cos(gamma),sn=Math.sin(gamma),map={},out=[],sameLevel=d.level===LV;
+  // a building with a cellar stands on the game's ground grid, as it did in its
+  // level (the ground over a cellar opens only in whole 16 m squares): the whole
+  // paste moves the few metres that takes, so what came with it stays round it -
+  // by the move that puts the most of them on it (a lift's shaft of level 13
+  // fell between the squares its barracks' cellar is on)
+  var holed=d.items.filter(function(p){return p.type==="building"&&!p.of&&holesOf(p)&&squareTurn((p.gamma||0)+gamma)});
+  function at(p,ox,oy){return {x:x+ox+p.dx*cs-p.dy*sn,y:y+oy+p.dx*sn+p.dy*cs}}
+  var shift=null;
+  holed.forEach(function(p){
+    var w=at(p,0,0),hg=onHoleGrid(p,w.x,w.y,(p.gamma||0)+gamma),ox=hg.x-w.x,oy=hg.y-w.y;
+    var on=holed.filter(function(q){
+      var v=at(q,ox,oy);
+      return (holeCentres(q,v.x,v.y,(q.gamma||0)+gamma)||[]).every(function(h){
+        return Math.abs(gridOff(h.x-h.s/2))<HOLE_TOL&&Math.abs(gridOff(h.y-h.s/2))<HOLE_TOL});
+    }).length;
+    if(!shift||on>shift.on||(on===shift.on&&Math.hypot(ox,oy)<Math.hypot(shift.x,shift.y)))shift={x:ox,y:oy,on:on};
+  });
+  if(shift){x+=shift.x;y+=shift.y}
   var dz=0;
   var gz=groundAt(x,y);if(gz!=null&&d.z!=null&&!sameLevel)dz=gz-d.z;
-  d.nodes.forEach(function(n){
+  // one paste, one batch: what came together overlapped as it does in the level
+  // it was kept from, and the check list leaves that be (placeCheck)
+  var batch=uid();
+  // its walkways: points of the mission's own, all in the graph of this level
+  // whose walkways on the ground are nearest; placed below, on the ground as it
+  // will be, and joined to the graph
+  var home=nearestGraph(x,y,gz!=null?gz:0)||Object.keys(GRAPHS||{})[0]||null,pnodes=[];
+  (d.nodes||[]).forEach(function(n){
     var u=uid();map["n:"+n.old]="n:"+u;
-    var o={uid:u,own:true,type:"navnode",x:x+n.dx*cs-n.dy*sn,y:y+n.dx*sn+n.dy*cs,z:n.z+dz,graph:n.graph};
-    settleZ(o);rehome(o);
-    navNodes.push(o);out.push(o);
+    var nz=d.rigid&&n.rel!=null&&gz!=null?+(gz+n.rel).toFixed(2):n.z+dz;
+    pnodes.push({o:{uid:u,own:true,type:"navnode",x:x+n.dx*cs-n.dy*sn,y:y+n.dx*sn+n.dy*cs,z:nz,graph:String(home||n.graph)},up:n.up,rigid:d.rigid&&n.rel!=null});
   });
   d.items.forEach(function(p){if(p.old)map["t:"+p.old]="t:"+(p._new=uid())});
-  var dropped=0,kits=[],mounted=[];
+  var dropped=0,kits=[],mounted=[],seated=[],guards=[];
   d.items.forEach(function(p){
     var o=JSON.parse(JSON.stringify(p));
-    o.uid=p._new||uid();delete o.old;delete o._new;delete o.dx;delete o.dy;
+    o.uid=p._new||uid();delete o.old;delete o._new;delete o.dx;delete o.dy;o.batch=batch;
     // a door, lift or desk that came with a building stays that building's
     if(o.of){var nb=map["t:"+o.of];if(nb)o.of=nb.slice(2);else{delete o.of;delete o.slot}}
     if(o.alarmId&&o.alarmId.indexOf("own:")===0&&map["t:"+o.alarmId.slice(4)])o.alarmId="own:"+map["t:"+o.alarmId.slice(4)].slice(2);
@@ -7156,14 +7568,21 @@ function pasteData(d,x,y,gamma){
       if(o.door.switch&&map["t:"+o.door.switch])o.door.switch=map["t:"+o.door.switch].slice(2);
     }
     o.x=+(x+p.dx*cs-p.dy*sn).toFixed(3);o.y=+(y+p.dx*sn+p.dy*cs).toFixed(3);o.z=(p.z||0)+dz;
+    // from a level with no ground: as high over the lowest floor as it stood, and kept there
+    if(d.rigid&&p.rel!=null&&gz!=null&&!o.of){o.z=+(gz+p.rel).toFixed(3);o.exact=true;o._up=true}
+    delete o.rel;
     // what stood above the ground in its place - a switch on a gate post, a keypad
     // on a wall, a camera on a pole, a guard on a tower's platform - keeps its
     // height above the ground here, and stays there (exact: the build rests things
     // on what is under them, and under a keypad on a wall is the ground); it was
     // set down on the ground. The rest is set on the ground, or a floor. A guard
     // a step up stood on something that may not have come: he is set down.
-    if(p.up!=null&&p.up>(o.type==="soldier"?2:0.25)&&!o.of){o.exact=true;o._up=true;mounted.push([o,p.up])}
-    delete o.up;
+    if(o._up&&d.rigid){}
+    else if(p.up!=null&&p.up>(o.type==="soldier"?2:0.25)&&!o.of){o.exact=true;o._up=true;mounted.push([o,p.up])}
+    // one its level set deeper in the ground, or higher, than the build sets its
+    // model (a wall sunk to make a low one of it) stands as it stood, too
+    else if(o.type==="building"&&p.seat!=null&&!o.of&&Math.abs(p.seat-seatOf(o.model))>0.3){o.exact=true;o._up=true;seated.push([o,p.seat])}
+    delete o.up;delete o.seat;
     o.gamma=+(((p.gamma||0)+gamma)%(Math.PI*2)).toFixed(5);
     if(o.type==="soldier"){
       var before=(o.patrol||[]).length;
@@ -7176,12 +7595,24 @@ function pasteData(d,x,y,gamma){
         return sameLevel?n:null;
       }).filter(function(n){return n!=null});
       dropped+=before-o.patrol.length;
-      if(!sameLevel||!o.patrol.length)o.graph=guardGraph(o.x,o.y,o.z);
-      if(!o.patrol.length)delete o.patrolCmds;
+      guards.push(o);
     }
     placements.push(o);out.push(o);
   });
   d.items.forEach(function(p){delete p._new});
+  // cameras and alarm buttons brought where no alarm system is - an empty map
+  // has none - bring one: they raise it, and the guards answer it, as they did
+  // in the level they were kept from (the build gave cameras with no system an
+  // alarm of their own that no guard answers, and warned)
+  var parts=out.filter(function(o){return !o.gate&&o.alarm!==false&&/^(camera|switch|siren|alarmlight)$/.test(o.type)});
+  if(parts.length&&!alarmSystems().length&&!out.some(function(o){return o.type==="alarmctl"})){
+    var az=groundAt(x,y);
+    var sys={uid:uid(),own:true,type:"alarmctl",kind:"alarmctl",model:"",name:"Alarm system",
+      x:+x.toFixed(3),y:+y.toFixed(3),z:(az!=null?az:0)+1,gamma:0,hackTime:4,batch:batch};
+    placements.push(sys);out.push(sys);
+    parts.forEach(function(o){o.alarmId="own:"+sys.uid});
+    toast("This mission had no alarm system: one came with the "+(parts.some(function(o){return o.type==="camera"})?"cameras":"alarm buttons"));
+  }
   // what names an alarm system or an event this mission does not have: automatic
   // again (the nearest system), or at the start
   out.forEach(function(o){
@@ -7190,13 +7621,65 @@ function pasteData(d,x,y,gamma){
     if(!o.alarmId&&!o.gate&&/^(camera|switch|siren|alarmlight)$/.test(o.type)&&o.alarm!==false){var na=nearestAlarm(o.x,o.y);if(na)o.alarmId=na.key}
     if(o.arriveOn&&!events.some(function(v){return v.uid===o.arriveOn})){delete o.arriveOn;delete o.arriveTimes}
   });
+  // heights are taken on the ground as it will be: the ground under a building
+  // that levels its own is levelled first (applyGround, the pads)
+  applyGround();
+  // a building down as the build sets it down, on the lowest ground under it as
+  // deep as its model sits, before its doors and furniture are fitted to it: a
+  // machine gun post came 2.5 m up from the middle height of what was kept, its
+  // sandbags with it, and the walkways laid round them were asked about there
+  out.forEach(function(o){
+    if(o.type!=="building"||o.of||o.exact)return;
+    var fl=footLow(o.model,o.x,o.y,o.gamma);if(fl!=null)o.z=+(fl+seatOf(o.model)).toFixed(3);
+  });
   kits.forEach(function(b){addBuildingDoors(b)});
-  // their heights are taken on the ground as it will be: the ground under a
-  // building that levels its own is levelled first (applyGround, the pads)
-  if(mounted.length){
-    applyGround();
-    mounted.forEach(function(m){var gu=groundAt(m[0].x,m[0].y);if(gu!=null)m[0].z=+(gu+m[1]).toFixed(3)});
+  // what the buildings came with is of the same paste
+  var kitOf={};kits.forEach(function(b){kitOf[b.uid]=true});
+  placements.forEach(function(q){if(q.of&&kitOf[q.of])q.batch=batch});
+  mounted.forEach(function(m){var gu=groundAt(m[0].x,m[0].y);if(gu!=null)m[0].z=+(gu+m[1]).toFixed(3)});
+  seated.forEach(function(m){var fl=footLow(m[0].model,m[0].x,m[0].y,m[0].gamma);if(fl!=null)m[0].z=+(fl+m[1]).toFixed(3)});
+  // the walkways: each as high above the ground as it was, then joined to the
+  // graph once the server has said where the walls are (relayWalkways, below):
+  // a point nothing can reach is left out then, and a stop at it.
+  var gone={},wpts=[];
+  if(pnodes.length&&home){
+    pnodes.forEach(function(q){
+      if(q.rigid)return;
+      if(q.up!=null){var gu=groundAt(q.o.x,q.o.y);if(gu!=null)q.o.z=+(gu+q.up).toFixed(2)}
+      settleZ(q.o);
+    });
+    // all in, for now: the relay below lays them in an order that links, and
+    // joins them by the way on foot, once the walls are known
+    pnodes.forEach(function(q){navNodes.push(q.o);out.push(q.o)});
+    wpts=pnodes.map(function(q){return q.o});
+  }else pnodes.forEach(function(q){gone[q.o.uid]=true});
+  // the doorways of its buildings: a step out of each where none of its
+  // walkways comes, for them to reach - a doorway joins only points within 12 m
+  // of it, and with none its guards could not walk out
+  if(home){
+    var steps=[];
+    out.forEach(function(o){
+      if(o.type!=="building"||o.of||o.interior===false)return;
+      doorwaySteps(o).forEach(function(st){
+        if(!wpts.concat(steps).some(function(q){return Math.hypot(q.x-st.x,q.y-st.y)<4&&Math.abs(q.z-st.z)<=SAME_FLOOR}))steps.push(st);
+      });
+    });
+    steps.forEach(function(st){
+      var q={uid:uid(),own:true,type:"navnode",x:+st.x.toFixed(3),y:+st.y.toFixed(3),z:+st.z.toFixed(2),graph:String(home)};
+      navNodes.push(q);out.push(q);wpts.push(q);
+    });
   }
+  // the guards: their patrols on the walkways that came with them, and their
+  // graph the one those are in; one standing still walks the walkways where he stands
+  guards.forEach(function(o){
+    var before=o.patrol.length;
+    o.patrol=o.patrol.filter(function(n){return !(typeof n==="string"&&n.indexOf("n:")===0&&gone[n.slice(2)])});
+    dropped+=before-o.patrol.length;
+    var own=o.patrol.filter(function(n){return typeof n==="string"&&n.indexOf("n:")===0})[0],pn=own?planNode(own):null;
+    if(pn)o.graph=String(pn.graph);
+    else if(!sameLevel||!o.patrol.length)o.graph=guardGraph(o.x,o.y,o.z);
+    if(!o.patrol.length)delete o.patrolCmds;
+  });
   multi=out.length>1?out.slice():[];
   sel=out[out.length-1]||null;
   touch();renderSide();renderNavSection();draw();
@@ -7206,7 +7689,7 @@ function pasteData(d,x,y,gamma){
   // building set down carries what hangs on its walls (the switch of level 8's
   // inner radar gate is on the barracks' side), and it is to stand as high
   // above the ground as it stood
-  if(mounted.length)Promise.all(waits).then(function(){
+  var down=Promise.all(waits).then(function(){
     var moved=0;
     mounted.forEach(function(m){
       if(placements.indexOf(m[0])<0)return;
@@ -7215,7 +7698,39 @@ function pasteData(d,x,y,gamma){
     });
     if(moved){lastChangeAt=Date.now();touch();draw()}
   });
-  if(dropped)toast(dropped+" patrol stop"+(dropped===1?"":"s")+" pointed at this level's own nodes elsewhere and were left out");
+  if(dropped)toast(dropped+" patrol stop"+(dropped===1?"":"s")+" had no walkway that came along, and "+(dropped===1?"was":"were")+" left out");
+  // the walkways, laid again round the walls once the server has said where they
+  // are - asked once everything is down, at the heights the game will have
+  if(wpts.length)PASTE_WALK=down.then(function(){return relayWalkways(wpts,home)}).then(function(lost){
+    var off={};(lost||[]).forEach(function(n){off[n.uid]=true});
+    var cut=0;
+    guards.forEach(function(o){
+      if(placements.indexOf(o)<0)return;
+      var before=(o.patrol||[]).length;
+      o.patrol=(o.patrol||[]).filter(function(n){return !(typeof n==="string"&&n.indexOf("n:")===0&&(off[n.slice(2)]||!planNode(n)))});
+      cut+=before-o.patrol.length;
+      var own=o.patrol.filter(function(n){return typeof n==="string"&&n.indexOf("n:")===0})[0],pn=own?planNode(own):null;
+      o.graph=pn?String(pn.graph):(guardGraph(o.x,o.y,o.z)||o.graph);
+      if(!o.patrol.length)delete o.patrolCmds;
+    });
+    nodeVer++;
+    var moved=guards.filter(function(o){return placements.indexOf(o)>=0&&standOnWalkways(o)}).length;
+    lastChangeAt=Date.now();touch();renderNavSection();renderSide();draw();
+    if(cut||moved)toast((cut?cut+" patrol stop"+(cut===1?"":"s")+" had walls all round and "+(cut===1?"was":"were")+" left out. ":"")+
+      (moved?moved+" guard"+(moved===1?"":"s")+" had no walkway on "+(moved===1?"his":"their")+" floor here and "+(moved===1?"was":"were")+" put on the nearest":""));
+    return lost||[];
+  });
+  else if(guards.length&&SRV)PASTE_WALK=down.then(function(){
+    // no walkways of its own: each guard walks the ones where he now stands (a
+    // building's floors: that building's), and stands where walkways are
+    guards.forEach(function(o){
+      if(placements.indexOf(o)<0||(o.patrol||[]).some(function(n){return typeof n==="string"&&n.indexOf("n:")===0}))return;
+      o.graph=guardGraph(o.x,o.y,o.z)||o.graph;
+    });
+    var moved0=guards.filter(function(o){return placements.indexOf(o)>=0&&standOnWalkways(o)}).length;
+    if(moved0){touch();draw();toast(moved0+" guard"+(moved0===1?"":"s")+" had no walkway on "+(moved0===1?"his":"their")+" floor here and "+(moved0===1?"was":"were")+" put on the nearest")}
+    return [];
+  });
   return out;
 }
 var CLIP_KEY="studio:clipboard";
@@ -7237,7 +7752,9 @@ function pasteClipboard(){
 function duplicateGroup(){
   var list=groupList();if(list.length<2||!canEdit())return false;
   var d=groupData(list),c=groupCentre(list);
-  pasteData(d,c.x+3,c.y-3,0);
+  // a building with a cellar goes on the ground grid: a square along, not back onto itself
+  var off=list.some(function(o){return holesOf(o)})?HOLE_GRID:3;
+  pasteData(d,c.x+off,c.y-off,0);
   return true;
 }
 function groupInspector(el){
@@ -7758,8 +8275,8 @@ function buildingPads(){
     if(!zs.length)return;
     zs.sort(function(q1,q2){return q1-q2});
     if(zs[zs.length-1]-zs[0]<=0.25)return;          // flat enough already: no pad (apply_plan.py)
-    var R=PAD_FLAT+PAD_BLEND,z0=s.z0||0;
-    out.push({p:p,rects:s.body,c:c,s:sn,target:zs[zs.length>>1],z:zs[zs.length>>1]-(z0<-0.1?z0:0),
+    var R=PAD_FLAT+PAD_BLEND;
+    out.push({p:p,rects:s.body,c:c,s:sn,target:zs[zs.length>>1],z:zs[zs.length>>1]+seatOf(p.model),
       box:[Math.min.apply(null,xs)-R,Math.max.apply(null,xs)+R,Math.min.apply(null,ys)-R,Math.max.apply(null,ys)+R]});
   });
   return out;
@@ -9586,7 +10103,7 @@ function walkGrid(x0,x1,y0,y1){
   var ok=new Uint8Array(m.w*m.h),B=blockers(),way={},house={};
   // a door or a gate is a way through, not a wall; a building has doors the
   // grid does not know, so it is a way through too, a slow one (2)
-  B.forEach(function(o,oi){if(o.type==="door"||wallKind(o)==="gate")way[oi]=1;else if(o.type==="building")house[oi]=1});
+  B.forEach(function(o,oi){if(o.type==="door"||wallKind(o)==="gate"||(o.door&&typeof o.door==="object"))way[oi]=1;else if(o.type==="building")house[oi]=1});
   for(var j=Math.max(1,y0);j<Math.min(m.h-1,y1);j++)for(var i=Math.max(1,x0);i<Math.min(w-1,x1);i++){
     var k=j*w+i,g=H[k],under=G.top[k]>g+FLOOR_MAX;
     if(!(g===g)||(under&&!way[G.id[k]]&&!house[G.id[k]]))continue;
@@ -9595,8 +10112,10 @@ function walkGrid(x0,x1,y0,y1){
     if(!under&&(Math.abs(a-g)>rise||Math.abs(b-g)>rise||Math.abs(c-g)>rise||Math.abs(d-g)>rise))continue;
     ok[k]=under&&house[G.id[k]]?2:1;
   }
+  // wire, electric and masonry: a wall panel is thinner than a cell of the
+  // obstacle grid and can slip through it, so it is drawn in as a line too
   walls().forEach(function(sg){
-    if(sg.kind!=="fence"&&sg.kind!=="electric")return;
+    if(sg.kind!=="fence"&&sg.kind!=="electric"&&sg.kind!=="wall")return;
     if(isRemoved(sg.o))return;
     var len=Math.hypot(sg.b[0]-sg.a[0],sg.b[1]-sg.a[1]),n=Math.max(1,Math.ceil(len/(cell*0.4)));
     for(var s=0;s<=n;s++){
@@ -9605,6 +10124,20 @@ function walkGrid(x0,x1,y0,y1){
       for(var dj=-1;dj<=0;dj++)for(var di=-1;di<=0;di++){
         var ii=ci+di,jj=cj+dj;if(ii>=0&&jj>=0&&ii<w&&jj<m.h)ok[jj*w+ii]=0;
       }
+    }
+  });
+  // a doorway is a way through whatever is over it: the cells a door's or a
+  // gate's leaf stands in are open (a wall piece with a doorway in it has its
+  // lintel over them, and a walled yard kept from a level had no way in)
+  B.forEach(function(o,oi){
+    if(!way[oi]||isRemoved(o))return;
+    var s=MODELS&&MODELS.sizes&&MODELS.sizes[o.model];if(!s||!s.body)return;
+    var R=Math.hypot(s.w||0,s.d||0)/2+Math.hypot(s.cx||0,s.cy||0)+1;
+    var i0=Math.max(x0,Math.floor((o.x-R-m.x0)/cell)),i1=Math.min(x1,Math.ceil((o.x+R-m.x0)/cell));
+    var j0=Math.max(y0,Math.floor((o.y-R-m.y0)/cell)),j1=Math.min(y1,Math.ceil((o.y+R-m.y0)/cell));
+    for(var jd=j0;jd<=j1;jd++)for(var id=i0;id<=i1;id++){
+      var kd=jd*w+id;if(kd<0||kd>=ok.length||!(H[kd]===H[kd]))continue;
+      if(inBody(o,m.x0+id*cell,m.y0+jd*cell,0.5))ok[kd]=1;
     }
   });
   return ok;
@@ -11033,7 +11566,7 @@ function planOf(){
         arriveOn:p.type==="soldier"&&p.arriveOn?p.arriveOn:undefined,arriveTimes:p.type==="soldier"&&p.arriveOn?(p.arriveTimes||1):undefined,
         reinforce:p.reinforce||undefined,
         door:p.door||undefined,lift:p.lift||undefined,of:p.of||undefined,slot:p.slot||undefined,
-        onLevel:p.onLevel||undefined,gate:p.type==="switch"&&p.gate?true:undefined,
+        onLevel:p.onLevel||undefined,gate:p.type==="switch"&&p.gate?true:undefined,batch:p.batch||undefined,
         stays:p.type==="switch"&&p.stays===false?false:undefined}}),
     objectives:objectives.map(function(o){return JSON.parse(JSON.stringify(o))}),failOnAlarm:failOnAlarm,objBase:objBase,
     ccwLying:true,settings:settingsPlan(),events:events.map(function(v){return JSON.parse(JSON.stringify(v))}),
@@ -13230,6 +13763,9 @@ function fenceGaps(){
   segs.forEach(function(s){
     segs.forEach(function(t){
       if(s===t)return;
+      // two panels of one paste stand as they stood in the level they were kept
+      // from: a gap its makers left there is theirs (a way through, often)
+      if(s.o.batch&&s.o.batch===t.o.batch)return;
       // along the run: a gap is ahead of the end, an overlap (a run's last panel
       // set back to finish at its corner) behind it
       var ux=Math.cos(s.dir),uy=Math.sin(s.dir),vx=t.a[0]-s.b[0],vy=t.a[1]-s.b[1];
@@ -13466,7 +14002,7 @@ function localChecks(){
   });
   placements.filter(function(p){return p.type==="soldier"&&!p.arriveOn}).concat(editedSoldiers()).forEach(function(p){
     // a guard in a building whose floors Apply adds walks that building's graph (the build moves him to it)
-    var bi=buildingAt(p.x,p.y,p.z),g=(bi&&bi.it&&bi.it.gid)||p.graph||graphOf(p),near=g?guardWalkway(p,String(g)):null;
+    var g=guardGraphOf(p),near=g?guardWalkway(p,g):null;
     if(!g||!near){
       add("error","Guards",displayName(p)+" has no walkways near him: in the game he walks to his walkway graph when the mission starts, and there is none he can stand on. Lay walkways where he stands",p,null,
         "Walkways tool, or the AI designer's add_walkways");
@@ -14726,12 +15262,14 @@ function nearestWalk(x,y,z,surface){
 }
 // a way on foot between two points over open ground (the routes' walk grid,
 // buildings as walls), as points; null when there is none within 60 m round
-function walkPath(a,b){
+function walkPath(a,b,block){
   if(!TERR)return null;
   var m=TERR.meta,w=m.w,cell=m.cell,pad=60/cell;
   var x0=Math.floor((Math.min(a.x,b.x)-m.x0)/cell-pad),x1=Math.ceil((Math.max(a.x,b.x)-m.x0)/cell+pad);
   var y0=Math.floor((Math.min(a.y,b.y)-m.y0)/cell-pad),y1=Math.ceil((Math.max(a.y,b.y)-m.y0)/cell+pad);
-  var ok=walkGrid(x0,x1,y0,y1),s0=nearCell(ok,a.x,a.y,Math.round(6/cell)),t0=nearCell(ok,b.x,b.y,Math.round(6/cell));
+  var ok=walkGrid(x0,x1,y0,y1);
+  if(block)for(var bk in block)ok[+bk]=0;
+  var s0=nearCell(ok,a.x,a.y,Math.round(6/cell)),t0=nearCell(ok,b.x,b.y,Math.round(6/cell));
   if(s0.k<0||t0.k<0)return null;
   var n=ok.length,dist=new Float32Array(n),prev=new Int32Array(n),done=new Uint8Array(n),heap=[s0.k];
   dist.fill(Infinity);prev.fill(-1);dist[s0.k]=0;

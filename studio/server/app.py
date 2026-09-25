@@ -532,6 +532,7 @@ def mission_cleanup(cfg, mid):
     barracks the mission placed stands on that floor; measured against the bare
     level it seemed to hover as high as the floor (0.58 m), and so did the
     doors in its doorways, with nothing to be done about it."""
+    from studio.build import surface as SF
     m = MS.load(mid)
     plan = m.get("plan") or {}
     placements = plan.get("placements") or []
@@ -557,9 +558,7 @@ def mission_cleanup(cfg, mid):
             src, z = surf.height(p["x"], p["y"], p["z"], reach_up=0.02, skip="own:%s" % p.get("uid"))
             if z is None or src != "terrain":
                 continue                       # only bare ground is certain enough to act on
-            s = sizes.get(p.get("model")) or {}
-            z0 = s.get("z0", 0.0) if p["type"] != "pickup" else 0.0
-            rest = z - (z0 if z0 < -0.1 else 0.0) + (0.5 if p["type"] == "pickup" else 0.0)
+            rest = z + (0.5 if p["type"] == "pickup" else SF.seat_of(sizes, p.get("model")))
             gap = p["z"] - rest
             if 0.05 < gap < 0.6:
                 floating.append({"uid": p.get("uid"), "name": p.get("name"), "type": p["type"],

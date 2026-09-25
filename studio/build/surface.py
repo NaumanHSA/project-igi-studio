@@ -20,6 +20,18 @@ UP = 0.6                     # a triangle is a floor if its normal is this close
 NODE_REACH = 2.5             # metres: a node this close says what floor you are on
 
 
+def seat_of(sizes, model):
+    """How high a model's origin stands above the lowest ground under it: as
+    the game's levels stand it (extract/seats.py - a barracks has its origin
+    at the ground and 11 m of foundation below it), else on its lowest point,
+    ignoring a base plate of a few cm."""
+    s = sizes.get(model) or {}
+    if s.get("seat") is not None:
+        return float(s["seat"])
+    z0 = s.get("z0", 0.0)
+    return -z0 if z0 < -0.1 else 0.0
+
+
 def _ilff(buf, start=20):
     off = start
     while off + 16 <= len(buf):
@@ -340,9 +352,8 @@ class Surface:
         if z is None:
             return None, None
         if kind == "building" and model:
-            # models are set down by their lowest point, ignoring a base plate of a few cm
-            z0 = (self._sizes.get(model) or {}).get("z0", 0.0)
-            z -= z0 if z0 < -0.1 else 0.0
+            # set down as the levels set it down, or by its lowest point
+            z += seat_of(self._sizes, model)
         elif kind == "pickup":
             z += self.PICKUP_RISE if src in ("terrain", "node", "floor") else self.PICKUP_ON_TOP
         return z, src

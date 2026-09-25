@@ -329,9 +329,8 @@ def rest_z(x, y, near_z, model=None, skip=None):
         src_ = "navmesh"
     if z is None:
         return None, None
-    # models are set down by their lowest point, ignoring a base plate of a few cm
-    z0 = (_sizes.get(model) or {}).get("z0", 0.0) if model else 0.0
-    return z - (z0 if z0 < -0.1 else 0.0), src_
+    # models are set down as the levels set them down, or by their lowest point
+    return z + (SF.seat_of(_sizes, model) if model else 0.0), src_
 
 
 # The game's own player starts stand 0.9-1.0 m above the ground under them (the
@@ -624,8 +623,7 @@ def _snap_place(p):
     pad = PADS.get(id(p))
     if pad is not None and FLAT_PATCHES:
         # on the ground levelled for it
-        z0 = (_sizes.get(p.get("model")) or {}).get("z0", 0.0)
-        z = pad["target"] - (z0 if z0 < -0.1 else 0.0)
+        z = pad["target"] + SF.seat_of(_sizes, p.get("model"))
         if abs(z - p["z"]) > 0.15:
             warnings.append("%s: z %.2f -> %.2f (on ground flattened from %.1f-%.1f)"
                             % (p.get("name", "?"), p["z"], z, pad["low"], pad["high"]))
@@ -643,7 +641,14 @@ def _snap_place(p):
                                 "on the high side" % (p.get("name", "?"), spread, spread))
             p["z"] = round(z, 3)
             return
-    g, how = rest_z(p["x"], p["y"], p.get("z"), p.get("model") if p["type"] != "pickup" else None)
+    # a pickup lies half a metre over the floor under it: that floor is looked
+    # for from there, not from the pickup - asked from itself under a roof it was
+    # its own floor, and it rose half a metre with every dry run the editor took
+    # its heights from
+    near = p.get("z")
+    if p["type"] == "pickup" and near is not None:
+        near = float(near) - PICKUP_RISE
+    g, how = rest_z(p["x"], p["y"], near, p.get("model") if p["type"] != "pickup" else None)
     if g is not None:
         want = round(g + _rise(p["type"], how), 3)
         if abs(want - p["z"]) > 0.15:
@@ -664,7 +669,8 @@ def _snap_edit(e, kinds):
     # "settle": the editor asked for this object to be dropped onto what is under it
     if not moved and not e.get("settle"):
         return
-    g, how = rest_z(ex, ey, e.get("z", o["z"]) - _rise(o["type"], None) * (o["type"] == "player"),
+    lift = PLAYER_LIFT if o["type"] == "player" else PICKUP_RISE if o["type"] == "pickup" else 0.0
+    g, how = rest_z(ex, ey, e.get("z", o["z"]) - lift,
                     o.get("model") if o["type"] not in ("pickup", "player") else None, skip=e["ref"])
     if g is not None:
         e["z"] = round(g + _rise(o["type"], how), 3)
@@ -793,7 +799,10 @@ def _label(o):
 
 
 for p in objects:
-    if _surface is not None:
+    # a door or gate of yours opens, as the level's do (surface.py blocked): the
+    # walkways through its doorway stay open - a yard kept from a level, walled
+    # round with its gates, was sealed off from the map by them
+    if _surface is not None and not isinstance(p.get("door"), dict):
         _surface.add_object(p)
     t = template_for(p.get("model"))
     # a building people walk into gets its floors now; a tower or pylon platform
@@ -1349,6 +1358,17 @@ def own_nodes_of(o):
     return out
 
 
+def off_the_ground(o, t):
+    """A room under the ground - level 13's tunnels and rooms, reached by a lift -
+    or one high over it (level 14's, pasted as they stood on one another): every
+    floor more than a storey from the ground over its middle."""
+    tz = _surface.terrain.z(o["x"], o["y"]) if _surface is not None and _surface.terrain is not None else None
+    fl = [o["z"] + f for f, _ in t["floors"]]
+    return tz is not None and (max(fl) < tz - 3.0 or min(fl) > tz + 3.0)
+
+
+SHUT_IN = []                # (label, graph, ids) of interiors with doorways nothing joined yet
+
 for key, o, t, label in INTERIORS:
     floors, missing = FLOORS[key]
     merge = key in _world_by_ref
@@ -1358,9 +1378,12 @@ for key, o, t, label in INTERIORS:
     # A platform with no way in (a watchtower's) needs no yard: as the game gives each
     # tower sniper a graph of his own - a node or a few up there, linked to nothing
     # below - it joins the nearest graph however far that is, as nodes of their own.
+    # So does a room under the ground, reached by a lift, or one high over it:
+    # no yard is near either.
     gid = max(own, key=lambda k: len(own[k])) if own else \
         str(o.get("graph") or graph_near(o["x"], o["y"], o["z"]) or
-            (graph_near(o["x"], o["y"], o["z"], radius=1e9) if not t["exits"] else None) or "")
+            (graph_near(o["x"], o["y"], o["z"], radius=1e9) if not t["exits"] or off_the_ground(o, t) else None)
+            or "")
     if gid not in origins:
         warnings.append("%s: no navmesh within 40 m - it gets no floor nodes, and guards "
                         "inside it will stand at ground level" % label)
@@ -1455,8 +1478,17 @@ for key, o, t, label in INTERIORS:
         if not t["exits"]:
             report.append("%s: like the shipped copy, those nodes have no way down - a guard up there stays there" % label)
         else:
-            warnings.append("%s: no yard node within %.0f m of its doorways can be reached without "
-                            "passing through a wall - guards inside can't walk out" % (label, LINK_EXIT))
+            SHUT_IN.append((label, gid, set(ids)))
+
+# A building whose doorways reached nothing when its floors were laid may be
+# reached from one laid after it: the rooms and tunnels of level 13 each join
+# the next one's doorways. Shut in is what nothing joins once all are laid.
+for label, gid, ids in SHUT_IN:
+    g = edited_graphs.get(gid)
+    if g is not None and any((e[0] in ids) != (e[1] in ids) for e in g.edges):
+        continue
+    warnings.append("%s: no yard node within %.0f m of its doorways can be reached without "
+                    "passing through a wall - guards inside can't walk out" % (label, LINK_EXIT))
 
 # guards inside a building that got an interior belong to that graph
 for s in soldiers:
@@ -1564,16 +1596,18 @@ GUARD_STEP = 2.5                    # the height difference a floor allows (SAME
 
 def nearest_node(gid, here):
     """(metres away, height difference, node) of the node of graph gid nearest this
-    point on the ground, or None when the graph has none."""
+    point - height and all, as the game walks a guard to his graph: one on a
+    barracks' ground floor goes to a node on his floor, not to the one over his
+    head that is nearer on the map - or None when the graph has none."""
     g = peek_graph(str(gid))
     if g is None or not g.nodes:
         return None
     best = None
     for n in g.nodes:
         w = node_world(str(gid), n)
-        d = math.dist(here[:2], w[:2])
-        if best is None or d < best[0]:
-            best = (d, abs(w[2] - here[2]), n)
+        d, dz = math.dist(here[:2], w[:2]), abs(w[2] - here[2])
+        if best is None or math.hypot(d, dz) < math.hypot(best[0], best[1]):
+            best = (d, dz, n)
     return best
 
 
@@ -2476,8 +2510,8 @@ for _L in OWN_LIFTS:
     if _low > _ground - 2.0:
         continue                # it stays above the ground: nothing to open
     _holes += 1
-    warnings.append("%s runs %.0f m below the ground: the ground over its shaft is opened, "
-                    "so the cabin can go down" % (_L.get("name") or "a lift", _ground - _low))
+    report.append("%s runs %.0f m below the ground: the ground over its shaft is opened, "
+                  "so the cabin can go down" % (_L.get("name") or "a lift", _ground - _low))
     if any(abs(float(_L["x"]) - x) <= s / 2 and abs(float(_L["y"]) - y) <= s / 2
            for x, y, s in _covers.get(_L.get("of")) or []):
         continue                # its building's own square opens it, as in the game
