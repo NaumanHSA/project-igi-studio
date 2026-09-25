@@ -36,6 +36,8 @@ project-igi-studio/
 │   │   ├── terrain.py      exact terrain height from terrain.ctr/.cmd/.hmp
 │   │   ├── models.py       pack models from other levels into a slot; verify / repair / restore
 │   │   ├── lang.py         the game's text resources: a mission's objective texts and labels
+│   │   ├── music.py        the game's music (ILSF, IMA ADPCM): a mission's own track, previews
+│   │   ├── covers.py       a mission's own picture in the game's mission list (missionsprites.res)
 │   │   ├── empty_map.py    a built-in level reduced to terrain, sky, weather, navmesh, player
 │   │   └── migrate.py      turn a slot built the old way into a custom mission
 │   ├── extract/            reading the game's own files into what the editor needs

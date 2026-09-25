@@ -10,6 +10,16 @@ by dragging, and fixes for a mission that stopped the game.
 
 ### New
 
+- **Music for a mission.** Give a mission the main menu's music, another
+  mission's, or the outro's - when you make it, or from *Mission, Music and
+  picture*. Listen to each first: its bars fill as it plays, with the music's
+  spectrum dancing over them. Apply puts the track into the game with the
+  mission.
+- **A picture of your own in the game's mission list.** Choose any picture: it
+  is cut to the game's 168 x 124 (the middle of it at first), what is left out
+  is dimmed, and you drag and size the frame to choose the part. You see it as
+  the game will show it, and the library's card shows it too. A custom mission
+  had no picture in the game's list.
 - **Your items.** Keep what you like in a mission - a building, a guard, a
   whole area, yours or the level's - in the inventory: select it, *Add to your
   items*, give it a name and a category (areas, buildings, characters, objects,

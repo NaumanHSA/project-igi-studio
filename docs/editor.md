@@ -27,7 +27,7 @@ Everything saves as you go. **Settings** holds the game folder.
 
 The library has two shelves.
 
-- **Your missions:** a cover (a picture of your map, or the base mission's),
+- **Your missions:** a cover (your own picture, a picture of your map, or the base mission's),
   the base, the guard and change counts, and the game status: *not in the game
   yet*, *mission 15 · up to date*, or *changes not applied*. The **⋯** menu
   has open, rename, duplicate, export, remove from the game, and delete.
@@ -112,6 +112,59 @@ it:
   stops.
 
 Mission 15 was recovered this way from its extracted data in git.
+
+## Music and the mission's picture
+
+A mission can have music of its own and a picture of its own, both optional:
+in the **New mission** dialog (*Music and picture*, folded under the list of
+missions to start from) or later from **Mission ▾ → Music and picture…**. Both
+go into the game with the mission when it is applied, and a change to either
+is a change to apply.
+
+- **Music:** the game's own. Every level plays
+  `missions/location0/level<N>/sounds/game_music.wav`, which the engine loads by
+  that name (no script names it; a level's scripts only turn the music off and
+  on round a cutscene), so Apply puts the chosen track into the mission's slot
+  under that name, or its map's own again (`studio/build/music.py`). The list
+  has the main menu's music (`menu_music.wav` in `menusystem/SOUND/sounds.res`),
+  the missions' - nine tracks for fourteen missions, each listed once with every
+  mission that plays it (1 and 7, 3, 6 and 10, 4 and 14, 8 and 13 share theirs)
+  - and the outro's (`screens/intro/outro.wav`). Each row has ▶ to listen: the
+  track's loudness through its length is drawn as bars that fill as it plays,
+  with a spectrum of what is playing rising over them (Web Audio's analyser);
+  one plays at a time, and closing the dialog stops it. *Its map's own* is
+  the default, and plays the base level's track.
+- **The game's sound files** are ILSF: `ILSF`, then u16 format, u16 bits, u16
+  channels, u16 flags, u32 sample rate, u32 frames. Formats 0 and 1 are 16-bit
+  PCM (every level's music: 44.1 kHz stereo, flags 0x1003); 2 and 3 are IMA
+  ADPCM with no blocks, a byte a stereo frame, its low nibble the left channel,
+  both starting from 0 at step 0 (the menu's music is format 3, the outro's 2).
+  The server plays them to the browser as WAV (`/api/music/<id>.wav`, byte
+  ranges for seeking; a compressed one decoded once into `work/music/`), and a
+  compressed track goes into a slot as 16-bit PCM, as the levels' own are.
+- **The picture:** the game's mission list (Select Mission) shows a picture
+  beside the list, 168 x 124 - not square. Choose a picture (or drop one on the
+  box): it is cut to that shape, the middle of it at first, and the part left
+  out is dimmed; drag the frame to choose the part, and size it with the wheel
+  or the slider. Beside it is the picture as the game will show it, in its 16
+  bits of colour. The part kept is saved at twice that size
+  (`missions/custom/<id>/picture.png`, 336 x 248), which the library's card
+  shows too.
+- **Into the game:** the game's pictures are in `menusystem/missionsprites.res`
+  - for each mission a sprite named `LOCAL:menusystem/mission<N>.spr` (an
+  84-byte LOOP header, 168 x 124 pixels of ARGB1555, a 40-byte trailer) and a
+  closing `PATH` listing every name - and `DefineMission` names each mission's.
+  Nothing answered to a custom mission's, so the list showed no picture. Apply
+  adds the mission's under its number, made as the game's own are (their
+  header, their commonest trailer), and takes it out when the picture is
+  removed or the mission leaves the game (`studio/build/covers.py`); a mission
+  renumbered takes it along. This is one of the few files outside a mission's
+  own slot the studio changes (`protect.assert_menu_sprites`): no other entry
+  is touched and every other picture is checked to come out byte for byte, and
+  the file as it was is kept in `backups/menusystem/` the first time. The
+  picture's fingerprint (`settings.picture`, the first 12 of its SHA-1, which the
+  server takes from the file on every save) is what makes a new one a change to
+  apply.
 
 ## The map
 

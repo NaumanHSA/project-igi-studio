@@ -27,6 +27,9 @@
 #   POST   /api/slots/<n>/remove             take out a slot the studio made that no mission here holds
 #   GET    /api/recoverable, POST /api/recover   missions in the game that this studio can take back in
 #   GET    /api/missions/<id>/cover.png
+#   GET    /api/missions/<id>/picture.png    the mission's own picture (PUT {picture: data URL or null})
+#   GET    /api/music                        the game's music a mission can have
+#   GET    /api/music/<id>.wav               one of them to listen to (byte ranges)
 #   GET    /api/trash, POST /api/trash/<tid>/restore,
 #          DELETE /api/trash/<tid> (for good), DELETE /api/trash (empty it)
 # The AI designer (studio/server/ai.py):
@@ -59,6 +62,8 @@ TOKEN = None
 
 from studio.qvm import compile as CQ
 from studio.build import install as INST
+from studio.build import music as MU
+from studio.build import covers as CV
 from studio.server import missions as MS
 from studio import protect
 from studio.build import slots as SL
@@ -947,6 +952,53 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Referrer-Policy", "no-referrer")
         super().end_headers()
 
+    def _game(self):
+        g = load_config().get("gamePath")
+        if not g:
+            raise FileNotFoundError("the studio has not been pointed at the game yet")
+        return g
+
+    def _send_track(self, tid):
+        """A track as a WAV, whole or the byte range the player asks for (it
+        seeks by asking for one)."""
+        head, f, off, n = MU.preview(self._game(), tid)
+        total = len(head) + n
+        a, b = 0, total - 1
+        rng = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
+        if rng and (rng.group(1) or rng.group(2)):
+            if rng.group(1):
+                a = int(rng.group(1))
+                b = min(total - 1, int(rng.group(2))) if rng.group(2) else total - 1
+            else:
+                a = max(0, total - int(rng.group(2)))
+            if a > b or a >= total:
+                self.send_response(416)
+                self.send_header("Content-Range", "bytes */%d" % total)
+                self.end_headers()
+                return
+            self.send_response(206)
+            self.send_header("Content-Range", "bytes %d-%d/%d" % (a, b, total))
+        else:
+            self.send_response(200)
+        self.send_header("Content-Type", "audio/wav")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(b - a + 1))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        pos = a
+        if pos < len(head):
+            self.wfile.write(head[pos:min(len(head), b + 1)])
+            pos = len(head)
+        with open(f, "rb") as fh:
+            fh.seek(off + pos - len(head))
+            left = b + 1 - pos
+            while left > 0:
+                chunk = fh.read(min(1 << 20, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
+
     def _mission_route(self):
         """(mission id, action) for /api/missions/<id>[/<action>]."""
         m = re.match(r"^/api/missions/([a-z0-9-]+)(?:/([a-z.]+))?/?(?:\?.*)?$", self.path)
@@ -986,6 +1038,8 @@ class Handler(SimpleHTTPRequestHandler):
             b = self._body()
             m = MS.save(mid, plan=b.get("plan"), name=b.get("name"), description=b.get("description"),
                         cover_png=_data_url_png(b.get("cover")), applied=b.get("applied"))
+            if "picture" in b:
+                m = MS.set_picture(mid, _data_url_png(b["picture"]) if b["picture"] else None)
             # a renamed mission that is in the game is renamed in the game's list too
             if b.get("name") is not None or b.get("description") is not None:
                 cfg = load_config()
@@ -1108,11 +1162,16 @@ class Handler(SimpleHTTPRequestHandler):
             return self._groundtex()
         if self.path.startswith("/api/library"):
             return self._guard(lambda: self._json({"ok": True, **library(load_config())}))
+        if re.match(r"^/api/music/?(?:\?.*)?$", self.path):
+            return self._guard(lambda: self._json({"ok": True, "tracks": MU.tracks(self._game())}))
+        mu = re.match(r"^/api/music/([a-z0-9]+)\.wav(?:\?.*)?$", self.path)
+        if mu:
+            return self._guard(lambda: self._send_track(mu.group(1)))
         if self.path.startswith("/api/trash"):
             return self._guard(lambda: self._json({"ok": True, "trash": MS.list_trash()}))
         mid, action = self._mission_route()
-        if mid and action == "cover.png":
-            f = MS.STORE / mid / "cover.png"
+        if mid and action in ("cover.png", "picture.png"):
+            f = MS.STORE / mid / action
             if not f.exists():
                 return self.send_error(404)
             body = f.read_bytes()
@@ -1241,6 +1300,17 @@ class Handler(SimpleHTTPRequestHandler):
                     base = b.get("base") or {}
                     m = MS.create(b.get("name") or "Untitled mission", base.get("level") or 1,
                                   base.get("kind") or "copy", b.get("description") or "", copy_from=b.get("from"))
+                    if b.get("music") is not None:
+                        if b["music"] and not MU.TRACK_ID.match(str(b["music"])):
+                            raise ValueError("no such track: %r" % b["music"])
+                        m["plan"].setdefault("settings", {})
+                        if b["music"]:
+                            m["plan"]["settings"]["music"] = str(b["music"])
+                        else:
+                            m["plan"]["settings"].pop("music", None)
+                        m = MS.save(m["id"], plan=m["plan"])
+                    if b.get("picture"):
+                        m = MS.set_picture(m["id"], _data_url_png(b["picture"]))
                     return self._json({"ok": True, "mission": m})
                 return self._guard(create)
 
@@ -1599,6 +1669,18 @@ def _build_into(m, mid, game, base, n, test, pl, say):
     except CQ.CompileError as e:
         say(str(e))
         return {"ok": False, "error": "compile failed"}
+    # its music (game_music.wav, which the level plays by that name) and its
+    # picture in the game's mission list
+    st = (m["plan"].get("settings") or {})
+    try:
+        MU.install(game, n, st.get("music") or None, base, log=say)
+    except (OSError, ValueError) as e:
+        say("the mission's music was left as it was: %s" % e)
+    try:
+        pic = MS.STORE / mid / MS.PICTURE
+        CV.set_cover(game, n, pic.read_bytes() if pic.exists() else None, log=say)
+    except (OSError, ValueError, RuntimeError, protect.ProtectedPath) as e:
+        say("the mission's picture in the game's list was left as it was: %s" % e)
     with _surf_lock:
         _surfaces.clear()
     m = MS.mark_installed(mid, n, applied=applied,

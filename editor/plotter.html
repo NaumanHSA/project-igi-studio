@@ -437,6 +437,51 @@ canvas{display:block}
 .pk[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
 .pk:focus-visible{outline:2px solid var(--accent)}
 .pk-img{display:block;aspect-ratio:168/124;background:var(--ground) center/cover no-repeat}
+/* music and the mission's picture: the new-mission dialog's optional part, and their own dialog */
+.nm-extra{margin-top:12px;border:1px solid var(--line);border-radius:7px;background:rgba(3,11,4,.25)}
+.nm-extra>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;color:var(--muted)}
+.nm-extra>summary::-webkit-details-marker{display:none}
+.nm-extra>summary b{color:var(--ink);font-weight:600}
+.nm-extra>summary .nm-x-sum{margin-left:auto;font:11px "IBM Plex Mono",monospace;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.nm-extra>summary svg{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-width:2;transition:transform .15s}
+.nm-extra:not([open])>summary svg{transform:rotate(-90deg)}
+.nm-extra[open] .picks{max-height:24vh}
+.mcx{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;padding:4px 12px 12px}
+.mcx .lbl.head{margin:0 0 6px}
+.mu-list{display:flex;flex-direction:column;gap:5px;max-height:330px;overflow-y:auto;padding-right:4px}
+.mu{display:grid;grid-template-columns:30px minmax(0,1fr) 112px 74px;gap:2px 10px;align-items:center;padding:6px 8px;
+  border:1px solid var(--line);border-radius:6px;background:var(--sunken);cursor:pointer;transition:border-color .12s,background .12s}
+.mu:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.mu[aria-checked="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.mu:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.mu-play{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--accent);
+  display:grid;place-items:center;cursor:pointer;padding:0}
+.mu-play:hover{border-color:var(--accent)}
+.mu-play svg{width:12px;height:12px;fill:currentColor}
+.mu.playing .mu-play{background:var(--accent);color:#0a1a0c;border-color:var(--accent);box-shadow:0 0 12px color-mix(in srgb,var(--accent) 55%,transparent)}
+.mu-t{min-width:0}
+.mu-t b{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mu-t span{display:block;font:10.5px "IBM Plex Mono",monospace;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mu-viz{position:relative;width:112px;height:28px}
+.mu-viz canvas{position:absolute;inset:0;width:112px;height:28px}
+.mu-time{font:11px "IBM Plex Mono",monospace;color:var(--muted);text-align:right;white-space:nowrap}
+.mu.playing .mu-time{color:var(--accent)}
+.cvp{display:flex;flex-direction:column;gap:8px}
+.cvp-stage{position:relative;height:210px;border:1px dashed var(--line);border-radius:6px;background:rgba(2,9,3,.55);overflow:hidden;touch-action:none}
+.cvp-stage.drop{border-color:var(--accent);background:var(--accent-soft)}
+.cvp-stage.has{border-style:solid;cursor:grab}
+.cvp-stage.has.dragging{cursor:grabbing}
+.cvp-cv{position:absolute;inset:0;width:100%;height:100%}
+.cvp-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:var(--muted);font-size:12px;text-align:center;padding:10px}
+.cvp-empty svg{width:28px;height:28px;fill:none;stroke:var(--accent);stroke-width:1.5;margin-bottom:2px}
+.cvp-empty b{color:var(--ink);font-size:13px}
+.cvp-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start}
+.cvp-game{padding:3px;border:1px solid #58d65c;box-shadow:0 0 0 1px #0b2a0e,0 0 10px rgba(88,214,92,.18);background:#071408;line-height:0}
+.cvp-game canvas{width:168px;height:124px;image-rendering:pixelated;display:block}
+.cvp-ctl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cvp-ctl input[type=range]{width:100%;accent-color:var(--accent)}
+.cvp-acts{display:flex;gap:6px;flex-wrap:wrap}
+.cvp-empty[hidden],.cvp-row[hidden],.cvp-ctl [hidden]{display:none}
 .pk b{padding:5px 7px 0;color:var(--ink);font-weight:600;font-size:12.5px}
 .pk span:not(.pk-img){padding:0 7px 6px;font-size:11px}
 .pk b:last-child{padding-bottom:6px}
@@ -9691,6 +9736,10 @@ function settingsPlan(){
   if(MSET.timeLimit>0){s.timeLimit=Math.round(MSET.timeLimit);s.showTimer=MSET.showTimer!==false}
   if(MSET.fall){s.fall=MSET.fall;if(MSET.fall!=="none")s.heavy=+(MSET.heavy!=null?MSET.heavy:0.13).toFixed(3)}
   if(MSET.haze!=null)s.haze=+(+MSET.haze).toFixed(2);
+  // the music it plays (music.py), and the fingerprint of its own picture (the server's own reckoning, a
+  // SHA-1 of the file), so a new track or picture is something to apply
+  if(MSET.music)s.music=MSET.music;
+  if(MSET.picture)s.picture=MSET.picture;
   return s;
 }
 function clock(sec){sec=Math.round(sec);return Math.floor(sec/60)+":"+("0"+sec%60).slice(-2)}
@@ -9702,6 +9751,8 @@ function settingsText(){
   if(s.timeLimit)out.push("time limit "+clock(s.timeLimit)+(s.showTimer?"":", not shown"));
   if(s.fall)out.push(s.fall==="none"?"no rain or snow":heavyText(s.heavy)+" "+s.fall);
   if(s.haze!=null)out.push("haze "+Math.round(s.haze*100)+"%");
+  if(s.music)out.push("music: "+musicName(s.music));
+  if(s.picture)out.push("its own picture in the game's list");
   return out.join(", ");
 }
 // one symbol per kind of objective, and the level's own
@@ -11088,7 +11139,8 @@ function makeStore(serverOk){
     trashEmpty:function(){return api("DELETE","api/trash").then(function(j){return j.gone})},
     cleanup:function(id){return api("GET","api/missions/"+id+"/cleanup")},
     check:function(id){return api("GET","api/missions/"+id+"/check")},
-    coverUrl:function(m){return m.cover?"api/missions/"+m.id+"/cover.png?v="+(m.updated||0):null}
+    coverUrl:function(m){return m.picture?"api/missions/"+m.id+"/picture.png?v="+(m.updated||0):
+      m.cover?"api/missions/"+m.id+"/cover.png?v="+(m.updated||0):null}
   };
   // no server (the published page): missions are kept in this browser
   var K="studio:mission:",T="studio:trash:";
@@ -11397,7 +11449,14 @@ function openPopup(x,y,items){
 // of a built-in one - its terrain, sky, light and weather, and nothing on it.
 function newMissionDialog(preset){
   preset=preset||{};
-  var st={kind:preset.kind||"copy",level:preset.level||1,from:preset.from||null};
+  var st={kind:preset.kind||"copy",level:preset.level||1,from:preset.from||null,extra:false};
+  // its music and its picture, optional: made once, kept across the dialog's repaints
+  var MP=SRV?musicPicker({value:"",base:st.level}):null,CP=SRV?coverPicker({}):null;
+  function baseLevel(){if(st.kind==="copy"&&st.from){var m=LIB.missions.filter(function(x){return x.id===st.from})[0];if(m)return m.base.level}return st.level}
+  function extraSummary(){
+    var mu=MP?MP.value():"",pic=CP&&CP.result().dataUrl;
+    return (mu?"music: "+musicName(mu):"its map's own music")+" · "+(pic?"a picture of yours":"no picture");
+  }
   function sourceCards(){
     var h="";
     if(st.kind==="copy"){
@@ -11448,6 +11507,10 @@ function newMissionDialog(preset){
       '<button class="btn'+(st.kind==="empty"?" on":"")+'" data-kind="empty" role="radio" aria-checked="'+(st.kind==="empty")+'">Empty map</button></div>'+
       '<p class="hint" id="nm-sum" style="margin:8px 0 0">'+esc(summaryText())+'</p>'+
       '<div class="picks">'+sourceCards()+'</div>'+
+      (MP?'<details class="nm-extra" id="nm-extra"'+(st.extra?' open':'')+'><summary>'+
+        '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg><b>Music and picture</b><span>optional</span>'+
+        '<span class="nm-x-sum" id="nm-x-sum">'+esc(extraSummary())+'</span></summary>'+
+        '<div class="mcx"><div id="nm-mu-host"></div><div id="nm-cv-host"></div></div></details>':'')+
       '<div style="display:flex;gap:8px;margin-top:14px;align-items:center">'+
       '<button class="btn primary" id="nm-go">Create mission</button>'+
       '<span class="hint">Built-in missions are never changed. This makes a mission of your own.</span></div>');
@@ -11467,17 +11530,357 @@ function newMissionDialog(preset){
     });
     $("nm-name").addEventListener("keydown",function(e){if(e.key==="Enter")go()});
     $("nm-go").addEventListener("click",go);
+    if(MP){
+      MP.setBase(baseLevel());
+      $("nm-mu-host").appendChild(MP.el);$("nm-cv-host").appendChild(CP.el);CP.redraw();
+      MP.onChange=CP.onChange=function(){if($("nm-x-sum"))$("nm-x-sum").textContent=extraSummary()};
+      $("nm-extra").addEventListener("toggle",function(){st.extra=$("nm-extra").open;if(st.extra)CP.redraw();else playerStop()});
+    }
   }
   function go(){
     var name=($("nm-name").value||"").trim();
     if(!name){$("nm-name").focus();toast("Give the mission a name");return}
     $("nm-go").disabled=true;
-    Store.create({name:name,base:{level:st.level,kind:st.kind},from:st.kind==="copy"?st.from:null})
+    playerStop();
+    var body={name:name,base:{level:st.level,kind:st.kind},from:st.kind==="copy"?st.from:null};
+    if(MP&&MP.value())body.music=MP.value();
+    if(CP&&CP.result().dataUrl)body.picture=CP.result().dataUrl;
+    Store.create(body)
       .then(function(m){$("sheet").hidden=true;openMission(m.id);toast("Created “"+m.name+"”")})
       .catch(function(e){$("nm-go").disabled=false;toast("Could not create it: "+e.message)});
   }
   var ready=LIB?Promise.resolve():Store.library().then(function(l){LIB=l});
   ready.then(paint);
+}
+
+/* ---------------- music and the mission's picture ---------------- */
+// The game's music a mission can have (studio/build/music.py): the main menu's,
+// the missions' - each track once, with every mission that plays it - and the
+// outro's. A mission plays its map's own unless given another; Apply puts the
+// track into its slot as game_music.wav, the name the level plays it by.
+var MUSIC=null;
+function musicTracks(){
+  if(MUSIC)return Promise.resolve(MUSIC);
+  if(!SRV)return Promise.resolve([]);
+  return fetch("api/music").then(function(r){return r.json()}).then(function(j){MUSIC=j&&j.ok?j.tracks:[];return MUSIC})
+    .catch(function(){return []});
+}
+function trackOfLevel(n){return (MUSIC||[]).filter(function(t){return t.missions.some(function(m){return m.n===n})})[0]||null}
+function musicName(id){
+  var t=(MUSIC||[]).filter(function(x){return x.id===id})[0];
+  if(t)return t.kind==="mission"?t.label+"’s":t.kind==="menu"?"the main menu’s":"the outro’s";
+  return id==="menu"?"the main menu’s":id==="outro"?"the outro’s":/^level\d+$/.test(id||"")?"mission "+id.slice(5)+"’s":String(id||"");
+}
+// the settings a reset of time and weather leaves alone
+function keepMusic(s){if(MSET.music)s.music=MSET.music;if(MSET.picture)s.picture=MSET.picture;return s}
+function mmss(sec){sec=Math.max(0,Math.round(sec||0));return Math.floor(sec/60)+":"+("0"+sec%60).slice(-2)}
+
+// One player for every list: a track at a time, with a spectrum of it dancing
+// beside its row (Web Audio's analyser over the <audio>), and its bars filling
+// as it plays. A row that is gone - its dialog closed - stops it.
+var MU_PLAY='<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10.2 6z"/></svg>';
+var MU_STOP='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg>';
+var PLAYER={audio:null,ctx:null,an:null,bins:null,id:null,row:null,raf:0,lv:{}};
+function playerStop(){
+  var P=PLAYER;
+  if(P.audio)P.audio.pause();
+  if(P.row){
+    P.row.classList.remove("playing");
+    var b=P.row.querySelector(".mu-play");if(b){b.innerHTML=MU_PLAY;b.setAttribute("aria-label","Listen")}
+    if(P.row._paint)P.row._paint(null);
+  }
+  P.row=null;
+}
+function playerPlay(id,row){
+  var P=PLAYER;
+  if(!P.audio){P.audio=new Audio();P.audio.preload="auto";P.audio.addEventListener("ended",playerStop)}
+  if(!P.ctx){
+    try{
+      var C=window.AudioContext||window.webkitAudioContext;
+      if(C){P.ctx=new C();var src=P.ctx.createMediaElementSource(P.audio);P.an=P.ctx.createAnalyser();
+        P.an.fftSize=512;P.an.smoothingTimeConstant=0.74;src.connect(P.an);P.an.connect(P.ctx.destination);
+        P.bins=new Uint8Array(P.an.frequencyBinCount)}
+    }catch(e){P.ctx=null;P.an=null}
+  }
+  if(P.ctx&&P.ctx.state==="suspended")P.ctx.resume();
+  if(P.row&&P.row!==row)playerStop();
+  if(P.id!==id){P.audio.src="api/music/"+id+".wav";P.id=id}
+  P.row=row;row.classList.add("playing");
+  var b=row.querySelector(".mu-play");if(b){b.innerHTML=MU_STOP;b.setAttribute("aria-label","Stop")}
+  P.audio.play().catch(function(){if(P.row===row){toast("That track could not be played");playerStop()}});
+  if(!P.raf)P.raf=requestAnimationFrame(playerTick);
+}
+function playerTick(){
+  var P=PLAYER;P.raf=0;
+  if(P.row&&!P.row.isConnected){playerStop();return}
+  if(!P.row)return;
+  var bands=null;
+  if(P.an){
+    P.an.getByteFrequencyData(P.bins);
+    // sixteen bands, spaced as the ear hears them: 90 Hz to 14 kHz
+    bands=[];var n=P.bins.length;
+    for(var i=0;i<16;i++){
+      var a=Math.floor(Math.pow(i/16,1.9)*n*0.66)+1,b=Math.max(a+1,Math.floor(Math.pow((i+1)/16,1.9)*n*0.66)+1),m=0;
+      for(var k=a;k<b&&k<n;k++)m=Math.max(m,P.bins[k]);
+      bands.push(m/255);
+    }
+  }
+  if(P.row._paint)P.row._paint(bands);
+  P.raf=requestAnimationFrame(playerTick);
+}
+// a list of the tracks to pick from: {el, value(), setBase(level), onChange}
+function musicPicker(opts){
+  var st={value:opts.value||"",base:opts.base||1},api={el:document.createElement("div"),onChange:null};
+  api.el.className="mu-pick";
+  api.el.innerHTML='<div class="lbl head">Music</div><div class="mu-list" role="radiogroup" aria-label="Music"><p class="hint">Reading the game’s music…</p></div>'+
+    '<p class="hint" style="margin:6px 0 0">A mission plays its map’s own unless you give it another. ▶ plays a track here.</p>';
+  var list=api.el.querySelector(".mu-list");
+  function rowFor(t,id,title,meta){
+    var r=document.createElement("div");r.className="mu";r.tabIndex=0;r.setAttribute("role","radio");
+    r.setAttribute("aria-checked",String(st.value===id));r.setAttribute("data-id",id);
+    r.innerHTML='<button type="button" class="mu-play" aria-label="Listen">'+MU_PLAY+'</button>'+
+      '<div class="mu-t"><b>'+esc(title)+'</b><span>'+esc(meta)+'</span></div>'+
+      '<div class="mu-viz"><canvas></canvas></div><span class="mu-time">'+(t?mmss(t.secs):"")+'</span>';
+    var cv=r.querySelector("canvas"),tm=r.querySelector(".mu-time"),eq=new Array(16).fill(0),caps=new Array(16).fill(0);
+    // its bars: the track's loudness through its length, the part played lit; the
+    // spectrum of what plays now rising over them
+    r._paint=function(bands){
+      var dpr=Math.min(window.devicePixelRatio||1,2),W=112,H=28;
+      if(cv.width!==W*dpr){cv.width=W*dpr;cv.height=H*dpr}
+      var g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+      var pk=(t&&t.peaks)||[],n=pk.length||48,bw=W/n,acc=css("--accent"),dim="rgba(120,200,130,.28)";
+      var a=PLAYER.audio,playing=PLAYER.row===r&&a,pr=playing&&a.duration?a.currentTime/a.duration:0;
+      for(var i=0;i<n;i++){
+        var v=pk.length?pk[i]:0.35,h=Math.max(2,v*(H-6));
+        g.fillStyle=playing&&(i+0.5)/n<=pr?acc:dim;
+        g.fillRect(i*bw+0.5,(H-h)/2,Math.max(1,bw-1),h);
+      }
+      if(bands||eq.some(function(x){return x>0.01})){
+        var cols=16,cw=W/cols;
+        for(var k=0;k<cols;k++){
+          var want=bands?bands[k]:0;
+          eq[k]=want>eq[k]?want:eq[k]*0.86;
+          caps[k]=Math.max(eq[k],caps[k]-0.012);
+          var eh=eq[k]*(H-2);
+          var grd=g.createLinearGradient(0,H,0,H-eh);
+          grd.addColorStop(0,"rgba(120,230,140,.10)");grd.addColorStop(1,acc);
+          g.globalAlpha=0.55;g.fillStyle=grd;g.fillRect(k*cw+1.5,H-eh,cw-3,eh);g.globalAlpha=1;
+          g.fillStyle=acc;g.fillRect(k*cw+1.5,H-2-caps[k]*(H-4),cw-3,1.5);
+        }
+      }
+      if(tm&&t)tm.textContent=playing&&a.currentTime?mmss(a.currentTime)+" / "+mmss(t.secs):mmss(t.secs);
+    };
+    function pick(){st.value=id;list.querySelectorAll(".mu").forEach(function(x){x.setAttribute("aria-checked",String(x===r))});if(api.onChange)api.onChange(id)}
+    r.addEventListener("click",function(e){if(e.target.closest(".mu-play"))return;pick()});
+    r.addEventListener("keydown",function(e){if(e.key===" "||e.key==="Enter"){e.preventDefault();pick()}});
+    r.querySelector(".mu-play").addEventListener("click",function(e){
+      e.stopPropagation();
+      var play=t?t.id:null;
+      if(!play){toast("This map’s music is not in the list");return}
+      if(PLAYER.row===r&&PLAYER.audio&&!PLAYER.audio.paused)playerStop();else playerPlay(play,r);
+    });
+    requestAnimationFrame(function(){r._paint(null)});
+    return r;
+  }
+  function paint(){
+    if(!MUSIC)return;
+    if(PLAYER.row&&list.contains(PLAYER.row))playerStop();
+    list.innerHTML="";
+    if(!MUSIC.length){list.innerHTML='<p class="hint">The game’s music could not be read.</p>';return}
+    var own=trackOfLevel(st.base),b=builtin(st.base);
+    list.appendChild(rowFor(own,"","Its map’s own","mission "+st.base+(b?" · "+b.name:"")+(own&&own.missions.length>1?" · also "+
+      own.missions.filter(function(m){return m.n!==st.base}).map(function(m){return m.name}).join(", "):"")));
+    MUSIC.forEach(function(t){
+      var meta=t.kind==="menu"?"the game’s main menu":t.kind==="outro"?"after the last mission":
+        (t.missions.length>1?"missions ":"mission ")+t.missions.map(function(m){return m.n}).join(", ")+
+        (t.missions.length>1?" · "+t.missions.slice(1).map(function(m){return m.name}).join(", "):"");
+      list.appendChild(rowFor(t,t.id,t.label,meta));
+    });
+    var on=list.querySelector('.mu[aria-checked="true"]');
+    if(on)list.scrollTop=Math.max(0,on.offsetTop-list.offsetTop-list.clientHeight/2+on.offsetHeight/2);
+  }
+  api.value=function(){return st.value};
+  api.setBase=function(n){if(n!==st.base){st.base=n;paint()}};
+  musicTracks().then(paint);
+  return api;
+}
+// A picture for the game's mission list, which shows 168 x 124 (the library its
+// double): cut to that shape - the middle of it at first; the frame dragged and
+// sized by hand, what falls outside it dimmed. {el, result() {dataUrl, changed},
+// redraw(), onChange}; with url, the mission's picture as it is.
+var CV_W=168,CV_H=124;
+function coverPicker(opts){
+  opts=opts||{};
+  var st={img:null,cur:opts.url||null,cx:0.5,cy:0.5,zoom:1,changed:false,drag:null,out:null},api={onChange:null};
+  var el=document.createElement("div");el.className="cvp";api.el=el;
+  el.innerHTML='<div class="lbl head">Picture in the game’s mission list</div>'+
+    '<div class="cvp-stage" tabindex="0"><canvas class="cvp-cv"></canvas>'+
+    '<div class="cvp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>'+
+    '<b>Drop a picture here</b><button class="btn" type="button" data-cv="pick">Choose a picture…</button>'+
+    '<span class="hint">PNG, JPEG, WebP or GIF. The game shows 168 × 124, so it is cut to that shape: you choose the part.</span></div></div>'+
+    '<div class="cvp-row" hidden><div class="cvp-game" title="As the game shows it: 168 × 124, 16-bit colour"><canvas width="168" height="124"></canvas></div>'+
+    '<div class="cvp-ctl"><span class="lbl">Size of the part kept</span><input type="range" min="1" max="4" step="0.01" value="1" data-cv="zoom" aria-label="Size of the part kept">'+
+    '<p class="hint cvp-note" style="margin:0"></p>'+
+    '<div class="cvp-acts"><button class="btn" type="button" data-cv="pick">Another picture…</button><button class="btn danger" type="button" data-cv="clear">Remove</button></div></div></div>'+
+    '<input type="file" accept="image/*" hidden data-cv="file">';
+  var stage=el.querySelector(".cvp-stage"),cv=el.querySelector(".cvp-cv"),empty=el.querySelector(".cvp-empty"),row=el.querySelector(".cvp-row");
+  var game=el.querySelector(".cvp-game canvas"),zoom=el.querySelector("[data-cv=zoom]"),file=el.querySelector("[data-cv=file]"),note=el.querySelector(".cvp-note");
+  var zoomLbl=el.querySelector(".cvp-ctl .lbl");
+  function crop(){
+    var iw=st.img.naturalWidth,ih=st.img.naturalHeight,A=CV_W/CV_H,cw,ch;
+    if(iw/ih>A){ch=ih;cw=ch*A}else{cw=iw;ch=cw/A}
+    cw/=st.zoom;ch/=st.zoom;
+    var x=Math.max(0,Math.min(iw-cw,st.cx*iw-cw/2)),y=Math.max(0,Math.min(ih-ch,st.cy*ih-ch/2));
+    st.cx=(x+cw/2)/iw;st.cy=(y+ch/2)/ih;
+    return {x:x,y:y,w:cw,h:ch};
+  }
+  function fit(){
+    var r=stage.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=Math.max(1,Math.round(r.width)),H=Math.max(1,Math.round(r.height));
+    if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr}
+    return {W:W,H:H,dpr:dpr};
+  }
+  function place(){
+    var f=fit(),iw=st.img.naturalWidth,ih=st.img.naturalHeight,s=Math.min((f.W-16)/iw,(f.H-16)/ih);
+    return {f:f,s:s,ox:(f.W-iw*s)/2,oy:(f.H-ih*s)/2};
+  }
+  function draw(){
+    var has=!!(st.img||st.cur);
+    stage.classList.toggle("has",!!st.img);empty.hidden=has;row.hidden=!has;
+    var g=cv.getContext("2d"),f=fit();g.setTransform(f.dpr,0,0,f.dpr,0,0);g.clearRect(0,0,f.W,f.H);
+    var gg=game.getContext("2d");gg.clearRect(0,0,CV_W,CV_H);
+    if(!has){st.out=null;return}
+    if(!st.img){
+      // the mission's picture as it is: already cut to shape
+      var im=st.curImg;
+      if(!im){im=st.curImg=new Image();im.onload=draw;im.src=st.cur;return}
+      if(!im.complete)return;
+      var s0=Math.min((f.W-16)/im.naturalWidth,(f.H-16)/im.naturalHeight),w0=im.naturalWidth*s0,h0=im.naturalHeight*s0;
+      g.drawImage(im,(f.W-w0)/2,(f.H-h0)/2,w0,h0);
+      gg.imageSmoothingQuality="high";gg.drawImage(im,0,0,CV_W,CV_H);sixteen(gg);
+      zoom.hidden=zoomLbl.hidden=true;note.textContent="Your picture, as the game shows it. Choose another to change it, or remove it.";
+      return;
+    }
+    zoom.hidden=zoomLbl.hidden=false;
+    var P=place(),c=crop(),iw=st.img.naturalWidth,ih=st.img.naturalHeight;
+    g.imageSmoothingQuality="high";g.drawImage(st.img,P.ox,P.oy,iw*P.s,ih*P.s);
+    var fx=P.ox+c.x*P.s,fy=P.oy+c.y*P.s,fw=c.w*P.s,fh=c.h*P.s;
+    // what the game leaves out, dimmed
+    g.fillStyle="rgba(2,10,4,.66)";g.beginPath();g.rect(P.ox,P.oy,iw*P.s,ih*P.s);g.rect(fx,fy,fw,fh);g.fill("evenodd");
+    var acc=css("--accent");
+    g.strokeStyle="rgba(255,255,255,.18)";g.lineWidth=1;g.beginPath();
+    for(var k=1;k<3;k++){g.moveTo(fx+fw*k/3,fy);g.lineTo(fx+fw*k/3,fy+fh);g.moveTo(fx,fy+fh*k/3);g.lineTo(fx+fw,fy+fh*k/3)}
+    g.stroke();
+    g.strokeStyle=acc;g.lineWidth=1.5;g.strokeRect(fx+0.75,fy+0.75,fw-1.5,fh-1.5);
+    g.lineWidth=3;var L=Math.min(14,fw/4,fh/4);
+    [[fx,fy,1,1],[fx+fw,fy,-1,1],[fx,fy+fh,1,-1],[fx+fw,fy+fh,-1,-1]].forEach(function(q){
+      g.beginPath();g.moveTo(q[0]+q[2]*L,q[1]);g.lineTo(q[0],q[1]);g.lineTo(q[0],q[1]+q[3]*L);g.stroke()});
+    g.font='600 10px "IBM Plex Mono",monospace';var lab="168 × 124",tw=g.measureText(lab).width+10;
+    g.fillStyle="rgba(3,12,5,.8)";g.fillRect(fx+4,fy+4,tw,16);g.fillStyle=acc;g.fillText(lab,fx+9,fy+15.5);
+    gg.imageSmoothingQuality="high";gg.drawImage(st.img,c.x,c.y,c.w,c.h,0,0,CV_W,CV_H);sixteen(gg);
+    var lost=Math.round((1-(c.w*c.h)/(iw*ih))*100);
+    note.textContent=lost>0?"Drag the frame to choose the part the game shows; the wheel or the slider sizes it. "+lost+"% of the picture is left out.":
+      "The whole picture fits the game’s shape.";
+    st.out=null;
+  }
+  // the game keeps 5 bits a colour: seen here as it will be
+  function sixteen(gg){
+    var d=gg.getImageData(0,0,CV_W,CV_H),p=d.data;
+    for(var i=0;i<p.length;i+=4)for(var c2=0;c2<3;c2++){var v=((p[i+c2]*31+127)/255)|0;p[i+c2]=(v*255/31)|0}
+    gg.putImageData(d,0,0);
+  }
+  function load(f){
+    if(!f||!/^image\//.test(f.type||"")){toast("That is not a picture");return}
+    var rd=new FileReader();
+    rd.onload=function(){
+      var im=new Image();
+      im.onload=function(){st.img=im;st.cx=st.cy=0.5;st.zoom=1;zoom.value="1";st.changed=true;draw();if(api.onChange)api.onChange()};
+      im.onerror=function(){toast("That picture could not be read")};
+      im.src=rd.result;
+    };
+    rd.readAsDataURL(f);
+  }
+  el.querySelectorAll("[data-cv=pick]").forEach(function(b){b.addEventListener("click",function(){file.value="";file.click()})});
+  file.addEventListener("change",function(){load(file.files&&file.files[0])});
+  el.querySelector("[data-cv=clear]").addEventListener("click",function(){
+    st.img=null;st.cur=null;st.curImg=null;st.changed=true;draw();if(api.onChange)api.onChange()});
+  zoom.addEventListener("input",function(){if(st.img){st.zoom=+zoom.value;draw();if(api.onChange)api.onChange()}});
+  stage.addEventListener("wheel",function(e){
+    if(!st.img)return;e.preventDefault();
+    st.zoom=Math.max(1,Math.min(4,st.zoom*(e.deltaY<0?1.08:1/1.08)));zoom.value=String(st.zoom);draw();
+  },{passive:false});
+  stage.addEventListener("pointerdown",function(e){
+    if(!st.img)return;
+    var P=place(),c=crop(),r=stage.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    var inside=mx>=P.ox+c.x*P.s&&mx<=P.ox+(c.x+c.w)*P.s&&my>=P.oy+c.y*P.s&&my<=P.oy+(c.y+c.h)*P.s;
+    if(!inside){st.cx=(mx-P.ox)/P.s/st.img.naturalWidth;st.cy=(my-P.oy)/P.s/st.img.naturalHeight;draw()}
+    st.drag={x:e.clientX,y:e.clientY,cx:st.cx,cy:st.cy,s:P.s};stage.classList.add("dragging");
+    try{stage.setPointerCapture(e.pointerId)}catch(err){}
+  });
+  stage.addEventListener("pointermove",function(e){
+    var d=st.drag;if(!d||!st.img)return;
+    st.cx=d.cx+(e.clientX-d.x)/d.s/st.img.naturalWidth;st.cy=d.cy+(e.clientY-d.y)/d.s/st.img.naturalHeight;draw();
+  });
+  stage.addEventListener("pointerup",function(){if(st.drag){st.drag=null;stage.classList.remove("dragging");if(api.onChange)api.onChange()}});
+  stage.addEventListener("keydown",function(e){
+    if(!st.img)return;var k={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(!k)return;
+    e.preventDefault();st.cx+=k[0]*0.01;st.cy+=k[1]*0.01;draw();
+  });
+  stage.addEventListener("dragover",function(e){e.preventDefault();stage.classList.add("drop")});
+  stage.addEventListener("dragleave",function(){stage.classList.remove("drop")});
+  stage.addEventListener("drop",function(e){e.preventDefault();stage.classList.remove("drop");load(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0])});
+  // the part kept, at twice the game's size (the library's card), as a PNG
+  api.result=function(){
+    if(!st.changed)return {changed:false,dataUrl:null};
+    if(!st.img)return {changed:true,dataUrl:null};
+    if(!st.out){
+      var c=crop(),o=document.createElement("canvas");o.width=CV_W*2;o.height=CV_H*2;
+      var og=o.getContext("2d");og.fillStyle="#000";og.fillRect(0,0,o.width,o.height);
+      og.imageSmoothingQuality="high";og.drawImage(st.img,c.x,c.y,c.w,c.h,0,0,o.width,o.height);
+      st.out=o.toDataURL("image/png");
+    }
+    return {changed:true,dataUrl:st.out};
+  };
+  api.redraw=function(){requestAnimationFrame(draw)};
+  draw();
+  return api;
+}
+// the fingerprint the server gives a picture: the first 12 of its SHA-1
+function pictureFingerprint(dataUrl){
+  var b=atob(dataUrl.split(",")[1]||""),u=new Uint8Array(b.length);
+  for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);
+  return crypto.subtle.digest("SHA-1",u).then(function(h){
+    return Array.prototype.map.call(new Uint8Array(h),function(x){return ("0"+x.toString(16)).slice(-2)}).join("").slice(0,12)});
+}
+// Mission ▾ → Music and picture…
+function musicPictureDialog(){
+  if(!canEdit()||!M)return;
+  var MP=musicPicker({value:MSET.music||"",base:M.base.level});
+  var CP=coverPicker({url:MSET.picture?"api/missions/"+M.id+"/picture.png?v="+MSET.picture:null});
+  sheet("Music and picture",'<div class="mcx" style="padding:0"><div id="mp-mu"></div><div id="mp-cv"></div></div>'+
+    '<p class="hint" style="margin:10px 0 0">Both go into the game with the mission when you apply it: the music as its level’s own, '+
+    'the picture beside its name in the game’s mission list.</p>'+
+    '<div class="ck-foot"><button class="btn" id="mp-cancel">Cancel</button><button class="btn primary" id="mp-ok">Save</button></div>');
+  $("sheet").querySelector(".sheet-card").classList.add("wide");
+  $("mp-mu").appendChild(MP.el);$("mp-cv").appendChild(CP.el);CP.redraw();
+  $("mp-cancel").addEventListener("click",function(){playerStop();$("sheet").hidden=true});
+  $("mp-ok").addEventListener("click",function(){
+    playerStop();
+    var mu=MP.value(),res=CP.result();
+    if(mu)MSET.music=mu;else delete MSET.music;
+    function done(fp){
+      if(res.changed){if(fp)MSET.picture=fp;else delete MSET.picture}
+      lastChangeAt=0;touch();renderObjectives();renderList();
+      if(!res.changed){$("sheet").hidden=true;toast(mu?"Music: "+musicName(mu):"Its map’s own music");return}
+      $("mp-ok").disabled=true;
+      if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
+      Store.save(M.id,{plan:planOf(),name:MISSION,picture:res.dataUrl||null}).then(function(s){
+        refreshOpen(s);$("sheet").hidden=true;
+        toast(res.dataUrl?"The picture goes into the game’s mission list when you apply":"The picture is taken out when you apply");
+      }).catch(function(e){$("mp-ok").disabled=false;toast("Not saved: "+(e.message||e))});
+    }
+    if(res.changed&&res.dataUrl)pictureFingerprint(res.dataUrl).then(done);else done(null);
+  });
 }
 
 /* ---------------- opening ---------------- */
@@ -11968,6 +12371,7 @@ function missionMenuItems(){
     {label:"Duplicate…",act:function(){duplicateDialog(M)}},
     {label:"Rename & in-game description…",act:function(){renameDialog(M)}},
     {label:"Time limit and weather…",act:settingsDialog},
+    srv?{label:"Music and picture…",act:musicPictureDialog}:null,
     {label:"A draft from a description…",act:draftDialog},
     srv?{label:"Easy, normal and hard versions…",act:versionsDialog}:null,
     srv?{label:"Make a campaign…",act:function(){campaignDialog({})}}:null,
@@ -13404,7 +13808,7 @@ function settingsDialog(){
     $("st-heavy").addEventListener("change",function(){set({heavy:+this.value})});
     $("st-hz").addEventListener("change",function(){set({haze:this.checked?hazeNow:null});paint()});
     $("st-haze").addEventListener("change",function(){set({haze:+this.value})});
-    $("st-reset").addEventListener("click",function(){MSET={};lastChangeAt=0;touch();renderObjectives();renderList();paint()});
+    $("st-reset").addEventListener("click",function(){MSET=keepMusic({});lastChangeAt=0;touch();renderObjectives();renderList();paint()});
     $("st-done").addEventListener("click",function(){$("sheet").hidden=true});
   }
   paint();

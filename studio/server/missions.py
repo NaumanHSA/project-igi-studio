@@ -53,6 +53,8 @@ def summary(m):
             "changes": sum((1 if p.get(k) else 0) if k in LAYERS else len(p.get(k) or []) for k in PLAN_KEYS),
             "guards": sum(1 for x in p.get("placements") or [] if x.get("type") == "soldier"),
             "cover": (_dir(m["id"]) / "cover.png").exists(),
+            # a picture of the mission's own: the library's card and the game's list
+            "picture": (_dir(m["id"]) / PICTURE).exists(),
             "installed": inst, "upToDate": bool(inst and inst.get("hash") == plan_hash(m))}
 
 
@@ -153,6 +155,38 @@ def _write(m, snapshot=False):
     return m
 
 
+PICTURE = "picture.png"         # the mission's own picture, 336 x 248 (the game takes 168 x 124)
+
+
+def _picture_print(m):
+    """The fingerprint of the mission's own picture, from the file itself: a plan
+    saved by an editor that had not heard of it keeps it all the same."""
+    f = _dir(m["id"]) / PICTURE
+    st = m["plan"].setdefault("settings", {})
+    if f.exists():
+        st["picture"] = hashlib.sha1(f.read_bytes()).hexdigest()[:12]
+    else:
+        st.pop("picture", None)
+
+
+def set_picture(mid, png):
+    """The mission's own picture (PNG bytes), or none (None). Its fingerprint goes
+    in the plan's settings, so a mission whose picture changed has something to
+    apply. Returns the mission."""
+    m = load(mid)
+    f = _dir(mid) / PICTURE
+    if png:
+        if png[:8] != b"\x89PNG\r\n\x1a\n" or len(png) > 4_000_000:
+            raise ValueError("the picture must be a PNG of up to 4 MB")
+        f.write_bytes(png)
+    elif f.exists():
+        f.unlink()
+    _picture_print(m)
+    m["updated"] = now()
+    _write(m)
+    return m
+
+
 def create(name, base_level, kind="copy", description="", copy_from=None):
     base_level = int(base_level)
     if not 1 <= base_level <= 14:
@@ -173,6 +207,8 @@ def create(name, base_level, kind="copy", description="", copy_from=None):
     _write(m, snapshot=True)
     if copy_from and (_dir(copy_from) / "cover.png").exists():
         shutil.copyfile(_dir(copy_from) / "cover.png", _dir(mid) / "cover.png")
+    if copy_from and (_dir(copy_from) / PICTURE).exists():
+        shutil.copyfile(_dir(copy_from) / PICTURE, _dir(mid) / PICTURE)
     return m
 
 
@@ -207,8 +243,9 @@ def save(mid, plan=None, name=None, description=None, cover_png=None, applied=No
         # a lying weapon's heading turns like every other (see ccw_lying); a plan
         # from an editor opened before that keeps the old way, and is converted
         m["plan"]["ccwLying"] = bool(plan.get("ccwLying"))
-        # a time limit, rain or snow, haze (apply_plan.py _settings)
+        # a time limit, rain or snow, haze (apply_plan.py _settings), its music (music.py)
         m["plan"]["settings"] = plan.get("settings") if isinstance(plan.get("settings"), dict) else {}
+        _picture_print(m)
     # the editor took over heights the game already has (its height sync): the
     # record of what is in the game takes them too; when that is the whole plan,
     # the game is still up to date with it

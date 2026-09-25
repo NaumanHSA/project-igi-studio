@@ -234,6 +234,7 @@ def discard_slot(game, n, log=print):
         shutil.rmtree(paths.backups() / kind / ("level%d" % n), ignore_errors=True)
     from studio.build import lang
     lang.set_mission_strings(game, n, {}, log=lambda x: None)
+    _drop_picture(game, n, log)
     log("took the new slot level%d out of the game again: nothing of this mission is in it" % n)
     relink(game, log)
     try:
@@ -275,6 +276,15 @@ def _renumber_scripts(d, old, new):
         if fixed != text:
             protect.assert_writable(f)
             f.write_bytes(QW.compile_text(fixed))
+
+
+def _drop_picture(game, n, log):
+    """A mission leaving the game takes its picture out of the game's list."""
+    try:
+        from studio.build import covers
+        covers.set_cover(game, n, None, log=log)
+    except (OSError, ValueError, RuntimeError, protect.ProtectedPath) as e:
+        log("mission %d's picture stays in the game's list: %s" % (n, e))
 
 
 def mine(game, n):
@@ -363,6 +373,12 @@ def move_slots(game, moves, log=print):
                   for name, table in strings[old].items()}
         if tables:
             lang.set_mission_strings(game, new, tables, log=lambda x: None)
+    # the pictures in the game's mission list, under their new numbers
+    try:
+        from studio.build import covers
+        covers.move(game, moves, log=log)
+    except (OSError, ValueError, RuntimeError, protect.ProtectedPath) as e:
+        log("the missions' pictures stay under their old numbers: %s" % e)
     # definitions last, once every number is where it is going
     for old, new in moves.items():
         d = read_definition(game, new)
@@ -415,6 +431,7 @@ def remove_slot(game, n, log=print):
             log("removed mission %d's strings from the language files" % n)
     except (OSError, ValueError) as e:
         log("mission %d's strings stay in the language files: %s" % (n, e))
+    _drop_picture(game, n, log)
     relink(game, log)
     # the game's mission list no longer reaches past the last mission left
     try:

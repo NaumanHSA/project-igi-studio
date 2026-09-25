@@ -156,6 +156,26 @@ def assert_mission_link(path):
     return p
 
 
+def assert_menu_sprites(path):
+    """And the pictures of the game's mission list: the connected game's
+    menusystem/missionsprites.res, where a mission of the studio's with a picture
+    of its own has it under its number (studio/build/covers.py: it adds, replaces
+    or takes out LOCAL:menusystem/mission<N>.spr for N of 15 and up, and checks
+    every other picture came out the same). The original install is refused."""
+    p = pathlib.Path(path).resolve()
+    for root in pristine_roots():
+        if p == root or root in p.parents:
+            raise ProtectedPath("refusing to write %s: the studio only ever reads that" % p)
+    try:
+        game = paths.game().resolve() if paths.game_set() else None
+    except OSError:
+        game = None
+    if game is None or p != game / "menusystem" / "missionsprites.res":
+        raise ProtectedPath("refusing to write %s: the only mission pictures the studio changes are the "
+                            "connected game's menusystem/missionsprites.res" % p)
+    return p
+
+
 def assert_restore(target, source):
     """The only way a built-in mission may be written: putting it back.
 
@@ -253,5 +273,19 @@ if __name__ == "__main__":
             bad += 1
         except ProtectedPath:
             pass
-    print("protect self-test: %d of %d checks passed" % (len(refused) + 12 - bad, len(refused) + 12))
+    # the game's mission pictures: that one file of the connected game, nothing else
+    try:
+        assert_menu_sprites(game / "menusystem" / "missionsprites.res")
+    except ProtectedPath as e:
+        print("WRONGLY REFUSED:", game / "menusystem" / "missionsprites.res", e)
+        bad += 1
+    for p in (paths.pristine() / "menusystem" / "missionsprites.res", game / "menusystem" / "menusystem.res",
+              pathlib.Path("D:/some-other-install/menusystem/missionsprites.res")):
+        try:
+            assert_menu_sprites(p)
+            print("NOT REFUSED:", p)
+            bad += 1
+        except ProtectedPath:
+            pass
+    print("protect self-test: %d of %d checks passed" % (len(refused) + 16 - bad, len(refused) + 16))
     raise SystemExit(1 if bad else 0)
