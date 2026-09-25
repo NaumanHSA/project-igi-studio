@@ -226,7 +226,7 @@ STATIC = [("Building", "building"), ("EditRigidObj", "prop"), ("Door", "door"),
           ("Terminal", "terminal"), ("GunPickup", "pickup"), ("AmmoPickup", "pickup"),
           ("GenericPickup", "pickup"),
           ("SCamera", "camera"), ("ExplodeObject", "explodable"), ("Car", "vehicle"),
-          ("Switch", "switch"), ("Heli", "vehicle")]
+          ("Switch", "switch"), ("Heli", "vehicle"), ("StationaryGun", "prop")]
 
 
 
@@ -370,6 +370,17 @@ def extract(level, src_path=None, ai_dir=None):
                 sm = re.match(r'\s*,\s*(?:TRUE|FALSE)\s*,\s*"([^"]*)"', src[mm.end():mm.end() + 64])
                 if sm:
                     objects[-1]["mesh"] = sm.group(1)
+            if qtype == "StationaryGun":
+                # a machine gun on its stand (326_01_1): the gun's own model
+                # (123_02_1), then its weapon and how far it swings. The level's
+                # gunner works it through its task id, so it is shown and left
+                # where it is: not moved, taken out or offered in the inventory
+                wm = re.match(r'\s*,\s*"([^"]*)"', src[mm.end():mm.end() + 64])
+                objects[-1]["fixed"] = True
+                if wm:
+                    objects[-1]["weapon"] = wm.group(1)
+                if not nm:
+                    objects[-1]["name"] = "Machine gun"
             if qtype == "AmmoPickup":
                 cnt = re.match(r'\s*,\s*(\d+)', src[mm.end():mm.end() + 16])
                 if cnt:

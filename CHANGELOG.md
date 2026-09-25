@@ -23,9 +23,21 @@ for a mission that stopped the game.
 - **Fix with the AI designer** at the foot of the check list: its Edit agent
   gets every problem on the list and fixes them, keeping your guards, cameras
   and buildings.
+- **Built-in missions can be taken from.** Select one thing or a whole area of
+  an original mission (Shift+drag), look at it in 3D, copy it, and keep it in
+  Your items for a mission of yours - a group's panel has *Add to your items*
+  first, to keep the whole selection as one item.
+- **The level's machine guns are on their stands** on the map and in 3D: the
+  gun itself was never read, only its stand (the level data is read again
+  once, version 6).
 
 ### Changed
 
+- **Trying to change a built-in mission says so where it can't be missed:**
+  the banner at the top turns amber with a warning and a *New mission from
+  this* button, instead of a toast. Looking at one no longer shows the
+  message at all - it came up just from selecting something - and its
+  panels are no longer greyed out: what only looks stays on.
 - **The AI designer repairs instead of deleting.** Its agents are told that a
   fix makes the thing work - walkways laid where a guard has none, a guard
   stood on a building's floor or a tower's platform - and that a guard, camera

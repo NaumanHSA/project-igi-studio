@@ -34,6 +34,19 @@ The library has two shelves.
 - **Built-in missions:** the 14 missions with their in-game cover picture,
   name, description and map type. They can't be changed, renamed or deleted.
   Click one to look around its map (read-only), or **New mission from this**.
+  Looking includes everything that leaves the mission as it is: select one
+  thing or many (**Shift+drag** takes the level's own things here, as there
+  is nothing of yours; **Shift+click** adds or drops one), open its panel,
+  **View in 3D**, **Copy** (Ctrl+C, to paste into a mission of yours) and
+  **Add to your items**; the inventory is browsed as usual. What would change
+  the mission is off: the panel shows values instead of fields and leaves out
+  moving, turning, dropping and removing, the arrow keys pan the map, and
+  anything that asks to change it (a key, a menu, placing from the inventory,
+  the 3D view, the AI designer) turns the banner at the top into an amber
+  warning - *A built-in mission can't be changed*, with **New mission from
+  this** - and shakes it, instead of a toast that was gone before it was read.
+  Deciding what to draw asks quietly (`canEditQuiet`), so only a real attempt
+  warns.
 
 A mission is a **base plus a plan**:
 
@@ -1939,6 +1952,21 @@ created get it too, once, if their script has no `AIEVENT_ALARMON`:
 
 Combat after that is the engine's default handler, as it is for the shipped
 guards.
+
+## Machine guns
+
+A level's machine gun on its stand is three things in the game: the stand, an
+ordinary prop (`326_01_1`, *GUN_STAND*), and a `StationaryGun` task holding
+the mount (`123_02_1`, a swivel 35 cm tall) and naming its weapon
+(`WEAPON_ID_M2HB`), whose model (`123_01_1`, 1.75 m, its pivot at its origin,
+spade grips behind and barrel ahead) the game sets on the mount. Twenty of
+them, on levels 4, 6-9, 11 and 12. The level data reads the task (version 6)
+as a prop with `fixed` and its `weapon`; the map draws the gun from above and
+the 3D close-up puts it on its mount. It faces half a turn from the task's
+heading: each of the level's gunners stands 0.7-1 m out on the heading side of
+his gun and faces the other way (levels 6, 7 and 8, 160-175 degrees apart).
+A gun is shown, not edited: the level's gunner works it by its task id, so it
+is not moved, taken out, copied into a group, or offered in the inventory.
 
 ## Guard models
 

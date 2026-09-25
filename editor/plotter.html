@@ -291,6 +291,18 @@ canvas{display:block}
   border-left-width:3px;border-radius:5px;padding:8px 12px;box-shadow:var(--shadow);
   font-size:12.5px;line-height:1.45;color:var(--muted);display:flex;gap:10px;align-items:flex-start;z-index:3}
 .banner[hidden]{display:none}
+.banner .bn-ic{flex:none;display:grid;place-items:center;width:24px;height:24px;margin-top:1px;color:var(--accent)}
+.banner .bn-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.banner.warn{background:color-mix(in srgb,var(--accent) 11%,var(--surface));border-color:var(--accent);border-left-width:4px;
+  color:var(--ink);font-size:13px;padding:10px 12px;max-width:min(640px,calc(100% - 24px));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent),0 0 24px color-mix(in srgb,var(--accent) 22%,transparent),var(--shadow)}
+.banner.warn b{color:var(--accent);font-family:"Barlow Condensed","IBM Plex Sans",sans-serif;font-size:15px;letter-spacing:.04em;
+  text-transform:uppercase;display:block;margin-bottom:2px}
+.banner.warn .bn-acts{display:flex;gap:8px;margin-top:8px}
+.banner.nudge{animation:bn-nudge .5s ease}
+@keyframes bn-nudge{0%,100%{transform:translateX(-50%)}18%{transform:translateX(calc(-50% - 8px))}36%{transform:translateX(calc(-50% + 7px))}
+  54%{transform:translateX(calc(-50% - 5px))}72%{transform:translateX(calc(-50% + 3px))}}
+@media (prefers-reduced-motion:reduce){.banner.nudge{animation:none}}
 .banner b{color:var(--ink);font-weight:600}
 .banner button{border:none;background:transparent;color:var(--faint);cursor:pointer;font:inherit;
   font-size:16px;line-height:1;padding:0 0 0 4px;margin-left:auto}
@@ -422,8 +434,11 @@ canvas{display:block}
 .brand{all:unset;cursor:pointer;display:flex;align-items:baseline;gap:8px}
 .brand:focus-visible{outline:2px solid var(--accent)}
 .savechip.ok{color:var(--ok)}
-.readonly #panel-inv .inv-secs{opacity:.45;pointer-events:none}
-.readonly #insp input,.readonly #insp select,.readonly #insp button{pointer-events:none;opacity:.55}
+/* in a built-in mission the inventory is browsed; placing from it says why not (canEdit) */
+/* a built-in mission is only looked at: what would change it is off; looking,
+   the 3D view, copying and keeping in Your items (.ro-ok) stay on */
+.readonly #insp input,.readonly #insp select{pointer-events:none;opacity:.7}
+.readonly #insp button:not(.ro-ok){pointer-events:none;opacity:.45}
 .banner .btn{margin-left:8px;padding:1px 9px;font-size:12.5px}
 
 /* ---- apply / settings sheet ---- */
@@ -1519,7 +1534,7 @@ function styleFor(o){
   if(o.type!=="soldier"&&o.type!=="player"&&o.type!=="pickup"){
     var pi=window.PlanIcons?PlanIcons.propIcon(o):null;
     var sz=MODELS&&MODELS.sizes&&MODELS.sizes[o.model];
-    var meshable=window.MeshSprites&&MeshSprites.ready()&&MeshSprites.hasTop(o.model)&&!/^colbox/i.test(o.modelName||"");
+    var meshable=window.MeshSprites&&MeshSprites.ready()&&MeshSprites.hasTop(gunModelOf(o)||o.model)&&!/^colbox/i.test(o.modelName||"");
     // tanks, trucks, planes, crates: the model itself from above, darker than the
     // buildings; trees, lamps, poles and fittings stay symbols
     if(pi&&!ICON_ONLY.test(pi)&&meshable){s.mesh=true;if(!own&&isSolid(o,sz))s.pal="solid";pi=null}
@@ -1752,7 +1767,7 @@ function drawCameraGhost(){
 }
 // which alarm this part belongs to, and for a guard whether he answers one
 function alarmSection(o){
-  var sys=alarmSystems(),cur=o.alarmId||"",ro=!canEdit();
+  var sys=alarmSystems(),cur=o.alarmId||"",ro=!canEditQuiet();
   if(!cur&&!o.own){var was=alarmOf(o);if(was)cur=was.key}
   if(o.type==="alarmctl"){
     var me=alarmByKey("own:"+o.uid),P=me?alarmParts(me):null;
@@ -1812,7 +1827,7 @@ function bindAlarmSection(o){
   });
 }
 function cameraSection(o){
-  var cm=camOf(o),ro=!canEdit();
+  var cm=camOf(o),ro=!canEditQuiet();
   function f(id,label,v,unit,min,max,step){
     return '<label class="cam-f"><span>'+esc(label)+'</span><span class="cam-in"><input type="number" id="'+id+'" value="'+v+
       '" min="'+min+'" max="'+max+'" step="'+(step||1)+'"'+(ro?' disabled':'')+'><i>'+unit+'</i></span></label>';
@@ -2958,7 +2973,10 @@ function marker(o,s,emph){
   var see=seeThrough(o,s),a0=ctx.globalAlpha;
   if(s.mesh&&MeshSprites.ready()){
     // the model itself, seen from above - how the map computer draws buildings
-    var sp=MeshSprites.sprite(o.model,k*DPR,s.pal);
+    // (a machine gun: the gun on its mount, facing where it fires)
+    var gm=gunModelOf(o),top=gm&&MeshSprites.hasTop(gm)?gm:o.model;
+    if(top!==o.model)g+=Math.PI;
+    var sp=MeshSprites.sprite(top,k*DPR,s.pal);
     ctx.rotate(-g);
     ctx.imageSmoothingEnabled=true;
     if(see)ctx.globalAlpha=a0*see;
@@ -2969,12 +2987,12 @@ function marker(o,s,emph){
     ctx.globalAlpha=a0;
     if(see&&see<1){
       // its outline stays, so you still see where the walls are
-      var bo=MeshSprites.bounds(o.model);
+      var bo=MeshSprites.bounds(top);
       ctx.strokeStyle=s.c;ctx.lineWidth=1;ctx.setLineDash([5,3]);
       ctx.strokeRect(bo.minx*k,-bo.maxy*k,(bo.maxx-bo.minx)*k,(bo.maxy-bo.miny)*k);ctx.setLineDash([]);
     }
     if(emph){
-      var b=MeshSprites.bounds(o.model);
+      var b=MeshSprites.bounds(top);
       ctx.strokeStyle=acc;ctx.lineWidth=2;
       ctx.strokeRect(b.minx*k-4,-b.maxy*k-4,(b.maxx-b.minx)*k+8,(b.maxy-b.miny)*k+8);
     }
@@ -4591,6 +4609,7 @@ function removeSel(){
     sel=null;touch();renderSide();renderNavSection();draw();
     return;
   }
+  if(sel&&!sel.own&&sel.fixed){toast("The level's "+displayName(sel).toLowerCase()+" stays: its gunner works it");return}
   if(sel&&!sel.own&&sel.ref){
     if(removeRefs.indexOf(sel.ref)<0)removeRefs.push(sel.ref);
     sel=null;patrolMode=false;touch();renderSide();draw();
@@ -4886,7 +4905,9 @@ function setProp(o,fields){
 }
 // the player's start moves like anything else the level ships; a door does not
 // (it slides to a stop position stored with it)
-function canMove(o){return !!o&&(o.own||(!!o.ref&&o.type!=="door"))}
+// the level's things move once selected - not its doors, nor what it fixes in
+// place (a machine gun its gunner works)
+function canMove(o){return !!o&&(o.own||(!!o.ref&&o.type!=="door"&&!o.fixed))}
 
 function optionList(items,current,groupKey){
   var h="",groups={};
@@ -5024,7 +5045,7 @@ function previewHtml(o){
   if(!o||!window.MeshSprites||!MeshSprites.ready())return "";
   var pm=previewModel(o);
   if(!pm||!MeshSprites.has(pm))return "";
-  return '<div class="pv" id="pv3d"><button class="pv-x" id="pv-expand" type="button" title="Bigger preview" aria-label="Open a bigger 3D preview">'+
+  return '<div class="pv" id="pv3d"><button class="pv-x ro-ok" id="pv-expand" type="button" title="Bigger preview" aria-label="Open a bigger 3D preview">'+
     '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></button>'+
     '<div class="pv-cap"><span>'+esc(sizeText(o.type==="soldier"?o.model:pm))+'</span><span>drag · wheel</span></div></div>';
 }
@@ -5152,7 +5173,7 @@ function bindTextureSection(el,o){
   if(head.getAttribute("aria-expanded")==="true")open(true);
 }
 function objectInspector(el){
-  var o=sel,own=!!o.own,isSoldier=o.type==="soldier",isPickup=o.type==="pickup",move=canMove(o);
+  var o=sel,own=!!o.own,isSoldier=o.type==="soldier",isPickup=o.type==="pickup",move=canMove(o)&&!READONLY;
   var h=inspHead(o)+previewHtml(o)+'<dl class="kv">'+
     (!own?'<dt>task</dt><dd>'+esc(o.qtype)+(o.id>=0?' #'+esc(o.id):'')+'</dd>':'')+
     (!own&&o.name?'<dt>name</dt><dd>'+esc(o.name)+'</dd>':'')+
@@ -5180,17 +5201,19 @@ function objectInspector(el){
   if(isSoldier)h+=patrolSection(o);
   if(o.type==="camera")h+=cameraSection(o);
   if(/^(camera|switch|siren|alarmlight|alarmctl)$/.test(o.type)||(o.own&&o.type==="soldier"))h+=alarmSection(o);
-  var acts='<button class="btn act" id="i3d" title="V">'+IC.cube+(move&&canEdit()?'View and place in 3D':'View in 3D')+'</button>';
+  var acts='<button class="btn act ro-ok" id="i3d" title="V">'+IC.cube+(move&&canEditQuiet()?'View and place in 3D':'View in 3D')+'</button>';
   if(!own&&move&&o.type!=="soldier"&&o.type!=="camera")
     acts+='<button class="btn act" id="isettle" title="G">'+IC.ground+
        (edits[o.ref]&&edits[o.ref].settle?'Will rest on the ground when applied':'Drop onto the ground')+'</button>';
   if(o._orig)acts+='<button class="btn act" id="ireset">'+IC.undo+'Undo changes to this object</button>';
   if(groupable(o)&&o.type!=="navnode")
-    acts+='<button class="btn act" id="iitem" title="Add to your items\nKeep it in the inventory, to place in any mission">'+IC.save+'Add to your items…</button>';
-  if(own||o.ref)
+    acts+='<button class="btn act ro-ok" id="iitem" title="Add to your items\nKeep it in the inventory, to place in any mission">'+IC.save+'Add to your items…</button>';
+  if((own||(o.ref&&!o.fixed))&&!READONLY)
     acts+='<button class="btn act danger" id="idel" title="Delete">'+IC.trash+(own?'Remove':'Remove from mission')+'</button>';
   if(acts)h+='<div class="ins-acts">'+acts+'</div>';
-  if(!own&&o.ref)
+  if(READONLY)
+    h+='<p class="hint" style="margin:8px 0 0">A built-in mission is only looked at. View it in 3D, copy it (Ctrl+C), or keep it in Your items to place it in a mission of yours.</p>';
+  else if(!own&&o.ref)
     h+='<p class="hint" style="margin:8px 0 0">'+(move?'Drag it on the map once selected. ':'')+'Changes are made to this object itself when the mission is built. The original level is never touched.</p>';
   el.innerHTML=h;
   if($("ins-thumb"))$("ins-thumb").appendChild(thumbForObject(o,28));
@@ -5466,7 +5489,7 @@ function renderList(){
     (was?rows.edited:rows.added).push({thumb:function(){return thumbForObject(p,18)},name:p.name||displayName(p),
       meta:(was?"changed since the last Apply · ":"")+kindText(p)+" · "+num(p.x)+", "+num(p.y),on:sel===p||inMulti(p),
       go:function(){multi=[];sel=p;jumpTo(p.x,p.y);renderSide()},
-      undo:canEdit()?function(){multi=[];sel=p;removeSel()}:null,undoTip:"Remove it",undoIcon:IC.trash});
+      undo:canEditQuiet()?function(){multi=[];sel=p;removeSel()}:null,undoTip:"Remove it",undoIcon:IC.trash});
   });
   Object.keys(edits).forEach(function(ref){
     if(AS.edits[ref])return;
@@ -5476,7 +5499,7 @@ function renderList(){
     rows.edited.push({thumb:function(){return o?thumbForObject(o,18):iconSwatch("dot",css("--build"),18)},
       name:o?displayName(o):(e.name||e.qtype),meta:(what.join(", ")||"edited")+(o?" · "+num(o.x)+", "+num(o.y):""),on:!!o&&sel===o,
       go:o?function(){multi=[];sel=o;jumpTo(o.x,o.y);renderSide()}:null,
-      undo:o&&canEdit()?function(){resetShipped(o);touch();renderSide();draw()}:null,undoTip:"Undo the changes to it"});
+      undo:o&&canEditQuiet()?function(){resetShipped(o);touch();renderSide();draw()}:null,undoTip:"Undo the changes to it"});
   });
   removeRefs.forEach(function(ref){
     if(AS.removeRefs[ref])return;
@@ -5484,18 +5507,18 @@ function renderList(){
     rows.removed.push({thumb:function(){return o?thumbForObject(o,18):iconSwatch("dot",css("--danger"),18)},
       name:o?displayName(o):ref.split("@")[0],meta:"removed"+(o?" · "+num(o.x)+", "+num(o.y):""),
       go:o?function(){jumpTo(o.x,o.y)}:null,
-      undo:canEdit()?function(){removeRefs=removeRefs.filter(function(r){return r!==ref});touch();renderSide();draw()}:null,undoTip:"Put it back"});
+      undo:canEditQuiet()?function(){removeRefs=removeRefs.filter(function(r){return r!==ref});touch();renderSide();draw()}:null,undoTip:"Put it back"});
   });
   if(removals.length)rows.removed.push({thumb:function(){return iconSwatch("dot",css("--danger"),18)},
     name:removals.length+" shipped object"+(removals.length>1?"s":""),meta:"removed (older format)",
-    undo:canEdit()?function(){removals=[];touch();renderSide();draw()}:null,undoTip:"Put them back"});
+    undo:canEditQuiet()?function(){removals=[];touch();renderSide();draw()}:null,undoTip:"Put them back"});
   navNodes.forEach(function(p,i){
     if(AS.nodes[p.uid])return;
     var n=nodeLinks(p).length;
     rows.nav.push({thumb:function(){return iconSwatch("node",n?css("--accent"):css("--danger"),18)},name:"New node N"+(i+1),
       meta:"graph "+p.graph+" · "+(n?n+" link"+(n>1?"s":""):"no links"),bad:!n,on:sel===p,
       go:function(){multi=[];sel=p;jumpTo(p.x,p.y);renderSide()},
-      undo:canEdit()?function(){multi=[];sel=p;removeSel()}:null,undoTip:"Remove it",undoIcon:IC.trash});
+      undo:canEditQuiet()?function(){multi=[];sel=p;removeSel()}:null,undoTip:"Remove it",undoIcon:IC.trash});
   });
   Object.keys(nodeEdits).forEach(function(k){
     if(AS.nodeEdits[k])return;
@@ -5507,7 +5530,7 @@ function renderList(){
         if(!rm){multi=[];sel={type:"graphnode",graph:String(ed.graph),id:n.id,x:n.x,y:n.y,z:n.z,c:n.c}}
         jumpTo(n.x,n.y);renderSide();
       },
-      undo:canEdit()?function(){
+      undo:canEditQuiet()?function(){
         var orig=rawNodesOf(ed.graph).filter(function(x){return x.id===ed.id})[0];
         setNodeEdit(ed.graph,ed.id,null);
         if(sel&&sel.type==="graphnode"&&isSelNode(ed.graph,ed.id)&&orig){sel.x=orig.x;sel.y=orig.y;sel.z=orig.z}
@@ -5521,28 +5544,28 @@ function renderList(){
       name:"Ground area "+(i+1)+" · "+GM_TEXT[a.mode],meta:areaText(a)+" · "+Math.round(a.w)+" × "+Math.round(a.h)+" m",bad:!!st.clip,
       on:GSEL===a.uid,
       go:function(){GSEL=a.uid;GMODE.mode=a.mode;openGround();jumpTo(a.x,a.y);renderGround();renderList();draw()},
-      undo:canEdit()?function(){removeArea(a)}:null,undoTip:"Remove the area",undoIcon:IC.trash});
+      undo:canEditQuiet()?function(){removeArea(a)}:null,undoTip:"Remove the area",undoIcon:IC.trash});
   });
   if(hasPaint()&&!AS.paint){
     var pbx=paintBox();
     rows.ground.push({thumb:function(){return iconSwatch("dot","rgb("+GM_COL.paint+")",18)},
       name:"Painted ground",meta:paintKeys().length+" m² painted",
       go:function(){GSEL="paint";GMODE.mode="paint";openGround();jumpTo((pbx[0]+pbx[1])/2,(pbx[2]+pbx[3])/2)},
-      undo:canEdit()?clearPaint:null,undoTip:"Clear all paint",undoIcon:IC.trash});
+      undo:canEditQuiet()?clearPaint:null,undoTip:"Clear all paint",undoIcon:IC.trash});
   }
   if(hasSculpt()&&!AS.sculpt){
     var sbx=sculptBox();
     rows.ground.push({thumb:function(){return iconSwatch("dot","rgb("+GM_COL.raise+")",18)},
       name:"Big shapes",meta:Math.round(sculptKeys().length*SCULPT_M*SCULPT_M/1000)/1000+" km², up to "+Math.round(sculptPeak())+" m",
       go:function(){GSEL="sculpt";GMODE.mode="brush";openGround();jumpTo((sbx[0]+sbx[1])/2,(sbx[2]+sbx[3])/2)},
-      undo:canEdit()?clearSculpt:null,undoTip:"Clear all big shapes",undoIcon:IC.trash});
+      undo:canEditQuiet()?clearSculpt:null,undoTip:"Clear all big shapes",undoIcon:IC.trash});
   }
   if(hasBrush()&&!AS.brush){
     var bbx=brushBox();
     rows.ground.push({thumb:function(){return iconSwatch("dot","rgb("+GM_COL.brush+")",18)},
       name:"Brush strokes",meta:brushKeys().length+" m² painted",
       go:function(){GSEL=null;GMODE.mode="brush";openGround();jumpTo((bbx[0]+bbx[1])/2,(bbx[2]+bbx[3])/2)},
-      undo:canEdit()?clearBrush:null,undoTip:"Clear all brush strokes",undoIcon:IC.trash});
+      undo:canEditQuiet()?clearBrush:null,undoTip:"Clear all brush strokes",undoIcon:IC.trash});
   }
   objectives.forEach(function(ob,i){
     if(AS.objectives[ob.uid])return;
@@ -5557,20 +5580,20 @@ function renderList(){
     rows.ev.push({thumb:function(){return iconSwatch("dot",pr?css("--danger"):css("--electric"),18)},
       name:(i+1)+". "+eventLabel(v),meta:(IX&&IX.eventObj[v.uid]?"changed since the last Apply · ":"")+(pr||eventSummary(v)),bad:!!pr,
       go:function(){showPanel("ev");EVOPEN=v.uid;renderEvents();var w=eventWhere(v);if(w)jumpTo(w.x,w.y)},
-      undo:canEdit()?function(){removeEvent(v)}:null,undoTip:"Remove the event",undoIcon:IC.trash});
+      undo:canEditQuiet()?function(){removeEvent(v)}:null,undoTip:"Remove the event",undoIcon:IC.trash});
   });
   if(IX)Object.keys(IX.eventObj).forEach(function(u){
     if(events.some(function(v){return v.uid===u}))return;
     var v=IX.eventObj[u];
     rows.removed.push({thumb:function(){return iconSwatch("dot",css("--danger"),18)},name:"Event: "+eventLabel(v),
       meta:"taken out; it leaves the game at the next Apply",
-      undo:canEdit()?function(){events.push(JSON.parse(JSON.stringify(v)));lastChangeAt=0;touch();renderEvents();renderList();draw()}:null,undoTip:"Put it back"});
+      undo:canEditQuiet()?function(){events.push(JSON.parse(JSON.stringify(v)));lastChangeAt=0;touch();renderEvents();renderList();draw()}:null,undoTip:"Put it back"});
   });
   if(settingsText()&&!AS.settings)
     rows.obj.push({thumb:function(){return iconSwatch("dot",css("--accent"),18)},name:"Time limit and weather",
       meta:(IX&&IX.settings!=="{}"?"changed since the last Apply · ":"")+settingsText(),
       go:function(){settingsDialog()},
-      undo:canEdit()?function(){MSET={};touch();renderObjectives();renderList()}:null,undoTip:"Back to the level's own",undoIcon:IC.undo});
+      undo:canEditQuiet()?function(){MSET={};touch();renderObjectives();renderList()}:null,undoTip:"Back to the level's own",undoIcon:IC.undo});
   else if(IX&&IX.settings!=="{}"&&!settingsText())
     rows.obj.push({thumb:function(){return iconSwatch("dot",css("--danger"),18)},name:"Time limit and weather",
       meta:"back to the level's own at the next Apply",go:function(){settingsDialog()}});
@@ -5580,7 +5603,7 @@ function renderList(){
       var q=IX.placementObj[u];
       rows.removed.push({thumb:function(){return iconSwatch("dot",css("--danger"),18)},name:q.name||q.type,
         meta:"taken out; it leaves the game at the next Apply",go:function(){jumpTo(q.x,q.y)},
-        undo:canEdit()?function(){
+        undo:canEditQuiet()?function(){
           var c=JSON.parse(JSON.stringify(q));c.own=true;c.patrol=c.patrol||[];placements.push(c);sel=c;touch();renderSide();draw();
         }:null,undoTip:"Put it back"});
     });
@@ -5589,7 +5612,7 @@ function renderList(){
       var g=IX.groundObj[u];
       rows.removed.push({thumb:function(){return iconSwatch("dot",css("--danger"),18)},name:"Ground area, "+(GM_TEXT[g.mode]||"").toLowerCase(),
         meta:"taken out; the ground goes back at the next Apply",go:function(){jumpTo(g.x,g.y)},
-        undo:canEdit()?function(){groundEdits.push(JSON.parse(JSON.stringify(g)));areaChanged()}:null,undoTip:"Put it back"});
+        undo:canEditQuiet()?function(){groundEdits.push(JSON.parse(JSON.stringify(g)));areaChanged()}:null,undoTip:"Put it back"});
     });
   }
   wrap.innerHTML="";
@@ -6274,7 +6297,7 @@ function secTools(){
 }
 function renderSecurity(){
   var host=$("secbody");if(!host||$("panel-sec").hidden)return;
-  var keep=host.scrollTop,sys=alarmSystems(),ro=!canEdit();
+  var keep=host.scrollTop,sys=alarmSystems(),ro=!canEditQuiet();
   var ctlKind=ALARM_KINDS.filter(function(k){return k.type==="alarmctl"})[0];
   var h="";
   if(!ro){
@@ -6414,9 +6437,9 @@ function partBar(anchor,o,sys){
     ["show","Show it on the map\nFly there and select it",BAR_IC.show],
     ["sel","Select it\nOpen it in the panel on the right",BAR_IC.sel]
   ];
-  if(canEdit()&&(o.own||o.ref)&&/^(camera|switch|siren|alarmlight|soldier)$/.test(o.type))
+  if(canEditQuiet()&&(o.own||o.ref)&&/^(camera|switch|siren|alarmlight|soldier)$/.test(o.type))
     acts.push(["off","Take it off this alarm\nIt stays on the map, doing nothing for "+sys.name,BAR_IC.off]);
-  if(canEdit()&&(o.own||o.ref))
+  if(canEditQuiet()&&(o.own||o.ref))
     acts.push(["del",(o.own?"Remove it from the mission":"Remove it from the mission\nThe level keeps its own copy")+" · "+name,BAR_IC.del]);
   bar.innerHTML=acts.map(function(a){
     return '<button type="button" data-b="'+a[0]+'"'+(a[0]==="del"?' class="danger"':'')+' title="'+esc(a[1])+'">'+a[2]+'</button>';
@@ -6798,7 +6821,8 @@ function boxSelect(x0,y0,x1,y1,add,shipped){
   multi=list.length>1?list:[];
   sel=list.length?list[list.length-1]:null;
   renderSide();draw();
-  if(list.length)toast(list.length+" selected. Drag one to move them all, Ctrl+C to copy"+(shipped?"":" (Shift+Alt+drag includes the level's own objects)"));
+  if(list.length)toast(READONLY?list.length+" selected. Add to your items keeps them as one, in any mission"
+    :list.length+" selected. Drag one to move them all, Ctrl+C to copy"+(shipped?"":" (Shift+Alt+drag includes the level's own objects)"));
 }
 function drawBoxSelect(){
   var b=mouse.box;if(!b)return;
@@ -7005,20 +7029,24 @@ function duplicateGroup(){
 function groupInspector(el){
   var list=multi,kinds={};
   list.forEach(function(o){var k=o.type==="navnode"?"new node":o.type==="soldier"?"guard":o.type==="pickup"?"pickup":"object";kinds[k]=(kinds[k]||0)+1});
+  var ro=READONLY;
   var h='<dl class="kv"><dt>group</dt><dd>'+list.length+' selected</dd><dt>of</dt><dd>'+
     esc(Object.keys(kinds).map(function(k){return kinds[k]+" "+k+(kinds[k]===1?"":"s")}).join(", "))+'</dd></dl>'+
-    rotButtons("data-g-rot")+
+    (ro?'':rotButtons("data-g-rot"))+
     '<div class="ins-acts">'+
-    '<button class="btn act" data-g="drop" title="G">'+IC.ground+'Drop onto the ground</button>'+
+    // the whole selection as one item of the inventory: a compound, its fence, towers and guards
+    '<button class="btn act ro-ok" data-g="save" title="Add to your items\nKeep them all as one item in the inventory, to place in any mission">'+IC.save+'Add to your items…</button>'+
+    (ro?'':'<button class="btn act" data-g="drop" title="G">'+IC.ground+'Drop onto the ground</button>')+
     '<div class="btnrow" style="margin:0">'+
-    '<button class="btn" data-g="dup" title="Ctrl+D">'+IC.dup+'Duplicate</button>'+
-    '<button class="btn" data-g="copy" title="Ctrl+C">'+IC.copy+'Copy</button>'+
-    '<button class="btn" data-g="save" title="Add to your items\nKeep them in the inventory, to place in any mission">'+IC.save+'Keep…</button></div>'+
-    '<button class="btn act danger" data-g="del" title="Delete">'+IC.trash+'Remove all</button></div>'+
-    '<p class="hint" style="margin:8px 0 6px">Drag any of them to move the group. Arrow keys nudge it. Shift+click adds or drops one. Esc clears.</p>'+
+    (ro?'':'<button class="btn" data-g="dup" title="Ctrl+D">'+IC.dup+'Duplicate</button>')+
+    '<button class="btn ro-ok" data-g="copy" title="Ctrl+C">'+IC.copy+'Copy</button></div>'+
+    (ro?'':'<button class="btn act danger" data-g="del" title="Delete">'+IC.trash+'Remove all</button>')+'</div>'+
+    '<p class="hint" style="margin:8px 0 6px">'+(ro
+      ?'A built-in mission is only looked at: keep them in Your items, or copy them (Ctrl+C), to use in a mission of yours. Shift+click adds or drops one. Esc clears.'
+      :'Drag any of them to move the group. Arrow keys nudge it. Shift+click adds or drops one. Esc clears.')+'</p>'+
     '<div class="placed-list">';
   list.forEach(function(o,i){
-    h+='<button class="placed" data-m="'+i+'"><span class="nm">'+esc(o.type==="navnode"?"Node N"+(navNodes.indexOf(o)+1):displayName(o))+
+    h+='<button class="placed ro-ok" data-m="'+i+'"><span class="nm">'+esc(o.type==="navnode"?"Node N"+(navNodes.indexOf(o)+1):displayName(o))+
       '</span><span class="co">'+num(o.x)+', '+num(o.y)+'</span></button>';
   });
   el.innerHTML=h+'</div>';
@@ -8072,7 +8100,7 @@ function drawGround(){
 // ---- the Ground bar and its panel
 function buildGroundBar(){
   var host=$("gbar");if(!host)return;
-  var ro=!canEdit(),on=groundOpen();
+  var ro=!canEditQuiet(),on=groundOpen();
   host.innerHTML='<div class="gbar-t">Ground</div>'+GTOOLS.map(function(t){
     var n=t[0]==="brush"?(hasBrush()||hasSculpt()?1:0):t[0]==="paint"?(hasPaint()?1:0):groundEdits.filter(function(a){return a.mode===t[0]}).length;
     return '<button type="button" data-g="'+t[0]+'" aria-pressed="'+(on&&GMODE.mode===t[0])+'"'+(ro?' disabled':'')+
@@ -8402,7 +8430,7 @@ var WALL_ITEMS={camera:1,switch:1,siren:1,alarmlight:1};
 function key3d(o){return o.own?"own:"+o.uid:o.ref?"ref:"+o.ref:null}
 function byKey3d(k){
   if(!k)return null;
-  var v=k.slice(4);
+  var v=k.slice(4).replace(/:gun$/,"");      // a machine gun is its mount's
   if(k.indexOf("own:")===0)return placements.filter(function(p){return p.uid===v})[0]||null;
   return LEVEL?LEVEL.objects.filter(function(o){return o.ref===v})[0]||null:null;
 }
@@ -8462,8 +8490,8 @@ function spec3d(o){
   return {key:k||("x:"+o.type+":"+o.x+","+o.y+","+o.z),name:displayName(o),type:o.type,
     model:m&&MeshSprites.has(m)?m:null,x:o.x,y:o.y,z:z,rot:r.rot,head:r.head,headOff:r.off,headSign:r.sign||1,
     lift:o.type==="player"?-PLAYER_LIFT:0,
-    kind:!canMove(o)||!canEdit()?"fixed":WALL_ITEMS[o.type]?"wall":"floor",
-    editable:!!k&&canMove(o)&&canEdit(),own:fresh(o),solid:!!st&&st.pal==="solid",
+    kind:!canMove(o)||!canEditQuiet()?"fixed":WALL_ITEMS[o.type]?"wall":"floor",
+    editable:!!k&&canMove(o)&&canEditQuiet(),own:fresh(o),solid:!!st&&st.pal==="solid",
     cam:o.type==="camera"?Object.assign({model:CAM_MODELS.camera},camOf(o)):null,on:o.mount||"",gun:gn.gun||null,grip:gn.grip||null};
 }
 // everything whose footprint comes within the radius: the level's (not what the
@@ -8481,6 +8509,7 @@ function sceneAround(o,R,noSelf){
     if(!q.own&&removals.indexOf(q.id)>=0&&q.id>=0)return;
     if(Math.hypot(q.x-o.x,q.y-o.y)>R+reach(q))return;
     out.push(spec3d(q));
+    if(q.qtype==="StationaryGun")out.push(gunOnMount(q));
   });
   // the game's own lift cabins, and Eagle's Nest's cable car, where the level
   // starts them: seen here, not edited (an empty map has none)
@@ -8491,9 +8520,23 @@ function sceneAround(o,R,noSelf){
       model:window.MeshSprites&&MeshSprites.has(l.model)?l.model:null,x:l.x,y:l.y,z:l.z,rot:r,head:2,headOff:0,headSign:1,
       lift:0,kind:"fixed",editable:false,own:false,solid:false,cam:null,on:"",gun:null,grip:null});
   });
-  if(!noSelf)out.push(spec3d(o));
+  if(!noSelf){out.push(spec3d(o));if(o.qtype==="StationaryGun")out.push(gunOnMount(o))}
   return out;
 }
+// A level's machine gun: its task holds the mount (123_02_1, a hand's breadth
+// of swivel); the gun itself is its weapon's model - the M2HB, 123_01_1, 1.75 m
+// of it, its pivot at its origin, grips behind and barrel ahead - which the
+// game sets on the mount facing half a turn from the task's heading: each of
+// the level's gunners stands on the heading side of his gun and faces the
+// other way (levels 6, 7, 8: 160-175 degrees apart). Seen, not edited; a
+// click on it is a click on its mount.
+function gunOnMount(q){
+  var s=spec3d(q),g=gunModelOf(q),r=(s.rot||[0,0,0]).slice();
+  r[2]=(r[2]||0)+Math.PI;
+  return Object.assign({},s,{key:(s.key||"")+":gun",model:g&&MeshSprites.has(g)?g:null,rot:r,kind:"fixed",editable:false,
+    cam:null,gun:null,grip:null});
+}
+function gunModelOf(q){return q&&q.qtype==="StationaryGun"&&q.weapon&&window.MeshSprites?MeshSprites.pickupModel(q.weapon):null}
 // the ground round it, as the map has it (with the mission's own shaping), out
 // well past the things drawn on it - twice the radius, or 40 m more - so it runs
 // into the fog rather than ending in a cliff; every other cell when that is big
@@ -9583,7 +9626,7 @@ var OB_IC={
 function renderObjectives(){
   var host=$("objbody");if(!host||$("panel-obj").hidden)return;
   if(host.contains(document.activeElement)&&document.activeElement.tagName==="INPUT"&&document.activeElement.type==="text")return;
-  var ro=!canEdit(),h='<p class="hint" style="margin:0 0 8px">'+(objectives.length?
+  var ro=!canEditQuiet(),h='<p class="hint" style="margin:0 0 8px">'+(objectives.length?
       "The mission is complete when every objective is done.":
       "No objectives: the mission ends the way its base level does.")+'</p>';
   objectives.forEach(function(ob,i){
@@ -11198,9 +11241,7 @@ function viewBuiltin(level){
   $("start").hidden=true;
   applyModeUi();
   loadLevel(level,function(){chip("");paintStatus()});
-  banner('<b>'+esc(MISSION)+' is a built-in mission.</b> You can look around, but it can’t be changed. '+
-    '<button class="btn" id="bn-from">New mission from this</button>');
-  $("bn-from").addEventListener("click",function(){newMissionDialog({kind:"copy",level:level})});
+  builtinBanner(false);
 }
 function applyModeUi(){
   $("app").classList.toggle("readonly",READONLY);
@@ -11248,16 +11289,37 @@ function paintStatus(){
   $("modechip").textContent=st;
   $("modechip").classList.toggle("ok",!!(M&&M.installed&&M.upToDate));
 }
+// Anything that would change the mission asks here first. A built-in mission
+// says why not in the warning banner, not a toast that is gone before it is read.
 function canEdit(){
   if(M&&!READONLY)return true;
-  toast(READONLY?"Built-in missions can’t be changed. Start a new mission from it":"Open or create a mission first");
+  if(READONLY)readOnlyNotice();else toast("Open or create a mission first");
   return false;
 }
-function banner(html){
+var WARN_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.3 22.2 20.6H1.8z"/><path d="M12 9.6v5.2"/><path d="M12 17.7v.01"/></svg>';
+function banner(html,kind){
   var b=$("banner");
-  b.innerHTML='<div>'+html+'</div><button aria-label="Dismiss">&times;</button>';
+  b.className="banner"+(kind?" "+kind:"");
+  b.setAttribute("role",kind==="warn"?"alert":"status");
+  b.innerHTML=(kind==="warn"?'<span class="bn-ic">'+WARN_ICON+'</span>':'')+'<div>'+html+'</div><button aria-label="Dismiss">&times;</button>';
   b.hidden=false;
   b.querySelector("button[aria-label]").addEventListener("click",function(){b.hidden=true});
+}
+// the banner a built-in mission opens with; warn: something tried to change it
+function builtinBanner(warn){
+  banner(warn
+    ?'<b>A built-in mission can’t be changed</b>'+esc(MISSION)+' stays exactly as the game ships it. To change it, make a mission of your own '+
+      'from it: a full copy, or just its map. Here you can look around, view things in 3D, copy them, and keep them in Your items.'+
+      '<div class="bn-acts"><button class="btn primary" id="bn-from">New mission from this</button></div>'
+    :'<b>'+esc(MISSION)+' is a built-in mission.</b> Look around, view things in 3D, copy them and keep them in Your items; '+
+      'it can’t be changed. <button class="btn" id="bn-from">New mission from this</button>',
+    warn?"warn":"");
+  $("bn-from").addEventListener("click",function(){$("banner").hidden=true;newMissionDialog({kind:"copy",level:LV})});
+}
+function readOnlyNotice(){
+  var b=$("banner");
+  builtinBanner(true);
+  b.classList.remove("nudge");void b.offsetWidth;b.classList.add("nudge");    // asked again: it shakes again
 }
 // Plans the old editor kept in this browser (before missions had a base level)
 function legacyPlans(){
@@ -11403,7 +11465,7 @@ function bind(){
       return;
     }
     // Shift: a box (drag) or add/drop one (click)
-    if(e.shiftKey&&!tool&&!patrolMode){mouse.box={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y,shipped:e.altKey};return}
+    if(e.shiftKey&&!tool&&!patrolMode){mouse.box={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y,shipped:e.altKey||READONLY};return}
     if(!tool&&!patrolMode){
       // a shipped node moves only once it is selected, so a stray drag across
       // the map never edits the navmesh by accident
@@ -11818,7 +11880,7 @@ function mapMenuItems(sx,sy){
       o.own?{label:"Duplicate",act:function(){
         var c=JSON.parse(JSON.stringify(o));c.uid=uid();c.own=true;c.x+=3;c.y-=3;placements.push(c);sel=c;touch();renderSide();draw();
       }}:null,
-      {label:canMove(o)&&canEdit()?"View and place in 3D":"View in 3D",kbd:"V",act:function(){sel=o;multi=[];renderSide();open3d(o)}},
+      {label:canMove(o)&&canEditQuiet()?"View and place in 3D":"View in 3D",kbd:"V",act:function(){sel=o;multi=[];renderSide();open3d(o)}},
       canMove(o)?{label:"Rotate 90°",kbd:"R ×6",act:function(){setProp(o,{gamma:+(((o.gamma||0)+Math.PI/2)%(Math.PI*2)).toFixed(5)});sel=o;renderSide();draw()}}:null,
       soldier?{label:"Edit patrol route",act:function(){sel=o;patrolMode=true;renderSide();draw()}}:null,
       soldier&&(o.patrol||[]).length?{label:"Clear patrol (stand guard)",act:function(){setPatrol(o,[]);sel=o;renderSide();draw()}}:null,
@@ -11830,7 +11892,7 @@ function mapMenuItems(sx,sy){
         function(x){if(o.own)setProp(o,{pickupId:x.id,name:x.label});else setProp(o,{model:x.id});sel=o;renderSide();draw()})}:null,
       o._orig?{label:"Undo changes",act:function(){resetShipped(o);touch();renderSide();draw()}}:null,
       "-",
-      (o.own||o.ref)?{label:o.own?"Remove":"Remove from mission",danger:true,kbd:"Del",act:function(){sel=o;removeSel()}}
+      (o.own||(o.ref&&!o.fixed))?{label:o.own?"Remove":"Remove from mission",danger:true,kbd:"Del",act:function(){sel=o;removeSel()}}
                     :{label:"Can't be removed (no task reference)",disabled:true}];
   }
   var ground=groundAt(wx,wy);
@@ -12099,7 +12161,7 @@ function onKey(e){
   if(k.indexOf("Arrow")===0){
     var dir={ArrowUp:[0,1],ArrowDown:[0,-1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[k];
     e.preventDefault();
-    if(ctrl||!sel||tool){panBy(dir[0]*80*(e.shiftKey?4:1),dir[1]*80*(e.shiftKey?4:1));return}
+    if(ctrl||!sel||tool||READONLY){panBy(dir[0]*80*(e.shiftKey?4:1),dir[1]*80*(e.shiftKey?4:1));return}
     var step=e.shiftKey?5:e.altKey?0.1:0.5;
     if(multi.length>1){moveGroup(dir[0]*step,dir[1]*step);settleGroup(multi.slice());renderSide();draw();return}
     nudge(dir[0]*step,dir[1]*step);
@@ -12925,7 +12987,7 @@ var SRV=null;
 // Time limit, rain or snow, haze: one sheet, each change saved as it is made
 function settingsDialog(){
   if(!canEdit())return;
-  var lw=levelWeather(),ro=!canEdit();
+  var lw=levelWeather(),ro=!canEditQuiet();
   function paint(){
     var s=MSET,tl=s.timeLimit||0,fall=s.fall||"",heavy=s.heavy!=null?s.heavy:(lw.heavy||0.13);
     var ship=lw.fall?heavyText(lw.heavy)+" "+lw.fall:"no rain or snow";
@@ -15029,6 +15091,7 @@ window.StudioAI={
   ready:function(){return !!(LEVEL&&CATALOG&&MODELS)},
   tools:AIB.tools,run:AIB.run,isLook:AIB.isLook,kindOf:AIB.kindOf,
   editable:function(){return !!(M&&!READONLY)},
+  readOnly:function(){if(READONLY)readOnlyNotice()},
   missionId:function(){return M?M.id:null},
   local:function(){return !Store||!!Store.local},
   context:function(){

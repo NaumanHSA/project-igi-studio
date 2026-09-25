@@ -89,8 +89,8 @@ for lv in range(1, 15):
             if o.get("count"):
                 w["counts"].append(o["count"])
             continue
-        if kind not in ("building", "prop") or not o.get("model"):
-            continue
+        if kind not in ("building", "prop") or not o.get("model") or o.get("fixed"):
+            continue                            # a level's machine gun works only with its gunner
         if re.match(r"COLBOX", o.get("modelName") or "", re.I):
             continue                            # invisible collision helpers
         rec = seen[o["model"]]

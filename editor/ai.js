@@ -924,7 +924,7 @@ function paintPlanCard(b, d) {
 function planStart(auto) {
   var A = api(), p = CHAT.plan;
   if (RUN || !p) return;
-  if (!A.editable()) { A.toast("Built-in missions are never changed. Make your own mission to build it"); return; }
+  if (!A.editable()) { (A.readOnly ? A.readOnly() : A.toast("Built-in missions are never changed. Make your own mission to build it")); return; }
   if (!PLAN_BEFORE[CHAT.id] || p.stage === "proposed") PLAN_BEFORE[CHAT.id] = A.state();
   p.auto = !!auto;
   planNext();
@@ -1391,7 +1391,7 @@ function paintDesign(b, d) {
     bt.addEventListener("click", function () {
       var a = bt.getAttribute("data-a");
       if (a === "view") A.designView(b.id);
-      else if (a === "place") { if (!A.designPlace(b.id)) A.toast(A.editable() ? "That design is no longer here" : "Built-in missions are never changed. Make your own mission from it to place it"); }
+      else if (a === "place") { if (!A.designPlace(b.id)) (A.editable() ? A.toast("That design is no longer here") : A.readOnly ? A.readOnly() : A.toast("Built-in missions are never changed. Make your own mission from it to place it")); }
       else if (a === "add") {
         bt.disabled = true; bt.textContent = "Adding…";
         A.designAdd(b.id).then(function (g) {
@@ -1475,7 +1475,7 @@ function bindDesigns(d) {
     b.addEventListener("click", function () {
       if (RUN) return;
       var A = api();
-      if (!A.editable()) { A.toast("Built-in missions are never changed. Make your own mission from it to build"); return; }
+      if (!A.editable()) { (A.readOnly ? A.readOnly() : A.toast("Built-in missions are never changed. Make your own mission from it to build")); return; }
       setAgent("mission");
       el.input.value = "Plan and build " + b.getAttribute("data-design") + ", from the suggestions above.";
       submit();
@@ -1486,7 +1486,7 @@ function bindDesigns(d) {
     b.addEventListener("click", function () {
       if (RUN) return;
       var A = api();
-      if (!A.editable()) { A.toast("Built-in missions are never changed. Make your own mission from it to fix it"); return; }
+      if (!A.editable()) { (A.readOnly ? A.readOnly() : A.toast("Built-in missions are never changed. Make your own mission from it to fix it")); return; }
       setAgent("edit");
       el.input.value = "Fix " + b.getAttribute("data-finding").replace(/^finding\s+\d+:\s*/i, "the review's finding: ") + ". " + b.getAttribute("data-body");
       submit();
