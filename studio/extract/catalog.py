@@ -105,11 +105,42 @@ for lv in range(1, 15):
             rec["names"][pretty(o["name"])] += 1
 
 
+# A level's name for a thing can outlive the thing: swap a water tower's model
+# for a radar tower's in an editor, and its task is still called "WaterTower" and
+# the map computer still says "Water Tower". The levels slip the same way - level
+# 3 calls its comm towers "WatchTower", level 12 some of its watchtowers
+# "SecurityBuilding". A name that is itself another model's name, and says
+# nothing of this one, is not this one's (editor/plotter.html staleName does the
+# same for what the panel calls a thing). A generic head word (tower, building)
+# says nothing: "WaterTower" and RADAR_TOWER share only "tower".
+GENERIC_WORDS = {"tower", "building", "buildings", "house", "room", "hut", "post", "segment", "area", "the"}
+
+
+def _words(s):
+    return [w for w in re.split(r"[^a-z0-9]+", re.sub(r"([a-z])([A-Z])", r"\1 \2", s or "").lower()) if w]
+
+
+def _norm(s):
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def stale_name(name, model_name, all_names):
+    ws = _words(name)
+    if len(ws) < 2:
+        return False
+    k, m = "".join(ws), _norm(model_name)
+    if not m or k not in all_names or k == m or k in m or m in k:
+        return False
+    return not any(len(w) >= 3 and w not in GENERIC_WORDS and w in m for w in ws)
+
+
 def structures():
     out = []
+    every = {_norm(r) for rec in seen.values() for r in rec["raw"]}
     for model, rec in seen.items():
         raw = sorted(rec["raw"])[0]
-        name = rec["names"].most_common(1)[0][0] if rec["names"] else pretty(raw)
+        good = collections.Counter({n: c for n, c in rec["names"].items() if not stale_name(n, raw, every)})
+        name = good.most_common(1)[0][0] if good else pretty(raw)
         s = sizes.get(model, {})
         kind = rec["kinds"].most_common(1)[0][0]
         cat, _ = categorise(name, raw)

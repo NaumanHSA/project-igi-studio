@@ -382,6 +382,41 @@ def find_sources(location0, skip):
     return out
 
 
+# A texture's name means something only in the palette that lists it: 001_11_1
+# is one sniper's camouflage in Trainyard and a paler one in Eagle's Nest, and
+# an imported model that met a texture of its own name in its new level used to
+# wear that level's picture. When the pictures differ it now gets its own copy,
+# under a name of the same shape no one in the level uses (its middle number
+# counted down from 99: 001_11_1 -> 001_99_1), and its palette entry names that
+# instead; the level's own models keep theirs. Same-length names keep every
+# chunk and palette entry the size it was.
+TEX_NAME = re.compile(r"^(\d{3})_(\d{2})_(\d)(.*)$")
+
+
+def _free_name(stem, taken):
+    m = TEX_NAME.match(stem)
+    if not m:
+        return None
+    for n in range(99, 9, -1):
+        cand = "%s_%02d_%s%s" % (m.group(1), n, m.group(3), m.group(4))
+        if cand not in taken:
+            return cand
+    return None
+
+
+def _renamed(nc, old, new):
+    """A NAME chunk naming the texture `new` where it named `old` (as long)."""
+    ln = struct.unpack_from("<I", nc, 4)[0]
+    at = nc[16:16 + ln].rfind(old.encode("latin1"))
+    if at < 0 or len(new) != len(old):
+        return None
+    return nc[:16 + at] + new.encode("latin1") + nc[16 + at + len(old):]
+
+
+def _payload(chunk):
+    return chunk[16:16 + struct.unpack_from("<I", chunk, 4)[0]]
+
+
 def import_models(slot_dir, wanted, location0, log=print, backup_root=None):
     """Append the wanted models' whole families (with textures) to a level."""
     protect.assert_writable(slot_dir)
@@ -411,11 +446,80 @@ def import_models(slot_dir, wanted, location0, log=print, backup_root=None):
         return None
     # what they are built from, all the way down
     wanted, parts = with_parts(wanted, find)
-    if not [m for m in wanted if m not in have] and not _incomplete(f, d, wanted, location0):
+
+    # the level's textures, and the names no copy may take: those, and the
+    # location's shared archive's
+    common = pathlib.Path(location0) / "common" / "textures" / "location0.res"
+    in_level = set(d["textures"])
+    taken = in_level | ({s for s, _n, _b in res_entries(common)[1]} if common.exists() else set())
+    fresh = {}                  # a name added by this import -> its picture
+    copies = {}                 # (source archive, name) -> the name its copy was given here
+    new_tex = []
+
+    def source_of(name):
+        for sf, sm in sources:
+            if name in sm["models"] and name in archive(sf["models"]):
+                return sf, sm
+        return None
+
+    def own_texture(t, sf, model):
+        """The name model's texture t goes by in this level: t, or a copy of its own."""
+        chunk = archive(sf["textures"]).get(t)
+        if not chunk:
+            raise RuntimeError("texture %s of model %s is missing from %s" % (t, model, sf["textures"]))
+        if t not in in_level:                   # new to the level: added under its own name
+            new_tex.append(chunk)
+            d["textures"].append(t)
+            in_level.add(t)
+            taken.add(t)
+            fresh[t] = _payload(chunk[1])
+            return t
+        here = fresh.get(t)
+        if here is None:
+            mine = archive(f["textures"]).get(t)
+            here = _payload(mine[1]) if mine else None
+        if here is None or here == _payload(chunk[1]):
+            return t                            # the same picture: shared
+        key = (str(sf["textures"]), t)
+        if key not in copies:
+            new = _free_name(t, taken)
+            nc = _renamed(chunk[0], t, new) if new else None
+            if not nc:
+                log("%s's texture %s differs from this level's and got no name of its own - it wears the level's"
+                    % (model, t))
+                return t
+            new_tex.append((nc, chunk[1]))
+            d["textures"].append(new)
+            in_level.add(new)
+            taken.add(new)
+            fresh[new] = _payload(chunk[1])
+            copies[key] = new
+            log("%s's texture %s is another picture in %s: it takes its own, as %s" % (model, t, f["dir"].name, new))
+        return copies[key]
+
+    # models an earlier Apply brought in wore this level's picture of a texture
+    # of their own name: put right, once and for all
+    record = pathlib.Path(backup_root or (paths.backups() / "models")) / f["dir"].name / "import.json"
+    earlier = set(json.load(record.open()).get("imported") or []) if record.exists() else set()
+    retextured = []
+    for i, (name, texs) in enumerate(d["models"]):
+        if name not in earlier:
+            continue
+        src = source_of(name)
+        if not src:
+            continue
+        sf, sm = src
+        own = sm["models"].get(name, [])
+        if len(own) != len(texs):
+            continue
+        now = [own_texture(t, sf, name) if texs[k] == t else texs[k] for k, t in enumerate(own)]
+        if now != list(texs):
+            d["models"][i] = (name, now)
+            retextured.append(name)
+
+    if not [m for m in wanted if m not in have] and not _incomplete(f, d, wanted, location0) and not retextured:
         return []
 
-    backup_root = pathlib.Path(backup_root or (paths.backups() / "models"))
-    record = backup_root / f["dir"].name / "import.json"
     if not record.exists():
         record.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(f["dat"], record.parent / f["dat"].name)
@@ -430,8 +534,7 @@ def import_models(slot_dir, wanted, location0, log=print, backup_root=None):
         log("backed up %s's model list; archives restore by truncation" % f["dir"].name)
     rec = json.load(record.open())
 
-    tex_have = set(d["textures"])
-    new_models, new_mef, new_tex, done = [], [], [], []
+    new_models, new_mef, done = [], [], []
 
     for want in wanted:
         src = None
@@ -454,15 +557,7 @@ def import_models(slot_dir, wanted, location0, log=print, backup_root=None):
         for name in members:
             if name in have or name not in archive(sf["models"]):
                 continue
-            texs = sm["models"].get(name, [])
-            for t in texs:
-                if t not in tex_have:
-                    chunk = archive(sf["textures"]).get(t)
-                    if not chunk:
-                        raise RuntimeError("texture %s of model %s is missing from %s" % (t, name, sf["textures"]))
-                    new_tex.append(chunk)
-                    d["textures"].append(t)
-                    tex_have.add(t)
+            texs = [own_texture(t, sf, name) for t in sm["models"].get(name, [])]
             nc, bc = archive(sf["models"])[name]
             body, lit = unlight_mef(bc[16:16 + struct.unpack_from("<I", bc, 4)[0]])
             if lit:
@@ -476,7 +571,7 @@ def import_models(slot_dir, wanted, location0, log=print, backup_root=None):
             log("importing family %s_* for %s from %s (%d model file%s)"
                 % (prefix, want, sf["dir"].name, added, "" if added == 1 else "s"))
 
-    if not done:
+    if not done and not retextured:
         return []
     d["models"].extend(new_models)
     _append(f["models"], new_mef)
@@ -488,6 +583,8 @@ def import_models(slot_dir, wanted, location0, log=print, backup_root=None):
         raise RuntimeError("after import the level no longer checks out: %s - run restore" % why)
     rec["imported"] = sorted(set(rec["imported"]) | set(done))
     json.dump(rec, record.open("w"), indent=2)
+    if retextured:
+        log("gave %d model(s) imported before their own pictures: %s" % (len(retextured), ", ".join(retextured)))
     # models imported before this was understood are still lightmapped: fix them too
     unlight_archive(f["models"], rec["imported"], log=log)
     log("imported %d model file(s), %d texture(s) into %s" % (len(new_mef), len(new_tex), f["dir"].name))

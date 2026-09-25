@@ -20,7 +20,7 @@
 # Archives are indexed once (the offset of every model and texture, not their
 # bytes: the textures alone are 2.9 GB over the fourteen levels); decoded
 # textures are cached as PNG under cache/tex.
-import array, base64, json, math, pathlib, struct, sys, threading, zlib
+import array, base64, hashlib, json, math, pathlib, struct, sys, threading, zlib
 
 from studio.extract import meshes as BM
 from studio import paths
@@ -138,6 +138,24 @@ class Library:
             f.seek(off)
             return f.read(n)
 
+    def home_of(self, name, lv):
+        """The level a model is read from when it is shown in level lv: lv itself
+        when its archive has the model; else the first level that ships it, as the
+        studio's import takes it (studio/build/models.py find_sources); else the
+        location's shared archive. Its textures are that level's: a texture's name
+        means something only in the palette that lists it - "001_01_1" is the
+        mountain sniper's face in levels 7 and 8, and a revolver in the shared
+        archive, where a model imported into Trainyard used to find it."""
+        idx = self.index()
+        by = idx["models"].get(name + ".mef") or {}
+        if lv in by:
+            return lv
+        lists = idx["lists"].get(name) or {}
+        for k in sorted(k for k in by if k):
+            if k in lists:
+                return k
+        return 0 if 0 in by else lv
+
     def mef(self, name, lv):
         loc = self._pick(self.index()["models"].get(name + ".mef"), lv)
         return self._read(loc) if loc else None
@@ -231,7 +249,9 @@ class Library:
 
     def model(self, name, lv):
         """What the close-up draws: positions, uvs and indices (base64 little-endian
-        float32 / float32 / uint32) and [first index, index count, texture] groups."""
+        float32 / float32 / uint32) and [first index, index count, texture] groups,
+        and the level it was read from ("home"), whose textures it wears."""
+        lv = self.home_of(name, lv)
         parts = self._assemble(name, lv)
         if not parts:
             return None
@@ -255,7 +275,7 @@ class Library:
         if sys.byteorder != "little":
             for a in (P, U, I):
                 a.byteswap()
-        return {"name": name, "verts": base, "groups": G,
+        return {"name": name, "home": lv, "verts": base, "groups": G,
                 "pos": base64.b64encode(P.tobytes()).decode(), "uv": base64.b64encode(U.tobytes()).decode(),
                 "idx": base64.b64encode(I.tobytes()).decode()}
 
@@ -264,11 +284,6 @@ class Library:
         """(PNG bytes, has transparent pixels) of a texture, at most size px on
         its longer side, or None."""
         size = max(16, min(2048, int(size)))
-        CACHE.mkdir(parents=True, exist_ok=True)
-        key = "%s_%d" % (name.replace("/", "_"), size)
-        f, meta = CACHE / (key + ".png"), CACHE / (key + ".json")
-        if f.exists() and meta.exists():
-            return f.read_bytes(), json.loads(meta.read_text()).get("alpha", False)
         idx = self.index()["tex"]
         loc = self._pick(idx.get(name + ".tex"), lv)
         if loc is None:
@@ -277,6 +292,15 @@ class Library:
             loc = self._pick(idx.get(cand[0]), lv) if cand else None
         if loc is None:
             return None
+        # cached as the copy it is made from: a name can hold other pictures in
+        # other levels (001_11_1 has three), and keyed by the name alone the first
+        # one asked for was shown in every level after it
+        CACHE.mkdir(parents=True, exist_ok=True)
+        tag = hashlib.md5(("%s|%d|%d" % loc).encode("utf-8")).hexdigest()[:10]
+        key = "%s_%d_%s" % (name.replace("/", "_"), size, tag)
+        f, meta = CACHE / (key + ".png"), CACHE / (key + ".json")
+        if f.exists() and meta.exists():
+            return f.read_bytes(), json.loads(meta.read_text()).get("alpha", False)
         b = self._read(loc)
         if len(b) < 32 or b[:4] != b"LOOP":
             return None

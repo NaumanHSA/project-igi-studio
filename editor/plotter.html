@@ -5048,10 +5048,11 @@ function textureSection(o){
     '<span class="lbl">Textures</span><span class="sec-n">'+(known?known.length:"")+'</span></div>'+
     '<div class="sec-b tex-body">'+(known?texRows(o,known):'<p class="hint">Open to see the pictures this model is drawn with.</p>')+'</div></div>';
 }
+var TEXHOME={};                      // model -> the level its pictures are read from
 function texRows(o,names){
   if(!names.length)return '<p class="hint">This model is drawn without a texture.</p>';
   return names.map(function(n){
-    var mine=texOwn(n),lv=(M&&M.base&&M.base.level)||LV;
+    var mine=texOwn(n),lv=TEXHOME[o.model]!=null?TEXHOME[o.model]:((M&&M.base&&M.base.level)||LV);
     return '<div class="tex-row" data-tex="'+esc(n)+'">'+
       '<img alt="" src="'+(mine?esc(mine.png):'api/texture?name='+encodeURIComponent(n)+'&level='+lv+'&size=96')+'">'+
       '<div><b>'+esc(n)+'</b>'+(mine?'<span class="tex-own">yours</span>':'')+'</div>'+
@@ -5116,7 +5117,7 @@ function bindTextureSection(el,o){
     body.innerHTML='<p class="hint">Looking…</p>';
     fetch("api/modeltextures?name="+encodeURIComponent(o.model)+"&level="+((M&&M.base&&M.base.level)||LV))
       .then(function(r){return r.json()})
-      .then(function(d){fill((d&&d.textures)||[])})
+      .then(function(d){if(d&&d.home!=null)TEXHOME[o.model]=d.home;fill((d&&d.textures)||[])})
       .catch(function(){body.innerHTML='<p class="hint">The studio server did not answer.</p>'});
   }
   head.addEventListener("click",function(){open(head.getAttribute("aria-expanded")!=="true")});
@@ -5313,6 +5314,24 @@ function interiorSection(o){
   return h+'</div>';
 }
 function setPatrol(o,list){setProp(o,{patrol:list})}
+// A level's name for a thing can outlive the thing: swap a water tower's model
+// for a radar tower's in an editor and its task is still called "WaterTower". A
+// name that is itself another model's name, and says nothing of this one, gives
+// way to this model's own (it stays on the panel's name row). As the inventory
+// does (studio/extract/catalog.py stale_name).
+var NAME_GENERIC={tower:1,building:1,buildings:1,house:1,room:1,hut:1,post:1,segment:1,area:1,the:1},MODEL_NAMES=null;
+function nameNorm(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function staleName(o){
+  var ws=String(o.name||"").replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if(ws.length<2||!CATALOG||!CATALOG.structures)return false;
+  if(!MODEL_NAMES||MODEL_NAMES.src!==CATALOG){
+    MODEL_NAMES={src:CATALOG,set:{}};
+    CATALOG.structures.forEach(function(r){if(r.raw)MODEL_NAMES.set[nameNorm(r.raw)]=1});
+  }
+  var k=ws.join(""),m=nameNorm(o.modelName);
+  if(!m||!MODEL_NAMES.set[k]||k===m||m.indexOf(k)>=0||k.indexOf(m)>=0)return false;
+  return !ws.some(function(w){return w.length>=3&&!NAME_GENERIC[w]&&m.indexOf(w)>=0});
+}
 function displayName(o){
   if(!o)return "";
   if(o.own&&o.name)return o.name;
@@ -5325,7 +5344,7 @@ function displayName(o){
   if(o.type==="pickup")return weaponLabel(o.own?o.pickupId:o.model)+(o.type==="pickup"&&!o.own?" pickup":"");
   if(o.type==="fence")return o.electric?"Electric fence":"Climbable fence";
   var c=CATALOG&&CATALOG.structures&&CATALOG.structures.filter(function(r){return r.model===o.model})[0];
-  return o.name&&!/^\d+$/.test(o.name)?o.name.replace(/([a-z])([A-Z])/g,"$1 $2"):(c?c.name:(o.modelName||o.qtype));
+  return o.name&&!/^\d+$/.test(o.name)&&!staleName(o)?o.name.replace(/([a-z])([A-Z])/g,"$1 $2"):(c?c.name:(o.modelName||o.qtype));
 }
 function iconSwatch(key,color,px,opts){
   px=px||20;

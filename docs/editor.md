@@ -155,6 +155,15 @@ double-click to set it spinning again. The expand button in its corner opens
 a large view at the same angle (Esc closes it). Hovering a structure in the
 inventory shows the same view beside the panel.
 
+**What a thing is called** is the level's own name for it - its task's name,
+"generator building", "Bridge 2" - unless that name is another model's and
+says nothing of this one: swap a water tower's model for a radar tower's in an
+editor and its task is still called "WaterTower", so it is called by its
+model, "Radar Tower", and the level's name stays on the panel's name row. The
+levels slip the same way (level 12 calls some of its watchtowers
+"SecurityBuilding"), and the inventory names its models by the same rule. The
+red names on the map are the map computer's own, which the game shows too.
+
 **Hovering the map** shows a card by the cursor: the model in 3D (when it has
 one), a tag (enemy, camera, building, vehicle, pickup, yours), a line on what
 it is, and the facts that matter:
@@ -1894,3 +1903,19 @@ animations and AI checked. The **Guard model test** mission
 (`missions/custom/guard-model-test-08be29/lineup.txt`) puts every guard type
 in a row at the start, numbered from the west, to find out in the game which
 ones fail.
+
+**An imported model wears its own textures.** A texture's name means something
+only in the palette that lists it: `001_11_1` is the sniper's camouflage in
+Trainyard and a paler one in Eagle's Nest, and `001_01_1` is the mountain
+sniper's face in levels 7 and 8 but a revolver in the location's shared
+archive. Import brings a model's textures from the level it takes the model
+from, and where the new level already has a texture of the same name with
+another picture - 86 of the ways a guard can be imported meet one - the model
+gets its own copy under a name of the same shape nobody there uses (its middle
+number counted down from 99: `001_11_1` becomes `001_99_1`), and its palette
+entry names that. The level's own models keep theirs; a model imported by an
+earlier Apply is put right on the next. The 3D close-up and the Textures
+section show an imported model the same way, from the level it comes from -
+they used to look its textures up in the mission's level, then the shared
+archive - and a texture's picture is cached as the copy it was made from, not
+by its name (which served the first level's picture to every level after it).

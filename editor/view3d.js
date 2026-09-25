@@ -323,13 +323,14 @@ function texturedModel(model, level) {
       g.computeBoundingBox();
       g.computeBoundingSphere();
       g.userData.keep = true;
-      return { geo: g, groups: m.groups };
+      // the level it was read from: an imported model wears that level's pictures
+      return { geo: g, groups: m.groups, home: m.home != null ? m.home : lv };
     }).catch(() => null));
   TMODEL.set(key, p);
   return p;
 }
-function textureOf(name) {
-  const lv = (O && O.level) || 0, key = name + "@" + lv;
+function textureOf(name, level) {
+  const lv = level != null ? level : (O && O.level) || 0, key = name + "@" + lv;
   if (TEX.has(key)) return TEX.get(key);
   let arrived;
   loadOne(new Promise(r => { arrived = r; }));
@@ -363,10 +364,13 @@ async function prepare(level, models, onProgress) {
   }
   await each(list, "models", async m => {
     const t = await texturedModel(m, lv);
-    if (t) for (const g of t.groups) if (g[2] && !seen.has(g[2])) { seen.add(g[2]); pics.push(g[2]); }
+    if (t) for (const g of t.groups) {
+      const k = g[2] + "@" + t.home;
+      if (g[2] && !seen.has(k)) { seen.add(k); pics.push([g[2], t.home]); }
+    }
   });
   if (mine !== PREP) return;
-  await each(pics, "pictures", n => fetch(texUrl(n, lv)).then(r => r.blob()).catch(() => null));
+  await each(pics, "pictures", p => fetch(texUrl(p[0], p[1])).then(r => r.blob()).catch(() => null));
   say("ready", list.length + pics.length, list.length + pics.length);
 }
 
@@ -379,7 +383,7 @@ function dress(mesh, it, isTarget) {
     const tint = isTarget ? 0xffe9a0 : it.own ? 0xfff2c8 : 0xffffff;
     const mats = t.groups.map(gr => {
       const m = new THREE.MeshLambertMaterial({ color: tint, side: THREE.DoubleSide, flatShading: true,
-        map: gr[2] ? textureOf(gr[2]) : null, alphaTest: gr[3] ? 0.5 : 0 });
+        map: gr[2] ? textureOf(gr[2], t.home) : null, alphaTest: gr[3] ? 0.5 : 0 });
       if (isTarget) m.emissive = new THREE.Color(0x2a1c00);
       else m.clippingPlanes = cutFor(it);
       return m;
@@ -620,7 +624,7 @@ function splineMeshes(list) {
     texturedModel(s.model).then(t => {
       if (!t || fillId !== S.fillId || !group.parent) return;
       const ms = t.groups.map(gr => new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide,
-        flatShading: true, map: gr[2] ? textureOf(gr[2]) : null, alphaTest: gr[3] ? 0.5 : 0 }));
+        flatShading: true, map: gr[2] ? textureOf(gr[2], t.home) : null, alphaTest: gr[3] ? 0.5 : 0 }));
       group.add(new THREE.Mesh(bentAlong(t.geo, s), ms));
       for (const m of strip) m.visible = false;
     });

@@ -1002,8 +1002,10 @@ class Handler(SimpleHTTPRequestHandler):
         textures go in the place of these)."""
         q = self._query()
         lib = self._assets()
-        names = lib.textures_of(q.get("name", ""), int(q.get("level") or 0))
-        return self._json({"ok": True, "textures": list(names)})
+        name = q.get("name", "")
+        home = lib.home_of(name, int(q.get("level") or 0))      # an imported model's own level
+        names = lib.textures_of(name, home)
+        return self._json({"ok": True, "textures": list(names), "home": home})
 
     def _groundtex(self):
         """GET /api/groundtex?level=N&mat=M: a ground material's own texture, as the
