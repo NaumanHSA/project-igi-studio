@@ -35,6 +35,11 @@ by dragging, and fixes for a mission that stopped the game.
   the drag goes - one undo step for the whole run. A click still lays one.
 - **A gate on its own** in the inventory, beside the gateway: both leaves and
   the switch that opens them, with no fence panels either side.
+- **A ⋮ menu on each of Your items:** edit its name and description, or
+  delete it from the inventory.
+- **An item's preview is all of it:** hovered, a compound shows as the whole
+  compound - its fence, gate, towers, buildings and guards, as one model -
+  and what it covers. It showed the first thing in it, often a guard.
 
 ### Changed
 

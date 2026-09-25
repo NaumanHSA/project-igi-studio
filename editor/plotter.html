@@ -238,6 +238,15 @@ canvas{display:block}
 .item .t span{font-size:10.5px;color:var(--faint);font-family:"IBM Plex Mono",monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item.na{opacity:.42}
 .item.na:hover{opacity:.72}
+/* one of your items, with its ⋮ menu beside it (a button can't hold another) */
+.item-wrap{position:relative}
+.item-wrap>.item{padding-right:28px}
+.item-more{position:absolute;right:3px;top:50%;transform:translateY(-50%);width:22px;height:26px;display:grid;place-items:center;
+  padding:0;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted);cursor:pointer}
+.item-more svg{width:14px;height:14px;fill:currentColor}
+.item-wrap:hover .item-more,.item-more[aria-expanded="true"]{color:var(--ink)}
+.item-more:hover,.item-more[aria-expanded="true"]{background:var(--surface);border-color:var(--line)}
+.item-more:focus-visible{outline:2px solid var(--accent);outline-offset:-1px;color:var(--ink)}
 .more{border:none;background:transparent;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:4px 6px}
 .graphs{display:flex;flex-direction:column;gap:2px;margin-top:8px}
 .graphrow{display:grid;grid-template-columns:14px 1fr auto auto;gap:3px 7px;align-items:center;padding:5px 6px;
@@ -5892,16 +5901,36 @@ function buildPalette(){
     return groupThumb(g.data,px);
   }
   function mineItem(b,g){
-    var gi=mainOf(g)[0]||{};
+    var main=mainOf(g),gi=main[0]||{};
     var it=item(b,{group:"prefab",id:g.id,label:g.name,data:g.data},mineThumb(g,20),g.name,esc(g.summary||groupSummary(g.data)),
-      (g.description?g.description+"\n":"")+"Place it; R turns it.\nRight-click to rename it, move it to another category or delete it.");
+      (g.description?g.description+"\n":"")+"Place it; R turns it.\n⋮ or right-click to rename it, describe it, move it to another category or delete it.");
     it.addEventListener("contextmenu",function(e){e.preventDefault();editItemDialog(g)});
+    // one thing shows as itself; several, or a design, as the whole of it
     it.addEventListener("mouseenter",function(){
-      if(gi.type==="soldier")hoverCard(it,{name:g.name,model:armedModel(gi.model,gi.weapon),size:gi.model});
-      else if(g.kind==="blueprint"){var k=designMesh("grp:"+g.id,g.data);if(k)hoverCard(it,{name:g.name,model:k,size:k})}
-      else if(gi.model&&mainOf(g).length===1)hoverCard(it,{name:g.name,model:gi.model,size:gi.model});
+      if(main.length===1&&g.kind!=="blueprint"){
+        var pm=previewModel(Object.assign({own:true},gi));
+        if(pm)hoverCard(it,{name:g.name,model:pm,size:gi.type==="soldier"?gi.model:pm});
+      }else{var k=itemMesh(g);if(k)hoverCard(it,{name:g.name,model:k,caption:itemCaption(g)})}
     });
     it.addEventListener("mouseleave",function(){hoverCard(null)});
+    var wrap=document.createElement("div");wrap.className="item-wrap";
+    b.replaceChild(wrap,it);wrap.appendChild(it);
+    var mb=document.createElement("button");mb.type="button";mb.className="item-more";
+    mb.title="Edit or delete “"+g.name+"”";mb.setAttribute("aria-label","More for "+g.name);
+    mb.setAttribute("aria-haspopup","menu");mb.setAttribute("aria-expanded","false");
+    mb.innerHTML='<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3.2" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="12.8" r="1.4"/></svg>';
+    mb.addEventListener("click",function(e){
+      e.stopPropagation();
+      // clicked again, it closes: from the keyboard here, with the mouse the press already did
+      if(mb.getAttribute("aria-expanded")==="true"){closeMenus();return}
+      if(Date.now()-(mb._shut||0)<400)return;
+      closeMenus();
+      var r=mb.getBoundingClientRect();
+      openPopup(r.left,r.bottom+4,itemMenuItems(g));
+      mb.setAttribute("aria-expanded","true");
+      ctxEl._closed=function(){mb.setAttribute("aria-expanded","false");mb._shut=Date.now()};
+    });
+    wrap.appendChild(mb);
   }
   section("mine","Your items",mine.length,false,function(b){
     if(!GROUPS.length){
@@ -6129,7 +6158,7 @@ function hoverCard(btn,r){
     }
     var b=btn.getBoundingClientRect(),panel=(btn.closest(".invfly")||btn.closest(".panel")).getBoundingClientRect();
     HOVER.el.querySelector("b").textContent=r.name;
-    HOVER.el.querySelector(".hc-t span").textContent=sizeText(r.size||r.model)+" · "+(r.size||r.model);
+    HOVER.el.querySelector(".hc-t span").textContent=r.caption||(sizeText(r.size||r.model)+" · "+(r.size||r.model));
     HOVER.el.hidden=false;
     var hh=HOVER.el.offsetHeight;
     HOVER.el.style.left=(panel.right+8)+"px";
@@ -7200,6 +7229,28 @@ function itemFields(name,cat,desc){
     '<div class="field" style="margin-top:8px"><span class="lbl">Category</span><select id="grp-cat">'+
       ITEM_CATS.map(function(c){return '<option value="'+c[0]+'"'+(c[0]===cat?' selected':'')+'>'+esc(c[1])+'</option>'}).join("")+'</select></div>'+
     '<div class="field" style="margin-top:8px"><span class="lbl">Description (optional)</span><input id="grp-desc" value="'+esc(desc)+'" placeholder="What it is, where it works well"></div>';
+}
+// the ⋮ menu of one of your items
+function itemMenuItems(g){
+  return [
+    {head:g.name},
+    {label:"Edit name and description…",title:"Its name, category and description",act:function(){editItemDialog(g)}},
+    "-",
+    {label:"Delete from Your items…",danger:true,act:function(){deleteItemDialog(g)}}
+  ];
+}
+function deleteItemDialog(g){
+  sheet("Delete from Your items",'<p class="hint" style="margin:0 0 10px">“'+esc(g.name)+'” ('+esc(g.summary||groupSummary(g.data))+
+    ') leaves the inventory. Missions it was placed in keep their copies.</p>'+
+    '<div class="ck-foot"><button class="btn" id="grp-cancel">Cancel</button><button class="btn danger" id="grp-del">Delete</button></div>');
+  $("grp-cancel").addEventListener("click",function(){$("sheet").hidden=true});
+  $("grp-cancel").focus();
+  $("grp-del").addEventListener("click",function(){
+    GroupStore.remove(g.id).then(function(){
+      $("sheet").hidden=true;if(tool&&tool.group==="prefab"&&tool.id===g.id)selectTool(null);
+      loadGroups();toast("“"+g.name+"” deleted from Your items");
+    }).catch(function(e){toast(String(e.message||e))});
+  });
 }
 // rename one of your items, or put it under another category
 function editItemDialog(g){
@@ -11941,7 +11992,7 @@ function toast(msg){
 // ---- right-click menu
 var ctxEl=null;
 function closeMenus(){
-  if(ctxEl){ctxEl.remove();ctxEl=null}
+  if(ctxEl){var oc=ctxEl._closed;ctxEl.remove();ctxEl=null;if(oc)oc()}
   var q=$("quickadd");if(q)q.remove();
   var mm=$("missionmenu");if(mm&&!mm.hidden){mm.hidden=true;$("btnmenu").setAttribute("aria-expanded","false")}
   var hm=$("helpmenu");if(hm&&!hm.hidden){hm.hidden=true;$("btnhelp").setAttribute("aria-expanded","false")}
@@ -14007,6 +14058,34 @@ function designParts(d){
     var m=p.type==="soldier"?armedModel(p.model,p.weapon):p.type==="pickup"?(window.MeshSprites&&MeshSprites.pickupModel(p.pickupId)):p.model;
     return {model:m,x:p.dx||0,y:p.dy||0,z:p.z||0,g:p.gamma||0};
   }).filter(function(p){return p.model});
+}
+// One of your items as one model, for its preview: everything in it where it
+// stands in it - a compound's fence, gate, towers, buildings and guards - with
+// the doors and furniture a building of the level's is placed with (its kit),
+// heights from its lowest thing. Made from the item's own things, so an item
+// kept before this has one too. Fittings go last: past 65535 vertices they are
+// what is left out.
+function itemMesh(g){
+  var its=(g&&g.data&&g.data.items)||[];
+  if(!its.length||!window.MeshSprites||!MeshSprites.ready())return null;
+  var key="item:"+g.id;
+  if(MeshSprites.has(key))return key;
+  var z0=Math.min.apply(null,its.map(function(p){return p.z||0})),main=[],more=[];
+  its.forEach(function(p){
+    var q=designParts({items:[p]})[0];
+    if(q){q.z-=z0;(p.of?more:main).push(q)}
+    if(!p.kit||!p.model)return;
+    var k=buildingKit(p.model),c=Math.cos(p.gamma||0),sn=Math.sin(p.gamma||0);
+    k.doors.concat(k.props||[]).forEach(function(sl){
+      more.push({model:sl.model,x:(p.dx||0)+sl.dx*c-sl.dy*sn,y:(p.dy||0)+sl.dx*sn+sl.dy*c,z:(p.z||0)-z0+(sl.dz||0),g:(p.gamma||0)+(sl.dh||0)});
+    });
+  });
+  return MeshSprites.composite(key,main.concat(more));
+}
+// what the preview of one says under it: how much ground it covers, and how much is in it
+function itemCaption(g){
+  var d=g.data||{},n=(d.items||[]).filter(function(p){return !p.of}).length,sz=designSize(d);
+  return (sz[0]&&sz[1]?Math.round(sz[0])+" × "+Math.round(sz[1])+" m · ":"")+n+" thing"+(n===1?"":"s");
 }
 function designMesh(key,d){
   if(!window.MeshSprites||!MeshSprites.ready()||!d)return null;

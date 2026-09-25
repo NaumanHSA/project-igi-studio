@@ -1645,9 +1645,19 @@ PUT to rename or re-categorise, DELETE); without the server, in the browser.
   nearest alarm, at the start.
 - **The AI designer's Workshop** keeps its designs and characters here too
   (*Add to inventory* on a design), under Buildings or Characters.
-- **Editing one:** right-click it in the inventory, or *Edit this item…* on the
-  placement bar while it is picked: name, category, description, or Delete
-  (click twice). Missions it was placed in keep their copies.
+- **Editing one:** its **⋮** in the inventory (*Edit name and description…*,
+  *Delete from Your items…*, which asks first), a right-click on it, or *Edit
+  this item…* on the placement bar while it is picked: name, category,
+  description, or Delete (click twice). Missions it was placed in keep their
+  copies.
+- **Its preview is all of it:** hovered in the inventory, one thing shows as
+  itself (a guard with his gun, a building, a weapon); several, or a design, as
+  one model of everything in it where it stands in it - a compound's fence,
+  gate, towers, buildings and guards, with the doors and furniture a building
+  of the level's is placed with - and what it covers (*40 × 42 m · 27 things*).
+  It is made from the item's own things (`itemMesh`, `MeshSprites.composite`),
+  so nothing more is saved and items kept before it have one too. It showed the
+  first thing in it: a compound whose first thing was a guard showed a guard.
 - Saved groups from before this (no category) show under the category their
   contents suggest.
 
