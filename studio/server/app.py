@@ -38,6 +38,8 @@
 #   POST   /api/ai/chat          one model turn, streamed back as JSON lines
 #   GET    /api/missions/<id>/ai            the mission's chat threads
 #   GET/PUT/DELETE /api/missions/<id>/ai/<thread>   one thread
+#   GET /api/groups, POST (save), PUT /api/groups/<id> {name, cat, description}, DELETE:
+#          the user's own items for the inventory ("Your items"), in missions/groups/
 import base64, collections, hmac, json, os, pathlib, re, subprocess, sys, threading, time, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
@@ -645,11 +647,16 @@ def groups_list():
     return sorted(out, key=lambda g: -g.get("created", 0))
 
 
+# The inventory's "Your items": what the user (or the AI designer) keeps to
+# place again in any mission, each under one of these.
+ITEM_CATS = ("areas", "buildings", "characters", "objects", "weapons", "security")
+
+
 def group_save(b):
     name = str(b.get("name") or "").strip()[:80]
     data = b.get("data")
     if not name or not isinstance(data, dict) or not isinstance(data.get("items"), list):
-        raise ValueError("a group needs a name and its objects")
+        raise ValueError("an item needs a name and what it holds")
     gid = "%s-%s" % (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "group",
                      base64.b32encode(os.urandom(4)).decode().lower().rstrip("=")[:6])
     g = {"id": gid, "name": name, "summary": str(b.get("summary") or "")[:200],
@@ -657,9 +664,35 @@ def group_save(b):
     # made by the AI designer: a structure of parts, or a character
     if b.get("kind") in ("blueprint", "character"):
         g["kind"] = b["kind"]
-        g["description"] = str(b.get("description") or "")[:300]
+    if b.get("description"):
+        g["description"] = str(b.get("description"))[:300]
+    if b.get("cat") in ITEM_CATS:
+        g["cat"] = b["cat"]
     GROUPS.mkdir(parents=True, exist_ok=True)
     (GROUPS / (gid + ".json")).write_text(json.dumps(g, indent=1), encoding="utf-8")
+    return g
+
+
+def group_update(gid, b):
+    """Rename an item of the user's, or put it under another category."""
+    if not re.fullmatch(r"[a-z0-9-]+", gid or ""):
+        raise ValueError("bad group id")
+    f = GROUPS / (gid + ".json")
+    if not f.exists():
+        raise FileNotFoundError(gid)
+    g = json.load(f.open(encoding="utf-8"))
+    if b.get("name") is not None:
+        name = str(b["name"]).strip()[:80]
+        if not name:
+            raise ValueError("an item needs a name")
+        g["name"] = name
+    if b.get("cat") is not None:
+        if b["cat"] not in ITEM_CATS:
+            raise ValueError("no such category: %s" % b["cat"])
+        g["cat"] = b["cat"]
+    if b.get("description") is not None:
+        g["description"] = str(b["description"])[:300]
+    f.write_text(json.dumps(g, indent=1), encoding="utf-8")
     return g
 
 
@@ -924,6 +957,9 @@ class Handler(SimpleHTTPRequestHandler):
         return (m.group(1), m.group(2)) if m else (None, None)
 
     def do_PUT(self):
+        gm = re.match(r"^/api/groups/([a-z0-9-]+)$", self.path)
+        if gm:
+            return self._guard(lambda: self._json({"ok": True, "group": group_update(gm.group(1), self._body())}))
         tm, tid = self._thread_route()
         if tm and tid:
             return self._guard(lambda: self._json({"ok": True, **AI.save_thread(MS.STORE, tm, tid, self._body())}))

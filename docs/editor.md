@@ -286,14 +286,23 @@ new ones: **sweeping** (±45° at 20°/s, 3 s pause) or **fixed**.
 - **Settings** (in the side panel, for shipped cameras too): tilt, view width,
   range, sweep right and left, speed and pause. **Mount on the nearest wall**
   snaps it again.
-- **The alarm:** a camera that sees you only raises the alarm if the level
-  listens. Each new camera (unless you untick **Raises the alarm**) is added
-  to the level's own alarm wiring:
+- **The alarm:** a camera that sees you only raises the alarm if something
+  listens. A new camera (by hand, from the AI designer or a draft) is put on
+  the nearest alarm system as it is placed, as a button or siren is, and its
+  panel's **Raises alarm** changes it. One with none set (*Automatic: the
+  nearest one*, as older missions' cameras are) is wired on Apply:
   - **Camera control:** if the nearest cameras belong to one
     (`SCameraControl`), the new camera joins it. It then also goes dark when
     that system is hacked or its generator is blown.
   - **Alarm:** otherwise it joins the nearest alarm (`AlarmControl`).
-  - **No alarm:** a level without any gets a camera alarm of its own.
+  - **The mission's own:** a level with no alarm of its own (an empty map)
+    puts it on the mission's nearest alarm system.
+  - **No alarm at all:** it gets a camera alarm of its own, written as the
+    mission's own systems are - switched on ("1"), with an `EditVariable`
+    holding it on once raised - which no guard answers, and the check list
+    says so. It was written one parameter short (no *Alarm Expression*) and
+    switched off, and the game refused the level: "Too few parameters in line
+    0 of file ...objects.qsc" (2026-09-25).
 
   A new camera also copies the *on while* condition of the level's nearest
   camera.
@@ -359,7 +368,10 @@ When the mission is applied:
 - A system of your own is written whole: the control (with its hack time), the
   `EditVariable` that remembers it, and the trigger built from its parts.
 - Guards on a system get `SetAlarmControlID` for it, plus the alarm path out of
-  their building the studio already gives them.
+  their building the studio already gives them. A guard of yours on none
+  (*Automatic: the nearest one* in his panel) answers the alarm the level's
+  guards within 80 m of him answer, else the mission's own nearest system - on
+  an empty map he used to answer none, and nothing came when its alarm rang.
 - `310_*` and `344_*` are copied into the slot when the level does not ship
   them.
 
@@ -459,9 +471,20 @@ The right edge has tabs too: **Selection** (below) and the **AI designer**
 
 ## Inventory
 
-The inventory has three sections. Each one takes a share of the panel's
+The inventory has four sections. Each one takes a share of the panel's
 height and scrolls on its own, and each one collapses, as does every group
-inside them (Alt+click a group heading to fold or unfold all of them):
+inside them (Alt+click a group heading to fold or unfold all of them). The
+button beside the search box shows them as **tabs** instead - *Your items*,
+*Characters*, *Weapons* and *Structures* along the top, each with how many it
+holds, and the one picked filling the whole panel - and back again; the
+choice is remembered (`plotter:invlayout` in the browser).
+
+- **Your items**, at the top: what you keep to place in any mission (see
+  *Your items* below), under six categories - Areas & compounds, Buildings,
+  Characters, Objects & props, Weapons & items, Cameras & alarms. Each
+  category is a row whose list opens beside the panel, as the structures'
+  do; right-click an item there to rename it, move it to another category or
+  delete it.
 
 - **Characters**: all 28 AI types used in any mission, with the models and
   weapons they're seen with: the enemies, then the story characters (Ekk,
@@ -477,9 +500,6 @@ inside them (Alt+click a group heading to fold or unfold all of them):
   top-down render and 3D hover card, and picking one closes an unpinned list
   so the map is free. Esc closes it. Typing in the inventory search lists the
   matches in the panel instead, grouped by category.
-- **Yours:** designs the AI designer made and you kept are here too: *Your
-  designs* as the first category of Structures & objects, *Your characters*
-  at the end of Characters. They place like a saved group (R turns them).
 
 Nothing is restricted by level. A model the level doesn't pack is marked
 *import*; on Apply it is copied in, together with its LOD variants and textures
@@ -1109,7 +1129,10 @@ When the mission is applied, it is wired the way level 14 wires its own:
   from the start, messages at 5 minutes, 1 minute and 10 seconds left (the
   ones the limit is long enough for), and at zero *Time is up*, after which
   the mission fails (`LevelFlow`'s *Failed* waits for that message, as an
-  event's failure does).
+  event's failure does). The clock and its messages go inside the level's task
+  tree with the mission's other tasks: `LevelFlow` is a statement of its own
+  after the tree, and they used to be put beside it, where a second task is a
+  syntax error - no time limit compiled ("unexpected ','") until 2026-09-25.
 - **Rain or snow:** as the level, clear, rain or snow, light to heavy. The
   level's `RainEffect` is rewritten (*Is Rain* false is snow), or one is added
   next to its sky when the level has none.
@@ -1556,12 +1579,46 @@ change any piece. Models the level does not pack are brought in on Apply.
   and **Ctrl+V** pastes it at the cursor, in any mission and on any level.
   Patrol stops at copied nodes or copied buildings follow the copies. Stops at
   the level's own nodes are kept only on the same level.
-- **Save as group…** (in the group panel) names the group and keeps it in
-  `missions/groups/`. It then appears under **Saved groups** in the inventory,
-  with a small map of its members. Pick it, turn it with **R**, and click to
-  stamp it. **Delete saved group** is on the placement bar.
+- **Keep it:** see *Your items*, below.
+
+## Your items
+
+**Add to your items…** keeps what is selected - one thing (its panel has the
+button) or a group (*Keep…* in the group panel) - in the inventory, to place
+in any mission, on any level. It asks for a name, a category (guessed from
+what it is: a guard is a character, a building of the game's a building, a
+pickup a weapon or item, cameras and alarm parts security, several things of
+different kinds an area) and a line of description. Saved by the studio
+server in `missions/groups/` of the studio's folder (`api/groups`: GET, POST,
+PUT to rename or re-categorise, DELETE); without the server, in the browser.
+
+- **What comes along:** a building of yours brings its own doors, lift and
+  furniture (the placements whose `of` names it), relinked to the copy when it
+  is placed, so they move with it. One of the level's is kept as the model with
+  `kit`, and placed from Your items it comes with the doors, lift and
+  furniture the game gives it, as from the inventory; the level's own things
+  inside it are left out, not to be there twice.
+- **Placing:** pick it, turn it with **R**, click to stamp it (patrols follow
+  copied nodes and buildings, as a paste does). An alarm system or an event it
+  names that this mission does not have falls back to the automatic: the
+  nearest alarm, at the start.
+- **The AI designer's Workshop** keeps its designs and characters here too
+  (*Add to inventory* on a design), under Buildings or Characters.
+- **Editing one:** right-click it in the inventory, or *Edit this item…* on the
+  placement bar while it is picked: name, category, description, or Delete
+  (click twice). Missions it was placed in keep their copies.
+- Saved groups from before this (no category) show under the category their
+  contents suggest.
 
 ## Check before applying
+
+**Fix with the AI designer** at the foot of the list (when there is anything to
+fix or look at) hands every row to the AI designer's Edit agent, errors first,
+with the rule that a fix keeps what is there: lay walkways where a guard has
+none, stand him on a building's floor or a tower's platform, move or re-point
+what is wrong, and remove something only if nothing else can work (it removed
+the snipers a check complained about, 2026-09-25, rather than give them
+walkways). Everything it does is an ordinary change, undone like any other.
 
 **Apply** first saves the mission, then shows a check list. **Mission ▾ →
 Check mission…** shows the same list at any time. It has three groups:
@@ -1758,7 +1815,10 @@ heights. The result is `navtemplates.json` in the level data.
 - **A building you place** brings its interior (inspector → *Inside → Floor
   nodes*, on by default). On Apply its nodes join the nearest graph, whose
   capacity grows in 100-node steps when needed. Its doorways are linked to
-  yard nodes within 12 m, but only along lines that don't cross a wall.
+  yard nodes within 12 m, but only along lines that don't cross a wall. The
+  mission's own new walkway points go in first and count as yard: a building
+  put beside walkways the mission laid joins those, where it used to look
+  only at the level's own and, far from them, got no floor nodes at all.
 - **A building an earlier Apply placed** has no interior. Its inspector says
   so; **Add floor nodes** gives it one. Guards already standing inside it are
   moved up onto its floor.
@@ -1770,7 +1830,14 @@ heights. The result is `navtemplates.json` in the level data.
   that already exist are matched to the building's own nodes.
   - **Towers:** a watchtower (platform +11.6 m) or a water tower (+18.1 m)
     has only its platform. The shipped platforms aren't linked to the ground,
-    so a guard up there stays there.
+    so a guard up there stays there: each of the game's tower snipers has a
+    graph of his own up there, a node or a handful, linked to nothing below
+    (level 8's three tower snipers: one node each). A platform like that
+    joins the graph nearest the tower's base, however far away that is, as
+    nodes of their own; the check list reads it the same way. It used to
+    need a graph within 40 m of the base, and on an empty map, away from the
+    level's own walkways, the platform got no nodes and its sniper stood
+    11.6 m above his walkways, which Apply refuses.
 - **A shipped building you move** takes its interior nodes with it. One you
   remove takes its floor nodes away, except nodes a patrol still uses.
 - **Floors:** a guard or item dropped inside a building lands on its lowest

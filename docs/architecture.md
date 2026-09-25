@@ -26,6 +26,7 @@ project-igi-studio/
 │   │   └── toolkit.py      the old third party pipeline, kept only to capture a corpus
 │   ├── build/              turning a plan into a level the game can load
 │   │   ├── plan.py         plan JSON -> objects.qsc, AI scripts, edited graphs (validates first)
+│   │   ├── taskargs.py     how many parameters each kind of task takes; the build checks its script against it
 │   │   ├── install.py      put a built mission into its slot: script, models, ground, strings, graphs
 │   │   ├── slots.py        game mission slots: create from a base level, name, remove
 │   │   ├── graphs.py       read / add, move, remove nodes / rebuild routing / write graph*.dat

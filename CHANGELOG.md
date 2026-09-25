@@ -3,6 +3,62 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## Unreleased
+
+Your items in the inventory, a repair button for the AI designer, and fixes
+for a mission that stopped the game.
+
+### New
+
+- **Your items.** Keep what you like in a mission - a building, a guard, a
+  whole area, yours or the level's - in the inventory: select it, *Add to your
+  items*, give it a name and a category (areas, buildings, characters, objects,
+  weapons and items, cameras and alarms). It places in any mission, on any
+  level. A building keeps its doors, lift and furniture, and one of the level's
+  comes back with what the game gives it. The AI designer's kept designs and
+  characters, and saved groups, are there too.
+- **The inventory as tabs.** The button beside its search box shows Your
+  items, Characters, Weapons and Structures as tabs, one at a time filling the
+  panel - or as sections again.
+- **Fix with the AI designer** at the foot of the check list: its Edit agent
+  gets every problem on the list and fixes them, keeping your guards, cameras
+  and buildings.
+
+### Changed
+
+- **The AI designer repairs instead of deleting.** Its agents are told that a
+  fix makes the thing work - walkways laid where a guard has none, a guard
+  stood on a building's floor or a tower's platform - and that a guard, camera
+  or building is never removed just to make a check pass. It had removed the
+  snipers a check complained about.
+- **A camera joins the nearest alarm system as it is placed**, by hand, by the
+  AI designer or from a draft, as buttons and sirens do. On a level with no
+  alarm of its own, a camera or guard with none set raises or answers the
+  mission's own nearest system.
+
+### Fixed
+
+- **A mission with cameras and no alarm stopped the game** ("Too few
+  parameters in line 0 of file ...objects.qsc"): the alarm made for its
+  cameras was written one parameter short. It is written whole now, and every
+  Apply checks each task it writes against the count the game's own levels
+  give that kind of task, so a slip like it stops Apply, with the task's name,
+  instead of the game.
+- **A time limit could not be applied** ("unexpected ','"): its clock went
+  beside the level's LevelFlow, where the script allows nothing else.
+- **Snipers on a tower of yours** were refused, standing 11 m above their
+  walkways: a tower's platform got walkway points only with a graph within 40 m
+  of its base. It joins the nearest graph however far now, as the game gives
+  its own tower snipers walkways of their own up there, and the check list
+  reads a guard in a building on that building's walkways, as Apply does.
+- **Buildings beside walkways the mission laid got no floor nodes** ("no
+  navmesh within 40 m"): the mission's own new walkway points count now, and
+  doorways link to them.
+- **A copied building left its doors behind:** the doors, lift and furniture
+  that came with a building follow its copy when it is pasted or placed from
+  Your items, and an alarm or event the copy names that the mission lacks falls
+  back to the automatic.
+
 ## 1.0.5
 
 Soldiers on your side, buildings whose cellars, lifts and doors work the way

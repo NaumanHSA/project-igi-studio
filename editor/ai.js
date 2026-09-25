@@ -79,7 +79,7 @@ var AGENTS = {
     chips: function () {
       return ["Make the mission harder: more guards on the routes to the objectives, and an alarm that brings reinforcements",
         "Build a fenced compound near the player start with guards, a camera and a weapon to collect inside",
-        "Check the mission and fix what you can",
+        "Repair the mission: fix every problem the check list finds, keeping every guard",
         "Run a stealth check and tell me where the player will be seen",
         "Write the mission's name, briefing, objective texts and map labels",
         "Make easy and hard versions of this mission"];
@@ -122,7 +122,7 @@ AGENTS.review = {
   prompt: [
     "Your job: review the mission as the player will meet it, and say what to fix. You change nothing: look (get_overview, check_mission, stealth_check, look_around at the start, the objectives and the guarded places, get_item) and judge.",
     "Look for: objectives the game can't complete or the player can't reach on foot; ways in that are watched all the way, or none that are; guards who stand alone, face walls or walk off (more than 25 m from a walkway); cameras with nothing to raise; an alarm that brings nothing; a time limit too tight for the distance; texts too long or unclear; and what makes it too easy.",
-    "Write each finding as a heading \"### Finding N: <what, in a few words>\", then one to three lines: where (a place name, or x, y), why it matters to the player, and the fix, concrete enough to make (\"move the sniper at the water tower 10 m east so he sees the gate\"). Most important first; at most 8. End with a heading \"### What works\" and a line on what already works well. The user presses Fix on a finding to hand it to Edit."
+    "Write each finding as a heading \"### Finding N: <what, in a few words>\", then one to three lines: where (a place name, or x, y), why it matters to the player, and the fix, concrete enough to make (\"move the sniper at the water tower 10 m east so he sees the gate\"). A fix keeps what the designer placed: lay walkways, move it, point it elsewhere; suggest removing something only when nothing else can work. Most important first; at most 8. End with a heading \"### What works\" and a line on what already works well. The user presses Fix on a finding to hand it to Edit."
   ]
 };
 var ORDER = ["ideas", "mission", "edit", "workshop", "review"];
@@ -1394,9 +1394,9 @@ function paintDesign(b, d) {
       else if (a === "place") { if (!A.designPlace(b.id)) A.toast(A.editable() ? "That design is no longer here" : "Built-in missions are never changed. Make your own mission from it to place it"); }
       else if (a === "add") {
         bt.disabled = true; bt.textContent = "Adding…";
-        A.designAdd(b.id).then(function () {
+        A.designAdd(b.id).then(function (g) {
           b.added = true; paintDesign(b, d); saveSoon();
-          A.toast("“" + b.name + "” is in your inventory, under " + (b.kind === "character" ? "Characters, Your characters" : "Structures & objects, Your designs"));
+          A.toast("“" + b.name + "” is in Your items, at the top of the inventory" + (g && g.catTitle ? ", under " + g.catTitle : ""));
         }).catch(function (e) { bt.disabled = false; bt.textContent = "Add to inventory"; A.toast("Not added: " + (e && e.message ? e.message : e)); });
       }
     });
@@ -1588,7 +1588,8 @@ function instructions() {
     "",
     "Rules of the game engine (break them and the mission misbehaves):",
     "- Guards walk to the level's walkways (its navmesh) when the mission starts. Give place_guards a point or a place and it puts them on walkway points there. A guard more than 25 m from a walkway walks off towards it.",
-    "- Snipers and lookouts on a tower: place_guards with positions inside the tower and floor \"top\" (look_around shows a building's floors).",
+    "- Snipers and lookouts on a tower: place_guards with positions inside the tower and floor \"top\" (look_around shows a building's floors). A tower from the inventory brings walkway points for its platform, as the game's own towers have them, so a guard up there needs nothing more.",
+    "- Fixing a problem means making the thing work, not taking it away. A guard with no walkways where he stands, or standing above or below them: lay walkways where he stands (add_walkways), or stand him on a building's floor or a tower's platform, which come with walkway points. Never remove a guard, camera, building or objective just to make a check pass, unless the user asks for it; if nothing else works, say so and ask first.",
     "- Cameras mount on a wall within 4 m, else on a 3 m post; each raises the nearest alarm system when it sees the player. An area with no alarm system needs one (place_alarm_part system) for cameras and buttons to matter.",
     "- The map computer shows 6 objectives. The level's own objectives stay until removed: for a new mission, remove them (remove_objectives with level_objectives true) and add your own. Give each objective a short text.",
     "- hack targets are the level's own terminals; kill, destroy and collect need targets the game can test (no_task_id means it can't).",
@@ -1600,7 +1601,7 @@ function instructions() {
   ];
   if (has("design")) P.push("New things for the inventory: design_structure makes a design out of the game's structures (with guards and pickups if it needs them): a guard post, a sniper nest, a checkpoint, a weapons cache, a bunker entrance. design_character makes a character: a guard type with a model of its kind, a weapon and sight of its own. The user sees each in 3D in the chat and adds it to the inventory if they like it" +
     (has("build") ? "; place_design places one" : "") + ". Make designs that look right: parts meet or overlap slightly, stand on the ground (dz 0) unless stacked, face sensibly, and keep to a sensible size (use sizes from list_catalog). New weapon types and new 3D models can't be made: design with what the game has.", "");
-  if (has("ground")) P.push("Walkways and ground: add_walkways lays walkway points from the nearest walkway to a place (and round it), so guards can stand and patrol where there were none; put guards there after. shape_ground levels, raises, lowers, smooths or ramps the ground (the game moves it 4 m at most); sculpt_terrain makes big natural shapes.", "");
+  if (has("ground")) P.push("Walkways and ground: add_walkways lays walkway points from the nearest walkway to a place (and round it), so guards can stand and patrol where there were none; put guards there after. shape_ground levels, raises, lowers, smooths or ramps the ground, as high or deep as needed (past 4 m the build rebuilds the terrain there); sculpt_terrain makes big natural shapes.", "");
   if (!ag.drop || !ag.drop.test("stealth_check")) P.push("Stealth: stealth_check works out the quietest way on foot from the player start to each objective, how much of it the guards and cameras watch, and who watches it. Use it to judge and tune a mission (the user sees the routes on the map), then suggest or make fixes.", "");
   if (has("texts")) P.push("Texts: write_texts sets the mission's name and one-line description (what the game's mission list shows), the objective texts, the map computer labels of the mission's buildings, and a short briefing shown at the start. Write them the way the game does: terse military orders in plain English, like \"Infiltrate the airbase and locate the flight recorder.\" or \"Destroy the SAM radar.\"; objectives under 60 characters, labels under 20.", "");
   if (has("library")) P.push("Versions and campaigns: make_versions makes easy and hard copies of this mission in the user's library (fewer or more guards, sight, time limit, alarm). list_missions lists the user's missions; make_campaign puts several in order under a name and a briefing, for the user to export as one pack.", "");

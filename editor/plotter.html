@@ -619,7 +619,21 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .panel[hidden]{display:none}
 .panel-h{display:flex;align-items:center;gap:8px;padding:11px 12px 9px;border-bottom:1px solid var(--line)}
 .panel-b{flex:1;min-height:0;overflow-y:auto;padding:10px}
-.inv-search{padding:10px 10px 8px;border-bottom:1px solid var(--line)}
+.inv-search{padding:10px 10px 8px;border-bottom:1px solid var(--line);display:flex;gap:6px;align-items:center}
+.inv-lay{flex:none;width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--line);border-radius:4px;
+  background:var(--sunken);color:var(--muted);cursor:pointer;padding:0}
+.inv-lay:hover{color:var(--ink);border-color:var(--accent)}
+.inv-lay svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
+.inv-tabs{display:flex;gap:2px;padding:6px 6px 0;border-bottom:1px solid var(--line);flex:none}
+.inv-tab{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:5px 1px 6px;
+  border:1px solid transparent;border-bottom:none;border-radius:4px 4px 0 0;background:none;color:var(--muted);
+  font:600 11px/1.15 "Barlow Condensed",sans-serif;letter-spacing:.01em;text-transform:uppercase;cursor:pointer;text-align:center}
+.inv-tab span:first-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-tab:hover{color:var(--ink)}
+.inv-tab[aria-selected="true"]{color:var(--ink);background:var(--surface);border-color:var(--line);margin-bottom:-1px}
+.inv-tab .n{font:10px "IBM Plex Mono",monospace;color:var(--faint)}
+.isec.tabbed{flex:1 1 0;border-bottom:none}
+.isec.tabbed .isec-b{padding-top:6px}
 .inv-search input{width:100%;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:4px;
   padding:5px 8px;font:inherit;font-size:12.5px}
 .inv-search input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -1701,7 +1715,8 @@ function addCamera(wx,wy){
   var k=CAM_KINDS.filter(function(c){return c.id===tool.id})[0]||CAM_KINDS[0],m=camMount(wx,wy,tool.gamma||0);
   var o={uid:uid(),own:true,type:"camera",qtype:"SCamera",kind:"camera",model:CAM_MODELS.holder,modelName:"CAMERA",
     name:k.label.replace(", ","  ").split("  ")[0],x:+m.x.toFixed(3),y:+m.y.toFixed(3),z:+m.z.toFixed(3),gamma:m.gamma,
-    cam:JSON.parse(JSON.stringify(k.cam)),alarm:true,mount:m.on||"",turn:m.turn};
+    cam:JSON.parse(JSON.stringify(k.cam)),alarm:true,mount:m.on||"",turn:m.turn,
+    alarmId:(nearestAlarm(m.x,m.y)||{}).key||null};
   placements.push(o);sel=o;lastChangeAt=0;touch();renderSide();draw();
   toast(m.on?"Camera mounted on "+m.on:"No wall within 4 m, so the camera stands 3 m up on its own");
 }
@@ -1750,7 +1765,7 @@ function alarmSection(o){
   var what=o.type==="soldier"?"Answers alarm":"Raises alarm";
   var h='<div class="lbl" style="margin-top:12px">Alarm</div>'+
     '<div class="field" style="margin-top:5px"><span class="lbl">'+what+'</span><select id="al-sys"'+(ro?' disabled':'')+'>'+
-    '<option value=""'+(cur?'':' selected')+'>'+(o.type==="soldier"?"None: he ignores alarms":"None: it does nothing")+'</option>'+
+    '<option value=""'+(cur?'':' selected')+'>'+(o.type==="soldier"||o.type==="camera"?"Automatic: the nearest one":"None: it does nothing")+'</option>'+
     sys.map(function(a){return '<option value="'+esc(a.key)+'"'+(cur===a.key?' selected':'')+'>'+esc(a.name)+'</option>'}).join("")+
     '</select></div>';
   if(o.type==="soldier"&&o.own){
@@ -1985,14 +2000,26 @@ function hasInterior(o){
   return ownInteriorNodes(o)>=Math.max(1,Math.floor(inner/2));
 }
 // the graph a building joins: the one with a node nearest its ground floor
-function graphNear(x,y,z){
-  var best=null,bd=40;
-  for(var gid in (GRAPHS||{}))nodesOf(gid).forEach(function(n){
-    if(Math.abs(n.z-z)>SAME_FLOOR)return;      // another floor, or a building that is gone
+function graphNear(x,y,z,far){
+  var best=null,bd=far?1e12:40;
+  function look(gid,n){
+    if(!far&&Math.abs(n.z-z)>SAME_FLOOR)return;      // another floor, or a building that is gone
     var d=Math.hypot(n.x-x,n.y-y)+3*Math.abs(n.z-z);
     if(d<bd){bd=d;best=gid}
-  });
+  }
+  for(var gid in (GRAPHS||{}))nodesOf(gid).forEach(function(n){look(gid,n)});
+  // the mission's own new points count too: Apply adds them before the buildings
+  navNodes.forEach(function(n){if(n.graph!=null&&GRAPHS&&GRAPHS[String(n.graph)])look(String(n.graph),n)});
   return best;
+}
+// The graph a building's floors join on Apply (studio/build/plan.py, graph_near):
+// the one nearest its base. A platform with no way in - a watchtower's - joins
+// the nearest graph however far, as nodes of its own: the game gives each tower
+// sniper a graph of his own up there, linked to nothing below.
+function interiorGraph(o,t){
+  var low=Math.min.apply(null,t.floors.map(function(f){return f[0]}));
+  var platform=!t.exits.length&&low>=1.5;
+  return graphNear(o.x,o.y,platform?o.z:o.z+low)||(platform?graphNear(o.x,o.y,o.z,true):null);
 }
 // The game's own doors, read out of its levels (studio/extract/doors.py):
 // what each door model does when it opens, and which doors a building has. A
@@ -2042,8 +2069,7 @@ function makeInterior(key,o,t,own){
     var w=toWorld(o,n);
     return {ref:"t:"+key+":"+i,i:i,x:w.x,y:w.y,z:w.z,c:n[6]||"",porch:!!n[7]};
   });
-  var low=Math.min.apply(null,t.floors.map(function(f){return f[0]}));
-  var gid=graphNear(o.x,o.y,o.z+low);
+  var gid=interiorGraph(o,t);
   var it={key:key,o:o,t:t,own:own,nodes:nodes,gid:gid,exits:[],
           floors:floorsOf({o:o,t:t,it:own?{}:null})};
   // on a level building, floors that already have nodes keep them - Apply only adds the rest
@@ -4344,7 +4370,8 @@ function draftApply(plan){
         var a=i*Math.PI*2/it.n,m=camMount(w.x+Math.cos(a)*8,w.y+Math.sin(a)*8,0),k=CAM_KINDS[0];
         var c={uid:uid(),own:true,type:"camera",qtype:"SCamera",kind:"camera",model:CAM_MODELS.holder,modelName:"CAMERA",
           name:"Security camera",x:+m.x.toFixed(3),y:+m.y.toFixed(3),z:+m.z.toFixed(3),gamma:m.gamma,
-          cam:JSON.parse(JSON.stringify(k.cam)),alarm:true,mount:m.on||"",turn:m.turn};
+          cam:JSON.parse(JSON.stringify(k.cam)),alarm:true,mount:m.on||"",turn:m.turn,
+          alarmId:(nearestAlarm(m.x,m.y)||{}).key||null};
         placements.push(c);made.push(c);
       }
     }else if(it.k==="obj"){
@@ -5158,6 +5185,8 @@ function objectInspector(el){
     acts+='<button class="btn act" id="isettle" title="G">'+IC.ground+
        (edits[o.ref]&&edits[o.ref].settle?'Will rest on the ground when applied':'Drop onto the ground')+'</button>';
   if(o._orig)acts+='<button class="btn act" id="ireset">'+IC.undo+'Undo changes to this object</button>';
+  if(groupable(o)&&o.type!=="navnode")
+    acts+='<button class="btn act" id="iitem" title="Add to your items\nKeep it in the inventory, to place in any mission">'+IC.save+'Add to your items…</button>';
   if(own||o.ref)
     acts+='<button class="btn act danger" id="idel" title="Delete">'+IC.trash+(own?'Remove':'Remove from mission')+'</button>';
   if(acts)h+='<div class="ins-acts">'+acts+'</div>';
@@ -5230,6 +5259,7 @@ function objectInspector(el){
   });
   if($("imapinfo"))$("imapinfo").addEventListener("input",function(){if(o.label){o.label.info=$("imapinfo").value;touch();draw()}});
   if($("ireset"))$("ireset").addEventListener("click",function(){resetShipped(o);touch();renderSide();draw()});
+  if($("iitem"))$("iitem").addEventListener("click",function(){saveGroupDialog()});
   if($("isettle"))$("isettle").addEventListener("click",function(){editShipped(o,{settle:true});touch();renderSide()});
   if($("idel"))$("idel").addEventListener("click",removeSel);
   if($("i3d"))$("i3d").addEventListener("click",function(){open3d(sel)});
@@ -5623,6 +5653,33 @@ function renderList(){
 // (every model any shipped level uses). A model this level does not pack is
 // marked "import" - applying copies it in.
 var SEC_OPEN=(function(){try{return JSON.parse(localStorage.getItem("plotter:sections")||"{}")}catch(e){return {}}})();
+// The inventory's layout: every part in one list of folding sections, or tabs at
+// the top with one part at a time taking the whole panel
+var INV_TABS=[["mine","Your items"],["ai","Characters"],["pickup","Weapons"],["obj","Structures"]];
+var INVL=(function(){
+  var d={layout:"sections",tab:"mine"};
+  try{var v=JSON.parse(localStorage.getItem("plotter:invlayout")||"{}");
+    if(v.layout==="tabs"||v.layout==="sections")d.layout=v.layout;
+    if(INV_TABS.some(function(t){return t[0]===v.tab}))d.tab=v.tab}catch(e){/* private window */}
+  return d;
+})();
+function saveInvLayout(){try{localStorage.setItem("plotter:invlayout",JSON.stringify(INVL))}catch(e){/* private window */}}
+var INV_LAY_ICON={
+  tabs:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 5.5V3.5h4l1 2h8v7h-13z"/><path d="M1.5 5.5h13"/></svg>',
+  sections:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="13" height="3.2" rx=".8"/><rect x="1.5" y="6.4" width="13" height="3.2" rx=".8"/><rect x="1.5" y="10.8" width="13" height="3.2" rx=".8"/></svg>'};
+function layoutButton(){
+  var box=document.querySelector("#panel-inv .inv-search");if(!box)return;
+  var b=$("invlayout");
+  if(!b){
+    b=document.createElement("button");b.type="button";b.id="invlayout";b.className="inv-lay";box.appendChild(b);
+    b.addEventListener("click",function(){INVL.layout=INVL.layout==="tabs"?"sections":"tabs";saveInvLayout();flyClose();buildPalette()});
+  }
+  var tabs=INVL.layout==="tabs";
+  b.innerHTML=tabs?INV_LAY_ICON.sections:INV_LAY_ICON.tabs;
+  b.title=tabs?"Show as sections\nEvery part of the inventory in one list, each folding away"
+    :"Show as tabs\nYour items, characters, weapons and structures, one at a time";
+  b.setAttribute("aria-label",tabs?"Show the inventory as sections":"Show the inventory as tabs");
+}
 var SEC_SCROLL={};
 var SUB_OPEN=(function(){try{return JSON.parse(localStorage.getItem("plotter:subs")||"{}")}catch(e){return {}}})();
 var CHEVRON='<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>';
@@ -5699,22 +5756,30 @@ function buildPalette(){
   var q=(($("invq")&&$("invq").value)||"").trim().toLowerCase();
   var lm=levelModels(),lvName=LEVEL?(LEVEL.level>14?"mission "+LEVEL.level:"level "+LEVEL.level):"this level";
   host.innerHTML="";
+  var TABS=INVL.layout==="tabs",TABN={};
+  layoutButton();
   function hit(){
     if(!q)return true;
     for(var i=0;i<arguments.length;i++)if(String(arguments[i]||"").toLowerCase().indexOf(q)>=0)return true;
     return false;
   }
+  // a part of the inventory: a folding section, or with tabs, the whole panel
+  // when its tab is the one picked (the others are only counted, for the tab bar)
   function section(id,title,count,big,fill,extra){
-    var open=q?count>0:(SEC_OPEN[id]==null?true:SEC_OPEN[id]);
-    var sec=document.createElement("section");sec.className="isec"+(big?" big":"");sec.setAttribute("data-open",String(open));
-    var h=document.createElement("button");h.className="sec-h";h.type="button";h.setAttribute("aria-expanded",String(open));
-    h.innerHTML=CHEVRON+'<span class="lbl">'+esc(title)+'</span><span class="count">'+count+'</span>';
-    h.addEventListener("click",function(){
-      SEC_OPEN[id]=!(sec.getAttribute("data-open")==="true");
-      try{localStorage.setItem("plotter:sections",JSON.stringify(SEC_OPEN))}catch(e){}
-      buildPalette();
-    });
-    sec.appendChild(h);
+    TABN[id]=count;
+    if(TABS&&id!==INVL.tab)return;
+    var open=TABS||(q?count>0:(SEC_OPEN[id]==null?true:SEC_OPEN[id]));
+    var sec=document.createElement("section");sec.className="isec"+(big?" big":"")+(TABS?" tabbed":"");sec.setAttribute("data-open",String(open));
+    if(!TABS){
+      var h=document.createElement("button");h.className="sec-h";h.type="button";h.setAttribute("aria-expanded",String(open));
+      h.innerHTML=CHEVRON+'<span class="lbl">'+esc(title)+'</span><span class="count">'+count+'</span>';
+      h.addEventListener("click",function(){
+        SEC_OPEN[id]=!(sec.getAttribute("data-open")==="true");
+        try{localStorage.setItem("plotter:sections",JSON.stringify(SEC_OPEN))}catch(e){}
+        buildPalette();
+      });
+      sec.appendChild(h);
+    }
     if(open){
       if(extra)sec.appendChild(extra);
       var b=document.createElement("div");b.className="isec-b";b.id="sec-"+id;
@@ -5770,6 +5835,45 @@ function buildPalette(){
   }
   var IMPORT_TAG='<i style="font-style:normal;color:var(--accent)">import</i>';
 
+  // your items - what you kept to place in any mission, by category: a row
+  // each, whose list opens beside the panel as the structures' do (a search
+  // lists them here instead). Right-click one to rename, move or delete it.
+  var mine=GROUPS.filter(function(g){return hit(g.name,g.summary,g.description,itemCatTitle(itemCat(g)))});
+  function mineOf(cat){return mine.filter(function(g){return itemCat(g)===cat})}
+  function mainOf(g){return ((g.data&&g.data.items)||[]).filter(function(p){return !p.of})}
+  function mineThumb(g,px){
+    var cat=itemCat(g),gi=mainOf(g)[0]||{};
+    if(cat==="characters"&&gi.type==="soldier")return markerSwatch("soldier",PlanIcons.soldierIcon(gi.ai),css("--accent"),px);
+    if(cat==="weapons"&&gi.type==="pickup")return markerSwatch("pickup",PlanIcons.weaponIcon(gi.pickupId),css("--accent"),px);
+    if(cat==="security"&&gi.type==="camera")return markerSwatch("camera","camera",css("--accent"),px);
+    if(mainOf(g).length===1&&gi.model&&gi.type==="building")return thumbFor(gi.model,"building","",px);
+    return groupThumb(g.data,px);
+  }
+  function mineItem(b,g){
+    var gi=mainOf(g)[0]||{};
+    var it=item(b,{group:"prefab",id:g.id,label:g.name,data:g.data},mineThumb(g,20),g.name,esc(g.summary||groupSummary(g.data)),
+      (g.description?g.description+"\n":"")+"Place it; R turns it.\nRight-click to rename it, move it to another category or delete it.");
+    it.addEventListener("contextmenu",function(e){e.preventDefault();editItemDialog(g)});
+    it.addEventListener("mouseenter",function(){
+      if(gi.type==="soldier")hoverCard(it,{name:g.name,model:armedModel(gi.model,gi.weapon),size:gi.model});
+      else if(g.kind==="blueprint"){var k=designMesh("grp:"+g.id,g.data);if(k)hoverCard(it,{name:g.name,model:k,size:k})}
+      else if(gi.model&&mainOf(g).length===1)hoverCard(it,{name:g.name,model:gi.model,size:gi.model});
+    });
+    it.addEventListener("mouseleave",function(){hoverCard(null)});
+  }
+  section("mine","Your items",mine.length,false,function(b){
+    if(!GROUPS.length){
+      b.innerHTML='<p class="hint" style="margin:8px 6px">Nothing of yours yet. Select something on the map, or a group of things, and press '+
+        '<b>Add to your items</b>: it can then be placed in any mission. What you keep from the AI designer\u2019s Workshop comes here too.</p>';
+      return;
+    }
+    ITEM_CATS.forEach(function(c){
+      var list=mineOf(c[0]);if(!list.length)return;
+      if(q){if(sub(b,"mine:"+c[0],c[1],list.length))list.forEach(function(g){mineItem(b,g)});return}
+      catRow(b,"my:"+c[0],c[1],list.length+" of yours",mineThumb(list[0],26));
+    });
+  });
+
   // characters - every AI type any mission uses: the enemy soldiers, then
   // the story characters (Ekk, Priboi, Anya) and civilians
   var foes=((CATALOG&&CATALOG.enemies)||[]).filter(function(e){return hit(e.label,e.id,(e.weapons||[]).join(" "))});
@@ -5820,24 +5924,10 @@ function buildPalette(){
     });
   });
 
-  // your characters (designed by the AI designer and kept): placed like a group
-  var myChars=GROUPS.filter(function(g){return g.kind==="character"&&hit(g.name,g.summary)});
-  if(myChars.length&&$("sec-ai")){
-    var cb0=$("sec-ai");
-    if(sub(cb0,"ai:yours","Your characters",myChars.length))myChars.forEach(function(g){
-      var gi=(g.data.items||[])[0]||{};
-      var it0=item(cb0,{group:"prefab",id:g.id,label:g.name,data:g.data},markerSwatch("soldier",PlanIcons.soldierIcon(gi.ai),css("--accent"),20),g.name,
-        esc(weaponLabel(gi.weapon))+" · "+esc((enemyInfo(gi.ai)||{}).label||gi.ai||""),(g.description||g.name)+"\nPlace him; R turns him. Designed with the AI designer.");
-      it0.addEventListener("mouseenter",function(){hoverCard(it0,{name:g.name,model:armedModel(gi.model,gi.weapon),size:gi.model})});
-      it0.addEventListener("mouseleave",function(){hoverCard(null)});
-    });
-  }
-
   // structures and objects, by category: a row each, whose list opens beside
   // the panel when hovered (clicked: it stays open); a search lists them here
   var rows=((CATALOG&&CATALOG.structures)||[]).filter(function(r){return hit(r.name,r.model,r.raw)});
   var cats=((CATALOG&&CATALOG.categories)||[]).filter(function(c){return rows.some(function(r){return r.cat===c.key})});
-  var myDesigns=GROUPS.filter(function(g){return g.kind==="blueprint"&&hit(g.name,g.summary)});
   function catItems(b,c){
     var inCat=rows.filter(function(r){return r.cat===c.key});
     inCat.sort(function(a,x){return (lm.has(x.model)?1:0)-(lm.has(a.model)?1:0)||a.name.localeCompare(x.name)});
@@ -5851,40 +5941,31 @@ function buildPalette(){
       it.addEventListener("mouseleave",function(){hoverCard(null)});
     });
   }
-  function designItems(b){
-    myDesigns.forEach(function(g){
-      var it=item(b,{group:"prefab",id:g.id,label:g.name,data:g.data},groupThumb(g.data),g.name,esc(g.summary||groupSummary(g.data)),
-        (g.description||g.name)+"\nPlace it; R turns it. Designed with the AI designer.");
-      it.addEventListener("mouseenter",function(){var k=designMesh("grp:"+g.id,g.data);if(k)hoverCard(it,{name:g.name,model:k,size:k})});
-      it.addEventListener("mouseleave",function(){hoverCard(null)});
-    });
-  }
   if(!q){
     FLY.fill=function(b,key){
       if(key.indexOf("pk:")===0){armItems(b,key.slice(3),30);return armsOf(key.slice(3)).length}   // a group of weapons
-      if(key==="_designs"){designItems(b);return myDesigns.length}
+      if(key.indexOf("my:")===0){var ml=mineOf(key.slice(3));ml.forEach(function(g){mineItem(b,g)});return ml.length}   // yours
       var c=cats.filter(function(x){return x.key===key})[0];if(!c)return 0;
       catItems(b,c);return rows.filter(function(r){return r.cat===key}).length;
     };
     FLY.title=function(key){
       if(key.indexOf("pk:")===0)return (ARMS.filter(function(g){return "pk:"+g[0]===key})[0]||[])[1]||"";
-      return key==="_designs"?"Your designs":((cats.filter(function(x){return x.key===key})[0]||{}).title||"");
+      if(key.indexOf("my:")===0)return itemCatTitle(key.slice(3));
+      return (cats.filter(function(x){return x.key===key})[0]||{}).title||"";
     };
-    section("obj","Structures & objects",rows.length+myDesigns.length,true,function(b){
+    section("obj","Structures & objects",rows.length,true,function(b){
       var list=cats.map(function(c){return {key:c.key,title:c.title,n:rows.filter(function(r){return r.cat===c.key}).length,
         first:rows.filter(function(r){return r.cat===c.key&&lm.has(r.model)})[0]||rows.filter(function(r){return r.cat===c.key})[0]}});
-      if(myDesigns.length)list.unshift({key:"_designs",title:"Your designs",n:myDesigns.length,design:myDesigns[0]});
       list.forEach(function(c){
-        var packedN=c.key==="_designs"?c.n:rows.filter(function(x){return x.cat===c.key&&lm.has(x.model)}).length;
-        catRow(b,c.key,c.title,c.n+(c.key==="_designs"?" of yours":" · "+packedN+" in "+esc(lvName)),
-          c.design?groupThumb(c.design.data,26):c.first?thumbFor(c.first.model,c.first.kind,c.first.raw,26):iconSwatch("dot",css("--build"),20));
+        var packedN=rows.filter(function(x){return x.cat===c.key&&lm.has(x.model)}).length;
+        catRow(b,c.key,c.title,c.n+" · "+packedN+" in "+esc(lvName),
+          c.first?thumbFor(c.first.model,c.first.kind,c.first.raw,26):iconSwatch("dot",css("--build"),20));
       });
     });
     if(FLY.key)flyOpen(FLY.key,null,true);
   }else{
     flyClose();
-    section("obj","Structures & objects",rows.length+myDesigns.length,true,function(b){
-      if(myDesigns.length&&sub(b,"obj:_designs","Your designs",myDesigns.length))designItems(b);
+    section("obj","Structures & objects",rows.length,true,function(b){
       cats.forEach(function(c){
         var n=rows.filter(function(r){return r.cat===c.key}).length;
         if(!n||!sub(b,"obj:"+c.key,c.title,n))return;
@@ -5894,14 +5975,18 @@ function buildPalette(){
   }
 
 
-  // saved groups (not the AI designer's characters and designs, listed above)
-  var grs=GROUPS.filter(function(g){return g.kind!=="character"&&g.kind!=="blueprint"&&hit(g.name,g.summary)});
-  if(grs.length)section("groups","Saved groups",grs.length,false,function(b){
-    grs.forEach(function(g){
-      item(b,{group:"prefab",id:g.id,label:g.name,data:g.data},groupThumb(g.data),g.name,esc(g.summary||groupSummary(g.data)),
-        "Place this group; R turns it. Saved from level "+g.data.level+".");
+  // with tabs: the bar that picks which part fills the panel, with how many each holds
+  if(TABS){
+    var bar=document.createElement("div");bar.className="inv-tabs";bar.setAttribute("role","tablist");bar.setAttribute("aria-label","Inventory");
+    INV_TABS.forEach(function(t){
+      var tb=document.createElement("button");tb.type="button";tb.className="inv-tab";tb.setAttribute("role","tab");
+      tb.setAttribute("aria-selected",String(INVL.tab===t[0]));
+      tb.innerHTML='<span>'+esc(t[1])+'</span><span class="n">'+(TABN[t[0]]||0)+'</span>';
+      tb.addEventListener("click",function(){if(INVL.tab===t[0])return;INVL.tab=t[0];saveInvLayout();flyClose();buildPalette()});
+      bar.appendChild(tb);
     });
-  });
+    host.insertBefore(bar,host.firstChild);
+  }
 
   renderNavSection();buildToggles();buildLegend();
 }
@@ -6792,8 +6877,22 @@ function dropGroup(){
 
 // ---- the portable form of a group
 function groupData(list){
-  list=list||groupList();
+  list=(list||groupList()).slice();
   if(!list.length)return null;
+  // a building of yours takes its own doors, lift and furniture along
+  list.slice().forEach(function(o){
+    if(o.own&&o.type==="building"&&o.uid)placements.forEach(function(p){if(p.of===o.uid&&list.indexOf(p)<0)list.push(p)});
+  });
+  // one of the level's comes back with the doors, lift and furniture the game gives
+  // it (placed as they are from the inventory): the level's own things inside it
+  // are left out, so they are not there twice
+  var kitted=list.filter(function(o){
+    if(o.own||o.type!=="building"||!o.model)return false;
+    var k=buildingKit(o.model);return k.doors.length+k.lifts.length+(k.props||[]).length>0;
+  });
+  if(kitted.length)list=list.filter(function(o){
+    return o.own||o.type==="navnode"||kitted.indexOf(o)>=0||!kitted.some(function(b){return inBody(b,o.x,o.y,0)&&withinHeight(b,o.z)});
+  });
   var c=groupCentre(list),items=[],nodes=[];
   list.forEach(function(o){
     if(o.type==="navnode"){nodes.push({old:o.uid,graph:o.graph,dx:o.x-c.x,dy:o.y-c.y,z:o.z});return}
@@ -6802,7 +6901,7 @@ function groupData(list){
     else if(o.type==="soldier")p={type:"soldier",kind:"soldier",ai:o.ai,model:o.model,weapon:o.weapon,
       name:displayName(o),graph:o.graph!=null?String(o.graph):null,patrol:(o.patrol||[]).filter(function(n){return typeof n==="number"})};
     else if(o.type==="pickup")p={type:"pickup",kind:"pickup",pickupId:o.model,name:displayName(o)};
-    else if(o.model)p={type:"building",kind:"object",model:o.model,name:displayName(o)};
+    else if(o.model){p={type:"building",kind:"object",model:o.model,name:displayName(o)};if(kitted.indexOf(o)>=0)p.kit=true}
     else return;
     p.own=true;p.dx=o.x-c.x;p.dy=o.y-c.y;p.z=o.z;p.gamma=o.gamma||0;
     delete p.x;delete p.y;
@@ -6811,9 +6910,17 @@ function groupData(list){
   return {v:1,level:LV,base:BASE_LEVEL,z:list.reduce(function(a,o){return a+o.z},0)/list.length,items:items,nodes:nodes};
 }
 function groupSummary(d){
-  var n={};d.items.forEach(function(p){var k=p.type==="soldier"?"guard":p.type==="pickup"?"pickup":"object";n[k]=(n[k]||0)+1});
-  if(d.nodes.length)n.node=d.nodes.length;
-  return Object.keys(n).map(function(k){return n[k]+" "+k+(n[k]===1?"":"s")}).join(", ");
+  var n={},fits=false;
+  d.items.forEach(function(p){
+    if(p.of||p.kit)fits=true;
+    if(p.of)return;                         // a building's own door, lift or desk: it goes with the building
+    var k=p.type==="soldier"?"guard":p.type==="pickup"?"pickup":p.type==="camera"?"camera"
+      :p.type==="building"&&realBuilding(p.model)?"building":"object";
+    n[k]=(n[k]||0)+1;
+  });
+  if(d.nodes.length)n["walkway point"]=d.nodes.length;
+  return Object.keys(n).map(function(k){return n[k]+" "+k+(n[k]===1?"":"s")}).join(", ")+
+    (fits?", with "+(n.building>1?"their":"its")+" doors and furniture":"");
 }
 // Put a group down with its centre at (x, y), turned by gamma. New ids; patrol
 // stops that point at copied nodes or buildings follow them; stops at the
@@ -6832,10 +6939,14 @@ function pasteData(d,x,y,gamma){
     navNodes.push(o);out.push(o);
   });
   d.items.forEach(function(p){if(p.old)map["t:"+p.old]="t:"+(p._new=uid())});
-  var dropped=0;
+  var dropped=0,kits=[];
   d.items.forEach(function(p){
     var o=JSON.parse(JSON.stringify(p));
     o.uid=p._new||uid();delete o.old;delete o._new;delete o.dx;delete o.dy;
+    // a door, lift or desk that came with a building stays that building's
+    if(o.of){var nb=map["t:"+o.of];if(nb)o.of=nb.slice(2);else{delete o.of;delete o.slot}}
+    if(o.alarmId&&o.alarmId.indexOf("own:")===0&&map["t:"+o.alarmId.slice(4)])o.alarmId="own:"+map["t:"+o.alarmId.slice(4)].slice(2);
+    if(o.kit){delete o.kit;kits.push(o)}
     o.x=+(x+p.dx*cs-p.dy*sn).toFixed(3);o.y=+(y+p.dx*sn+p.dy*cs).toFixed(3);o.z=(p.z||0)+dz;
     o.gamma=+(((p.gamma||0)+gamma)%(Math.PI*2)).toFixed(5);
     if(o.type==="soldier"){
@@ -6855,6 +6966,13 @@ function pasteData(d,x,y,gamma){
     placements.push(o);out.push(o);
   });
   d.items.forEach(function(p){delete p._new});
+  // what names an alarm system or an event this mission does not have: automatic
+  // again (the nearest system), or at the start
+  out.forEach(function(o){
+    if(o.alarmId&&!alarmByKey(o.alarmId))o.alarmId=null;
+    if(o.arriveOn&&!events.some(function(v){return v.uid===o.arriveOn})){delete o.arriveOn;delete o.arriveTimes}
+  });
+  kits.forEach(function(b){addBuildingDoors(b)});
   multi=out.length>1?out.slice():[];
   sel=out[out.length-1]||null;
   touch();renderSide();renderNavSection();draw();
@@ -6895,7 +7013,7 @@ function groupInspector(el){
     '<div class="btnrow" style="margin:0">'+
     '<button class="btn" data-g="dup" title="Ctrl+D">'+IC.dup+'Duplicate</button>'+
     '<button class="btn" data-g="copy" title="Ctrl+C">'+IC.copy+'Copy</button>'+
-    '<button class="btn" data-g="save" title="Save as a reusable group">'+IC.save+'Save…</button></div>'+
+    '<button class="btn" data-g="save" title="Add to your items\nKeep them in the inventory, to place in any mission">'+IC.save+'Keep…</button></div>'+
     '<button class="btn act danger" data-g="del" title="Delete">'+IC.trash+'Remove all</button></div>'+
     '<p class="hint" style="margin:8px 0 6px">Drag any of them to move the group. Arrow keys nudge it. Shift+click adds or drops one. Esc clears.</p>'+
     '<div class="placed-list">';
@@ -6938,27 +7056,86 @@ var GroupStore={
   remove:function(id){
     if(SRV)return fetch("api/groups/"+encodeURIComponent(id),{method:"DELETE"}).then(function(r){return r.json()});
     localStorage.setItem("studio:groups",JSON.stringify(GROUPS.filter(function(g){return g.id!==id})));return Promise.resolve({ok:true});
+  },
+  update:function(id,f){
+    if(SRV)return fetch("api/groups/"+encodeURIComponent(id),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(f)})
+      .then(function(r){return r.json()}).then(function(j){if(!j.ok)throw new Error(j.error||"not saved");return j.group});
+    var all=GROUPS.map(function(g){return g.id===id?Object.assign({},g,f):g});
+    localStorage.setItem("studio:groups",JSON.stringify(all));return Promise.resolve(all.filter(function(g){return g.id===id})[0]);
   }
 };
+// ---- Your items: what the user keeps to place in any mission - things or groups
+// saved from the map, and what the AI designer's Workshop made and they kept -
+// each under a category. Kept by the studio server in missions/groups/.
+var ITEM_CATS=[["areas","Areas & compounds"],["buildings","Buildings"],["characters","Characters"],
+  ["objects","Objects & props"],["weapons","Weapons & items"],["security","Cameras & alarms"]];
+function itemCatTitle(k){var c=ITEM_CATS.filter(function(x){return x[0]===k})[0];return c?c[1]:"Areas & compounds"}
+function realBuilding(model){var z=MODELS&&MODELS.sizes&&MODELS.sizes[model];return !!(z&&z.h>=2.5&&z.w>=2&&z.d>=2)}
+// the category a set of things goes under when nobody chose one
+function guessItemCat(d,kind){
+  if(kind==="character")return "characters";
+  var its=((d&&d.items)||[]).filter(function(p){return !p.of});   // a building's doors and furniture go with it
+  if(!its.length)return "areas";
+  if(its.every(function(p){return p.type==="soldier"}))return "characters";
+  if(its.every(function(p){return p.type==="pickup"}))return "weapons";
+  if(its.every(function(p){return /^(camera|switch|siren|alarmlight|alarmctl)$/.test(p.type)}))return "security";
+  if(its.length===1&&its[0].type==="building")return realBuilding(its[0].model)?"buildings":"objects";
+  if(kind==="blueprint")return "buildings";
+  if(its.every(function(p){return p.type==="building"&&!realBuilding(p.model)}))return "objects";
+  return "areas";
+}
+function itemCat(g){return g.cat||guessItemCat(g.data,g.kind)}
 function loadGroups(){
   return GroupStore.list().then(function(list){GROUPS=list||[];buildPalette()}).catch(function(){});
 }
+// "Add to your items": the selection - one thing, or a group - kept in the
+// inventory under a name and a category, to place in any mission
 function saveGroupDialog(){
-  var d=groupData();if(!d)return;
-  sheet("Save as group",'<p class="hint">'+esc(groupSummary(d))+'. Saved groups appear in the inventory and can be placed in any mission.</p>'+
-    '<div class="field"><span class="lbl">Name</span><input id="grp-name" value="" placeholder="e.g. Fenced checkpoint with two guards"></div>'+
-    '<div class="ck-foot"><button class="btn" id="grp-cancel">Cancel</button><button class="btn primary" id="grp-ok">Save group</button></div>');
-  var inp=$("grp-name");inp.focus();
+  var d=groupData();if(!d){toast("Select something to keep");return}
+  var guess=guessItemCat(d),one=d.items.length===1&&!d.nodes.length?d.items[0]:null;
+  sheet("Add to your items",'<p class="hint">'+esc(groupSummary(d))+'. Your items are at the top of the inventory, and place in any mission.</p>'+
+    itemFields(one&&one.name||"",guess,"")+
+    '<div class="ck-foot"><button class="btn" id="grp-cancel">Cancel</button><button class="btn primary" id="grp-ok">Add to your items</button></div>');
+  var inp=$("grp-name");inp.focus();inp.select();
   function go(){
     var name=inp.value.trim();if(!name){inp.focus();return}
-    GroupStore.save({name:name,data:d,summary:groupSummary(d)}).then(function(){
-      $("sheet").hidden=true;toast("Saved “"+name+"”. Find it under Saved groups in the inventory");
-      SEC_OPEN.groups=true;loadGroups();
+    var cat=$("grp-cat").value;
+    GroupStore.save({name:name,cat:cat,description:$("grp-desc").value.trim(),data:d,summary:groupSummary(d)}).then(function(){
+      $("sheet").hidden=true;toast("“"+name+"” is in Your items, under "+itemCatTitle(cat));
+      SEC_OPEN.mine=true;INVL.tab="mine";saveInvLayout();loadGroups();
     }).catch(function(e){toast(String(e.message||e))});
   }
   $("grp-ok").addEventListener("click",go);
   inp.addEventListener("keydown",function(e){if(e.key==="Enter")go()});
   $("grp-cancel").addEventListener("click",function(){$("sheet").hidden=true});
+}
+function itemFields(name,cat,desc){
+  return '<div class="field"><span class="lbl">Name</span><input id="grp-name" value="'+esc(name)+'" placeholder="e.g. Fenced checkpoint with two guards"></div>'+
+    '<div class="field" style="margin-top:8px"><span class="lbl">Category</span><select id="grp-cat">'+
+      ITEM_CATS.map(function(c){return '<option value="'+c[0]+'"'+(c[0]===cat?' selected':'')+'>'+esc(c[1])+'</option>'}).join("")+'</select></div>'+
+    '<div class="field" style="margin-top:8px"><span class="lbl">Description (optional)</span><input id="grp-desc" value="'+esc(desc)+'" placeholder="What it is, where it works well"></div>';
+}
+// rename one of your items, or put it under another category
+function editItemDialog(g){
+  sheet("Your item",itemFields(g.name,itemCat(g),g.description||"")+
+    '<p class="hint" style="margin:8px 0 0">'+esc(g.summary||groupSummary(g.data))+'. Missions it was placed in keep their copies.</p>'+
+    '<div class="ck-foot"><button class="btn danger" id="grp-del">Delete</button><span style="flex:1"></span>'+
+    '<button class="btn" id="grp-cancel">Cancel</button><button class="btn primary" id="grp-ok">Save</button></div>');
+  var inp=$("grp-name");inp.focus();
+  function go(){
+    var name=inp.value.trim();if(!name){inp.focus();return}
+    GroupStore.update(g.id,{name:name,cat:$("grp-cat").value,description:$("grp-desc").value.trim()}).then(function(){
+      $("sheet").hidden=true;if(tool&&tool.group==="prefab"&&tool.id===g.id)selectTool(null);loadGroups();toast("Saved “"+name+"”");
+    }).catch(function(e){toast(String(e.message||e))});
+  }
+  $("grp-ok").addEventListener("click",go);
+  inp.addEventListener("keydown",function(e){if(e.key==="Enter")go()});
+  $("grp-cancel").addEventListener("click",function(){$("sheet").hidden=true});
+  var del=$("grp-del");
+  del.addEventListener("click",function(){
+    if(!del.classList.contains("sure")){del.classList.add("sure");del.textContent="Sure?";return}
+    GroupStore.remove(g.id).then(function(){$("sheet").hidden=true;if(tool&&tool.group==="prefab"&&tool.id===g.id)selectTool(null);loadGroups();toast("“"+g.name+"” deleted from Your items")});
+  });
 }
 // a little map of the group: its members where they stand
 function groupThumb(d,px){
@@ -12327,7 +12504,7 @@ function renderPlaceBar(){
     '<button class="btn" data-pr="-15" title="Rotate 15° clockwise (Shift+R)">↻ 15°</button>'+
     '<button class="btn" data-pr="15" title="Rotate 15° anticlockwise (R)">↺ 15°</button>'+
     '<button class="btn" data-pr="90" title="Rotate 90° (T)">↺ 90°</button>'+
-    (tool.group==="prefab"?'<span class="sep"></span><button class="btn" id="pb-delgrp" title="Delete this saved group">Delete saved group</button>':'')+
+    (tool.group==="prefab"&&GROUPS.some(function(g){return g.id===tool.id})?'<span class="sep"></span><button class="btn" id="pb-edgrp" title="Rename it, move it to another category, or delete it">Edit this item…</button>':'')+
     (seg?'<span class="sep"></span>'+(tool.chain
         ?'<span class="chain on">Chained: the next panel continues the run</span><button class="btn" id="pb-break" title="C">Break (C)</button>'
         :'<span class="chain">Click to start a run. It snaps to fence ends nearby</span>'):'')+
@@ -12336,9 +12513,8 @@ function renderPlaceBar(){
     x.addEventListener("click",function(){rotateBy(parseFloat(x.getAttribute("data-pr")))});
   });
   if($("pb-break"))$("pb-break").addEventListener("click",function(){tool.chain=null;renderPlaceBar();present()});
-  if($("pb-delgrp"))$("pb-delgrp").addEventListener("click",function(){
-    var t=tool;if(!confirm("Delete the saved group “"+t.label+"”? Missions it was placed in keep their copies."))return;
-    GroupStore.remove(t.id).then(function(){selectTool(null);loadGroups();toast("Saved group deleted")});
+  if($("pb-edgrp"))$("pb-edgrp").addEventListener("click",function(){
+    var g=GROUPS.filter(function(x){return x.id===tool.id})[0];if(g)editItemDialog(g);
   });
 }
 
@@ -12473,7 +12649,8 @@ function localChecks(){
       p,null,num(p.x)+", "+num(p.y));
   });
   placements.filter(function(p){return p.type==="soldier"&&!p.arriveOn}).concat(editedSoldiers()).forEach(function(p){
-    var g=p.graph||graphOf(p),near=g?guardWalkway(p,String(g)):null;
+    // a guard in a building whose floors Apply adds walks that building's graph (the build moves him to it)
+    var bi=buildingAt(p.x,p.y,p.z),g=(bi&&bi.it&&bi.it.gid)||p.graph||graphOf(p),near=g?guardWalkway(p,String(g)):null;
     if(!g||!near){
       add("error","Guards",displayName(p)+" has no walkways near him: in the game he walks to his walkway graph when the mission starts, and there is none he can stand on. Lay walkways where he stands",p,null,
         "Walkways tool, or the AI designer's add_walkways");
@@ -12689,7 +12866,11 @@ function showChecks(thenApply){
     if(older)h+='<details class="ck-old"><summary>'+older+' about what is already in the game</summary>'+
       all.filter(function(r){return rows.indexOf(r)<0}).map(function(r){
         return '<div class="ck '+r.level+'"><span class="ic"></span><span class="tx"><b>'+esc(r.text)+'</b>'+(r.meta?'<span class="meta">'+esc(r.meta)+'</span>':'')+'</span></div>'}).join("")+'</details>';
-    h+='<div class="ck-foot">'+(thenApply
+    // the AI designer can take the whole list and work through it
+    var aiFix=!!window.AIPanel&&!READONLY&&(errors||warns);
+    h+='<div class="ck-foot">'+(aiFix?'<button class="btn" id="ck-ai" title="Fix with the AI designer\n'+
+        'Its Edit agent gets every problem on this list and fixes them one by one, keeping your guards, cameras and buildings. '+
+        'Everything it does can be undone">Fix with the AI designer</button>':'')+(thenApply
       ?(errors?'<span class="hint">Fix the errors above to apply.</span>':'')+
        '<button class="btn" id="ck-close">'+(thenApply?"Not now":"Close")+'</button>'+
        '<button class="btn primary" id="ck-apply"'+(errors?' disabled':'')+'>'+(warns?"Apply anyway":"Apply to game")+'</button>'
@@ -12709,8 +12890,31 @@ function showChecks(thenApply){
       });
     });
     $("ck-close").addEventListener("click",function(){$("sheet").hidden=true});
+    if($("ck-ai"))$("ck-ai").addEventListener("click",function(){repairWithAI(rows)});
     if($("ck-apply")){$("ck-apply").addEventListener("click",applyToGame);if(!errors)$("ck-apply").focus()}
   });
+}
+
+// The check list, handed to the AI designer's Edit agent: every problem it
+// shows, with the rule that a fix keeps what is there (it used to remove the
+// snipers a check complained about, rather than give them walkways).
+function repairWithAI(rows){
+  if(!window.AIPanel)return;
+  if(AIPanel.busy()){toast("The AI designer is still working. Wait for it, or stop it first");return}
+  function lines(l){
+    var out=l.slice(0,25).map(function(r){return "- "+r.text+(r.meta?" ("+r.meta+")":"")});
+    if(l.length>25)out.push("- and "+(l.length-25)+" more like these");
+    return out.join("\n");
+  }
+  var errs=rows.filter(function(r){return r.level==="error"}),warns=rows.filter(function(r){return r.level==="warn"});
+  var msg="Repair the mission: fix the problems the check list finds, below. Keep every guard, camera and building: "+
+    "lay walkways where a guard has none, stand a guard on a building's floor or a tower's platform, move or re-point what is wrong. "+
+    "Remove something only if nothing else can work, and say so if you do. Run check_mission when you are done."+
+    (errs.length?"\n\nMust fix before applying:\n"+lines(errs):"")+
+    (warns.length?"\n\nWorth a look:\n"+lines(warns):"");
+  $("sheet").hidden=true;
+  AIPanel.show();
+  AIPanel.send(msg,"edit");
 }
 
 /* ---------------- local server (Apply) ---------------- */
@@ -14189,8 +14393,9 @@ var AIB=(function(){
       name:"Security camera",x:+m.x.toFixed(3),y:+m.y.toFixed(3),z:+m.z.toFixed(3),gamma:m.gamma,
       cam:cam,alarm:a.raises_alarm!==false,mount:m.on||"",turn:m.turn};
     if(!m.on&&(a.facing_deg!=null||a.face_toward))o.gamma=facingArg(a,o.x,o.y,o.gamma);
-    placements.push(o);changed();
     var sys=nearestAlarm(o.x,o.y);
+    if(o.alarm&&sys)o.alarmId=sys.key;       // it raises that one, as a camera placed by hand does
+    placements.push(o);changed();
     return {ok:true,placed:[brief(o)],mounted_on:m.on?(/^colbox/i.test(m.on)?"a wall":m.on):"its own post, 3 m up (no wall within 4 m)",
       alarm:o.alarm?(sys?sys.name:"none near: add an alarm system"):"does not raise the alarm",ids:[o.uid],at:{x:o.x,y:o.y}};
   };
@@ -14872,8 +15077,9 @@ window.StudioAI={
   designAdd:function(id){
     var d=AIB.design(id);
     if(!d)return Promise.reject(new Error("That design is no longer here"));
-    return GroupStore.save({name:d.name,data:d.data,summary:d.summary,kind:d.kind,description:d.description||""}).then(function(g){
-      SEC_OPEN[d.kind==="character"?"ai":"obj"]=true;
+    var cat=guessItemCat(d.data,d.kind);
+    return GroupStore.save({name:d.name,data:d.data,summary:d.summary,kind:d.kind,cat:cat,description:d.description||""}).then(function(g){
+      SEC_OPEN.mine=true;g.catTitle=itemCatTitle(cat);
       return loadGroups().then(function(){return g});
     });
   },

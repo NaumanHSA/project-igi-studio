@@ -17,6 +17,7 @@ import base64, binascii, collections, heapq, json, math, os, pathlib, re, struct
 from studio import paths
 from studio.qvm import source as qvm_source
 from studio.build.objects import set_soldier_team
+from studio.build import taskargs as TASKARGS
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.build.plan), do not import it. The guard below
 # turns an accidental import into a clear error instead of a surprise.
@@ -1294,12 +1295,37 @@ if _surface is not None and SOLIDS:
             (" (%s)" % ", ".join("%s %d" % kv for kv in by.most_common())) if by else "",
             ("; node(s) %s left inside buildings removed" % buried) if buried else ""))
 
+# The plan's own walkway points go in first, so the interiors below see them:
+# a building the mission puts beside walkways it laid joins those (on an empty
+# map the level's own were often too far, and it got no floor nodes at all),
+# and its doorways link to them.
+
+def _link_ok(a, b):
+    return _surface is None or _surface.blocked(a, b) is None
+
+
+for pn in plan_nodes:
+    gid = str(pn.get("graph"))
+    if edit_graph(gid, "new node %s" % pn.get("uid")) is None:
+        continue
+    try:
+        g = edited_graphs[gid]
+        g.grow(1)
+        nid, linked = g.add_node((pn["x"], pn["y"], pn["z"]), origin_of(gid),
+                                 float(pn.get("link", 15.0)), link_ok=_link_ok)
+        node_ids[pn.get("uid")] = nid
+        pn["_id"], pn["_linked"] = nid, linked
+    except GE.GraphError as e:
+        errors.append("new node at %.1f, %.1f: %s" % (pn["x"], pn["y"], e))
+
+
 # Interiors: the template's nodes and links, then its doorways joined to the yard
 TEMPLATE_IDS = {}               # interior key -> (gid, [node ids])
 
 
 def graph_near(x, y, z, radius=40.0):
-    """The graph with a node nearest to a building's ground floor, for it to join."""
+    """The graph with a node nearest to a building's ground floor, for it to join
+    (the plan's own new nodes count: they are in their graphs by now)."""
     best = None
     for gid in origins:
         g = peek_graph(gid)
@@ -1328,9 +1354,13 @@ for key, o, t, label in INTERIORS:
     merge = key in _world_by_ref
     tf = [f for f, _ in t["floors"]]
     own = own_nodes_of(o) if merge else {}
-    # it joins the graph its existing nodes are on, else the one nearest its lowest new floor
+    # it joins the graph its existing nodes are on, else the one nearest its lowest new floor.
+    # A platform with no way in (a watchtower's) needs no yard: as the game gives each
+    # tower sniper a graph of his own - a node or a few up there, linked to nothing
+    # below - it joins the nearest graph however far that is, as nodes of their own.
     gid = max(own, key=lambda k: len(own[k])) if own else \
-        str(o.get("graph") or graph_near(o["x"], o["y"], o["z"]) or "")
+        str(o.get("graph") or graph_near(o["x"], o["y"], o["z"]) or
+            (graph_near(o["x"], o["y"], o["z"], radius=1e9) if not t["exits"] else None) or "")
     if gid not in origins:
         warnings.append("%s: no navmesh within 40 m - it gets no floor nodes, and guards "
                         "inside it will stand at ground level" % label)
@@ -1436,24 +1466,6 @@ for s in soldiers:
                         % (s.get("name"), job[0], s.get("graph")))
         s["graph"] = job[0]
 
-
-def _link_ok(a, b):
-    return _surface is None or _surface.blocked(a, b) is None
-
-
-for pn in plan_nodes:
-    gid = str(pn.get("graph"))
-    if edit_graph(gid, "new node %s" % pn.get("uid")) is None:
-        continue
-    try:
-        g = edited_graphs[gid]
-        g.grow(1)
-        nid, linked = g.add_node((pn["x"], pn["y"], pn["z"]), origin_of(gid),
-                                 float(pn.get("link", 15.0)), link_ok=_link_ok)
-        node_ids[pn.get("uid")] = nid
-        pn["_id"], pn["_linked"] = nid, linked
-    except GE.GraphError as e:
-        errors.append("new node at %.1f, %.1f: %s" % (pn["x"], pn["y"], e))
 
 _edited_tables = {gid: g.build_table() for gid, g in edited_graphs.items()}
 
@@ -1637,10 +1649,23 @@ for o in WORLD:
             _controls.append((o["x"], o["y"], int(c.group(1))))
 
 
+def own_alarm_near(x, y):
+    """The plan key of the mission's own alarm system nearest (x, y), or None."""
+    own = [k for k in alarm_kit if k.get("type") == "alarmctl"]
+    if not own:
+        return None
+    k = min(own, key=lambda k: math.hypot(float(k["x"]) - x, float(k["y"]) - y))
+    return "own:%s" % k.get("uid")
+
+
 def alarm_control_near(x, y, reach=80.0):
+    """The alarm a guard with none of his own answers: the one the level's guards
+    near him answer, else the mission's own nearest system - on an empty map, or
+    far from the level's guards, he answered none, and nothing came when the
+    mission's own alarm rang."""
     near = [(math.hypot(cx - x, cy - y), c) for cx, cy, c in _controls]
     near = [p for p in near if p[0] <= reach]
-    return min(near)[1] if near else None
+    return min(near)[1] if near else alarm_ctl_id(own_alarm_near(x, y))
 
 
 def is_tower(o):
@@ -1903,6 +1928,8 @@ def cam_params(c):
 
 
 CAM_LINKS = []                  # (task id, x, y) of cameras that raise the alarm
+LEVEL_ALARMS = bool(re.search(r'Task_New\(\d+, "AlarmControl"', src))
+CAM_OWN = []                    # the own system each camera with none of its own joined
 CAM_ALARM = None                # an alarm made for them when the level has none
 def cam_on(c):
     """When a new camera is on: like the level's nearest camera, so a terminal or
@@ -1924,14 +1951,30 @@ for c in cameras:
     if on != "1":
         report.append("camera %s is on while: %s" % (c.get("name") or cid, on.replace("\\n", " ")))
     if c.get("alarm", True) and not c.get("alarmId"):
-        CAM_LINKS.append((cid, c["x"], c["y"]))
-if CAM_LINKS and not re.search(r'Task_New\(\d+, "AlarmControl"', src):
-    CAM_ALARM = take_id()
+        # a level with no alarm of its own (an empty map): the mission's own
+        # nearest system, as a camera placed by hand joins it
+        if not LEVEL_ALARMS and own_alarm_near(c["x"], c["y"]):
+            c["alarmId"] = own_alarm_near(c["x"], c["y"])
+            CAM_OWN.append(c["alarmId"])
+        else:
+            CAM_LINKS.append((cid, c["x"], c["y"]))
+if CAM_LINKS and not LEVEL_ALARMS:
+    # no alarm anywhere: one of their own, written as the mission's own systems
+    # are - switched on, and an EditVariable that holds the alarm on once it is
+    # raised. It was written one parameter short (no Alarm Expression) and off,
+    # and the game refused the level: "Too few parameters in line 0".
+    CAM_ALARM, _cam_var = take_id(), take_id()
     blocks.append('Task_New(%d, "AlarmControl", "Camera alarm", 0, 0, 0, 0, 0, 0, "", "", 1, 0.5, 0.5, 1, 0, 5, 4, "", '
-                  '"explo_02_m", "", 4.0, "!AlarmControl_%d.isAlarm && (%s)"), %s'
-                  % (CAM_ALARM, CAM_ALARM, " || ".join("SCamera_%d.isDetection" % t for t, _, _ in CAM_LINKS), EOL))
+                  '"explo_02_m", "1", 4.0, "!AlarmControl_%d.isAlarm && (%s)", "EditVariable_%d.nValue == 1"), %s'
+                  % (CAM_ALARM, CAM_ALARM, " || ".join("SCamera_%d.isDetection" % t for t, _, _ in CAM_LINKS), _cam_var, EOL))
+    blocks.append('Task_New(%d, "EditVariable", "Camera alarm state", 0, 0, 0, 0, '
+                  '"EditVariable_%d.nValue == 0 && AlarmControl_%d.isTrigger", ""), %s' % (_cam_var, _cam_var, CAM_ALARM, EOL))
     CAM_LINKS = []
-    warnings.append("this level has no alarm: the cameras got one of their own, which no guard answers")
+    warnings.append("this level has no alarm: the cameras got one of their own, which no guard answers - "
+                    "place an alarm system and they raise it")
+if CAM_OWN:
+    report.append("%d camera(s) with no alarm of their own raise the mission's nearest alarm system (this level has none)"
+                  % len(CAM_OWN))
 if cameras:
     report.append("cameras: %d placed, %d raise the alarm" % (len(cameras), sum(1 for c in cameras if c.get("alarm", True))))
 
@@ -3329,6 +3372,55 @@ def _quoted_spans(text, start, end):
 
 
 EMPTY_SLOTS = ", ".join(['"", -1, "", ""'] * 6)
+
+
+# ---- a time limit: the mission's own clock
+# LevelFlow's "Interface timer enabled" and "Max level play time" (level 7 ships
+# with 1200 s) sit right after its Failed expression. The game's own "Max level
+# play time" only counts (in its small font); it does not end the mission (found
+# in game 2026-09-18). So the mission keeps its own clock: a LevelTimer from the
+# start, messages as time runs short, and at zero a "Time is up" message
+# LevelFlow fails on, as an event's failure does. They go inside the task tree,
+# where the marker is: LevelFlow is a statement of its own after the tree, and a
+# second task beside it is a syntax error (a time limit never compiled:
+# "unexpected ','").
+SETTINGS = plan.get("settings") or {}
+TIME_LIMIT = int(float(SETTINGS.get("timeLimit") or 0))
+TIME_UP = None              # the "Time is up" message LevelFlow fails on
+
+
+def _levelflow_timer(text):
+    """LevelFlow's task, its quoted strings, and its two timer fields after
+    Failed - or None for each that is not there."""
+    lf = re.search(r'Task_New\(-?\d+, "LevelFlow"', text)
+    sp = _quoted_spans(text, lf.start(), task_end(text, lf.start())) if lf else []
+    m = re.compile(r'\s*,\s*(TRUE|FALSE|0|1)\s*,\s*(%s)' % NUM).match(text, sp[3][1]) if len(sp) >= 4 else None
+    return lf, sp, m
+
+
+if TIME_LIMIT > 0:
+    _lf, _sp, _tm = _levelflow_timer(out_src)
+    if not _lf:
+        warnings.append("this level has no LevelFlow task - no time limit")
+    elif not _tm:
+        warnings.append("the level's LevelFlow has a layout this editor does not rewrite - no time limit")
+    elif MARKER not in out_src:
+        warnings.append("no place in the level's task tree for the mission's clock - no time limit")
+    else:
+        _clock, TIME_UP = take_id(), take_id()
+        _tasks = ['Task_New(%d, "LevelTimer", "Mission clock", 0, 0, 0, 0, 0, 0, "1", "", FALSE)' % _clock]
+        for _i, (_left, _words) in enumerate(((300, "5 minutes left"), (60, "1 minute left"), (10, "10 seconds left"))):
+            if TIME_LIMIT - _left < 15:
+                continue
+            _key = PREFIX + "T%d" % _i
+            LANG["messages.res"][_key] = _words
+            _tasks.append('Task_New(%d, "StatusMessage", "Time left", 0, 0, 0, 0, 0, 0, "LevelTimer_%d.nTick > %d*GAME_FREQUENCY", '
+                          '"%s", "", "message", TRUE, FALSE, 3.0)' % (take_id(), _clock, TIME_LIMIT - _left, _key))
+        LANG["messages.res"][PREFIX + "TUP"] = "Time is up"
+        _tasks.append('Task_New(%d, "StatusMessage", "Time is up", 0, 0, 0, 0, 0, 0, "LevelTimer_%d.nTick > %d*GAME_FREQUENCY", '
+                      '"%s", "", "fail", TRUE, FALSE, 2.0)' % (TIME_UP, _clock, TIME_LIMIT, PREFIX + "TUP"))
+        out_src = out_src.replace(MARKER, "".join(t + ", " + EOL for t in _tasks) + MARKER, 1)
+
 if OBJ_TASK_IDS.get("slots"):
     # The level's own numbered markers carry the level's numbering. The mission's
     # are written over them where there are enough, so the map computer's list of
@@ -3401,47 +3493,20 @@ if OBJ_TASK_IDS.get("done") or EVENT_FAILS:
 # level ships (LevelFlow, FlatSky) or adds the one it may lack (RainEffect), in
 # place, so the level keeps everything else it had. Parameters as the levels
 # declare them (docs/TASK-PARAMETERS.md).
-SETTINGS = plan.get("settings") or {}
 
 
 def _settings(text):
-    # a time limit: LevelFlow's "Interface timer enabled" and "Max level play time"
-    # (level 7 ships with 1200 s), right after its Failed expression
-    # The game's own "Max level play time" only counts (in its small font); it does
-    # not end the mission (found in game 2026-09-18). So the mission keeps its own
-    # clock: a LevelTimer from the start, messages as time runs short, and at zero
-    # a "Time is up" message LevelFlow fails on, as an event's failure does.
-    tl = int(float(SETTINGS.get("timeLimit") or 0))
-    if tl > 0:
-        lf = re.search(r'Task_New\(-?\d+, "LevelFlow"', text)
-        sp = _quoted_spans(text, lf.start(), task_end(text, lf.start())) if lf else []
-        m = re.compile(r'\s*,\s*(TRUE|FALSE|0|1)\s*,\s*(%s)' % NUM).match(text, sp[3][1]) if len(sp) >= 4 else None
-        if not lf:
-            warnings.append("this level has no LevelFlow task - no time limit")
-        elif not m:
-            warnings.append("the level's LevelFlow has a layout this editor does not rewrite - no time limit")
-        else:
-            shown = SETTINGS.get("showTimer", True) is not False
-            cid, fid = take_id(), take_id()
-            tasks = ['Task_New(%d, "LevelTimer", "Mission clock", 0, 0, 0, 0, 0, 0, "1", "", FALSE)' % cid]
-            for i, (left, words) in enumerate(((300, "5 minutes left"), (60, "1 minute left"), (10, "10 seconds left"))):
-                if tl - left < 15:
-                    continue
-                key = PREFIX + "T%d" % i
-                LANG["messages.res"][key] = words
-                tasks.append('Task_New(%d, "StatusMessage", "Time left", 0, 0, 0, 0, 0, 0, "LevelTimer_%d.nTick > %d*GAME_FREQUENCY", '
-                             '"%s", "", "message", TRUE, FALSE, 3.0)' % (take_id(), cid, tl - left, key))
-            LANG["messages.res"][PREFIX + "TUP"] = "Time is up"
-            tasks.append('Task_New(%d, "StatusMessage", "Time is up", 0, 0, 0, 0, 0, 0, "LevelTimer_%d.nTick > %d*GAME_FREQUENCY", '
-                         '"%s", "", "fail", TRUE, FALSE, 2.0)' % (fid, cid, tl, PREFIX + "TUP"))
-            # the countdown on screen, and the limit the game itself keeps
-            text = text[:sp[3][1]] + ", %s, %.1f" % ("TRUE" if shown else "FALSE", tl) + text[m.end():]
-            # LevelFlow fails when the last message has shown
-            old = text[sp[3][0] + 1:sp[3][1] - 1].strip() or "FALSE"
-            text = text[:sp[3][0]] + '"(%s) || StatusMessage_%d.nTicksSinceFinishedDisplay > 1 * GAME_FREQUENCY"' % (old, fid) + text[sp[3][1]:]
-            at = task_end(text, lf.start())
-            text = text[:at] + "".join(", " + EOL + t for t in tasks) + text[at:]
-            report.append("time limit %d:%02d%s, the mission fails when it runs out" % (tl // 60, tl % 60, ", on screen" if shown else ""))
+    # a time limit: its clock is in the task tree already (TIME_UP); here
+    # LevelFlow gets the countdown on screen, the limit the game itself keeps,
+    # and fails when "Time is up" has shown
+    if TIME_UP:
+        lf, sp, m = _levelflow_timer(text)
+        shown = SETTINGS.get("showTimer", True) is not False
+        text = text[:sp[3][1]] + ", %s, %.1f" % ("TRUE" if shown else "FALSE", TIME_LIMIT) + text[m.end():]
+        old = text[sp[3][0] + 1:sp[3][1] - 1].strip() or "FALSE"
+        text = text[:sp[3][0]] + '"(%s) || StatusMessage_%d.nTicksSinceFinishedDisplay > 1 * GAME_FREQUENCY"' % (old, TIME_UP) + text[sp[3][1]:]
+        report.append("time limit %d:%02d%s, the mission fails when it runs out"
+                      % (TIME_LIMIT // 60, TIME_LIMIT % 60, ", on screen" if shown else ""))
     # rain or snow: RainEffect (Is Rain, Traceline start, Traceline end, Is Active, Rain Alpha)
     fall = SETTINGS.get("fall") or ""
     if fall in ("none", "rain", "snow"):
@@ -3702,6 +3767,17 @@ if FLAT_PATCHES:
     out_src = FL.add_tasks(out_src, FLAT_PATCHES, _task_z, task_end, EOL)
 out_src = _settings(out_src)
 out_src, _bit = _paint(out_src)
+# The game refuses a task with more or fewer parameters than its kind takes,
+# with nothing but "Too few parameters in line 0 of file ...objects.qsc" (a
+# camera alarm one short did it, 2026-09-25). Every task is held to the count
+# the game's own levels write for its kind before anything is kept.
+_bad = TASKARGS.mismatches(out_src)
+if _bad:
+    print("PLAN REJECTED - %d problem(s):" % len(_bad))
+    for _t, _name, _n, _want in _bad[:20]:
+        print("   x the studio wrote a %s task (%s) with %d parameters where the game's take %s: the game would "
+              "refuse the mission. This is a studio bug - please report it" % (_t, _name, _n, " or ".join(map(str, _want))))
+    sys.exit(1)
 (OUT / "objects.qsc").write_bytes(out_src.encode("latin1"))
 # the mission's own strings, for the installer to put in the language files
 (OUT / "language.json").write_text(json.dumps(LANG, indent=1), encoding="utf-8")
