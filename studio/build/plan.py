@@ -2012,12 +2012,16 @@ for kit in alarm_kit:
     on = alarm_expr_of(key)
     g = round(float(kit.get("gamma") or 0), 5)
     if kit["type"] == "switch" and kit.get("gate"):
-        # a gate's switch: the gate panel, as level 10 opens its gate with one
+        # a gate's switch: the gate panel, as level 10 opens its gate with one. It
+        # stays pressed once pressed, unless it was kept from a level with one
+        # that springs back; one kept from a level wears that switch's own look
         sid = take_id()
         kit["_tid"] = sid
-        blocks.append('Task_New(%d, "Switch", "%s", %s, %s, %s, 0, 0, %s, "1", TRUE, '
-                      '"202_01_1", "202_01_1", "202_01_1", "202_01_1", "202_01_1", FALSE), %s'
-                      % (sid, _qstr_early(kit.get("name") or "Gate switch", 40), q(kit["x"]), q(kit["y"]), q(kit["z"]), g, EOL))
+        _swm = kit.get("model") if re.match(r"^\d{3}_\d{2}_\d$", str(kit.get("model") or "")) else "202_01_1"
+        blocks.append('Task_New(%d, "Switch", "%s", %s, %s, %s, 0, 0, %s, "1", %s, '
+                      '"%s", "%s", "%s", "%s", "%s", FALSE), %s'
+                      % (sid, _qstr_early(kit.get("name") or "Gate switch", 40), q(kit["x"]), q(kit["y"]), q(kit["z"]), g,
+                         "FALSE" if kit.get("stays") is False else "TRUE", _swm, _swm, _swm, _swm, _swm, EOL))
         continue
     if kit["type"] == "switch":
         sid = take_id()
@@ -2135,6 +2139,40 @@ def _door_angles(head, fixed, heading):
     return (f[0], f[1], heading)
 
 
+# A door kept from a level works as it did there: its locked, open and close
+# expressions are the level's own (studio/extract/levels.py door_wire), with the
+# tasks they named - the keypad the outer radar gate of level 8 opens on
+# (Door_239.isOpen), the switch of the inner one - turned into references to
+# the placements that are those things now ({@uid}), named here by their new
+# task ids. One whose reference is gone from the mission opens by hand.
+OWN_TASK = {}                   # uid -> "Door_12" / "Switch_40"
+for _g in OWN_GATES:
+    if _g.get("uid"):
+        OWN_TASK[_g["uid"]] = "Door_%d" % _g["_tid"]
+for _k in alarm_kit:
+    if _k.get("type") == "switch" and _k.get("uid") and "_tid" in _k:
+        OWN_TASK[_k["uid"]] = "Switch_%d" % _k["_tid"]
+WIRE_REF = re.compile(r"\{@([^}]+)\}")
+
+
+def _wired(expr):
+    """A kept door's expression with its references named: None when one of them
+    is no longer in the mission."""
+    gone = []
+
+    def name(m):
+        t = OWN_TASK.get(m.group(1))
+        if not t:
+            gone.append(m.group(1))
+        return t or ""
+    out = WIRE_REF.sub(name, str(expr or "")).replace('"', "'")
+    return None if gone else out
+
+
+def _timed_close(seconds):
+    return "this.nDoorOpenTicks > %d*GAME_FREQUENCY" % max(1, min(600, int(round(float(seconds)))))
+
+
 for _g in OWN_GATES:
     _d = _g["door"]
     _kl = _kit_leaf(_g)
@@ -2143,7 +2181,20 @@ for _g in OWN_GATES:
     _dm = DOOR_DEFAULTS.get(_g.get("model") or "") or {}
     _kind = _d.get("kind") or "gate"
     _sw = next((k for k in alarm_kit if k.get("uid") == _d.get("switch") and "_tid" in k), None)
-    if _kind == "gate":
+    _w = _d.get("wire") if isinstance(_d.get("wire"), dict) else None
+    _pickable = False
+    if _w is not None and _d.get("liftFloor") is None:
+        _open, _locked = _wired(_w.get("open")), _wired(_w.get("locked"))
+        if _open is None or _locked is None:
+            _open, _locked = "", ""
+            warnings.append("%s was opened by something no longer in the mission - the player opens it by hand"
+                            % (_g.get("name") or "a door"))
+        _close = TIMED_CLOSE if _w.get("close") is None else _wired(_w.get("close"))
+        if _close is None:
+            _close = TIMED_CLOSE
+        _pickable = bool(_d.get("pickable"))
+        _sounds = _d.get("sounds") if _d.get("sounds") is not None else (_dm.get("sounds") or DOOR_SOUNDS)
+    elif _kind == "gate":
         # the switch stays pressed while the gate is open, and pressing it again
         # lets it go: the leaves follow it both ways
         _open = "Switch_%d.isPressed" % _sw["_tid"] if _sw else "0"
@@ -2190,6 +2241,11 @@ for _g in OWN_GATES:
         if NAMES_TASK.search(_close):
             _close = TIMED_CLOSE            # a plan made before this was noticed
         _sounds = _d.get("sounds") or _dm.get("sounds") or DOOR_SOUNDS
+    # the panel's "Closes by itself": after so many seconds, or never
+    if _d.get("autoClose") is False:
+        _close = ""
+    elif _d.get("autoClose") is True:
+        _close = _timed_close(_d.get("closeAfter") or (GATE_OPEN_S if _kind == "gate" and _w is None else 6))
     _stop = _d.get("stop") or _dm.get("stop") or [0, 0]
     _slider = _d.get("slider", _dm.get("slider", 0))
     _a, _b, _c = _door_angles(_d.get("head", _dm.get("head", 2)), _d.get("fixed", _dm.get("fixed")),
@@ -2198,20 +2254,23 @@ for _g in OWN_GATES:
     _pick_t = _d.get("pickTime", _dm.get("pickTime", 4.0))
     _max_a = _d.get("maxAngle", _dm.get("maxAngle", 0))
     _snd = (list(_sounds) + ["", "", ""])[:3]
-    blocks.append('Task_New(%d, "Door", "%s", %s, %s, %s, %s, %s, %s, %s, %s, %s, "%s", %s, %s, FALSE, %s, "%s", "%s", "%s", '
+    blocks.append('Task_New(%d, "Door", "%s", %s, %s, %s, %s, %s, %s, %s, %s, %s, "%s", %s, %s, %s, %s, "%s", "%s", "%s", '
                   '"%s", "%s", "%s"), %s'
                   % (_g["_tid"], _qstr_early(_g.get("name") or ("Gate" if _kind == "gate" else "Door"), 40),
                      q(_g["x"]), q(_g["y"]), q(_g["z"]),
-                     repr(round(float(_stop[0]), 3)), repr(round(float(_stop[1]), 3)), repr(round(float(_slider), 3)),
+                     repr(round(float(_stop[0]), 4)), repr(round(float(_stop[1]), 4)), repr(round(float(_slider), 6)),
                      repr(round(_a, 5)), repr(round(_b, 5)), repr(round(_c, 5)),
                      _g.get("model") or "304_01_1", repr(round(float(_max_a), 3)), repr(round(float(_open_t), 3)),
-                     repr(round(float(_pick_t), 3)), _locked, _open, _close.replace('"', "'"),
+                     "TRUE" if _pickable else "FALSE", repr(round(float(_pick_t), 3)), _locked, _open, _close.replace('"', "'"),
                      _snd[0], _snd[1], _snd[2], EOL))
 _n_gates = sum(1 for _g in OWN_GATES if (_g["door"].get("kind") or "gate") == "gate")
+_n_wired = sum(1 for _g in OWN_GATES if isinstance(_g["door"].get("wire"), dict))
 if _n_gates:
     report.append("%d gate leaf(s) of yours, opened by their switch" % _n_gates)
 if len(OWN_GATES) - _n_gates:
     report.append("%d door(s) of yours that open in the game" % (len(OWN_GATES) - _n_gates))
+if _n_wired:
+    report.append("%d door(s) and gate leaf(s) kept from a level, working as they did there" % _n_wired)
 
 # ---------------------------------------------------------------- lifts of yours
 # A lift as the game writes its own (level 12's Guard HQ, level 13, level 5):

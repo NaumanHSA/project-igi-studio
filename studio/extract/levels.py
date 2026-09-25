@@ -10,6 +10,7 @@
 # "Error in graph NNNN routenet, Node #A to #B" at level load.
 import json, math, os, re, sys, pathlib, collections
 from studio import paths as studio_paths
+from studio.build import taskargs
 from studio.qvm import source as qvm_source
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.extract.levels), do not import it. The guard below
@@ -129,6 +130,42 @@ def _task_end(text, start):
                     return j + 1
         j += 1
     return len(text)
+
+
+def _plain_args(text, start):
+    """The values of the task starting at `start`, after its id, kind and name,
+    strings unquoted. A task nested in it is left out: level 8 writes the second
+    leaf of its inner radar gate inside the first."""
+    out = []
+    for a, b in taskargs._args(text, text.index("(", start))[3:]:
+        v = text[a:b].strip()
+        if v.startswith("Task_New("):
+            continue
+        out.append(v[1:-1] if len(v) >= 2 and v[0] == '"' and v[-1] == '"' else v)
+    return out
+
+
+def _real(v, default=0.0):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def door_wire(v):
+    """How a door of the level works, as its task has it: where it slides and
+    how fast, whether its lock can be picked and in how long, and its locked,
+    open and close expressions word for word - the level's own wiring, which
+    names other tasks by id. Level 8's radar: the outer gate leaves are locked
+    ("1"), open on "Door_239.isOpen" and never close (""); 239 is the keypad by
+    them, a door that does not move (213_01_1), locked until picked
+    ("!Door_239.isPicked") in 4 s. An area kept from a level keeps this, so its
+    gates work as they did (the editor rewrites the ids, the build writes them)."""
+    return {"stop": [round(_real(v[3]), 4), round(_real(v[4]), 4)], "slider": round(_real(v[5]), 6),
+            "orient": [round(_real(v[6]), 5), round(_real(v[7]), 5), round(_real(v[8]), 5)],
+            "maxAngle": _real(v[10]), "openTime": _real(v[11]), "pickable": v[12].upper() == "TRUE",
+            "pickTime": _real(v[13]), "locked": v[14], "open": v[15], "close": v[16],
+            "sounds": list(v[17:20])}
 
 
 def _strings(seg):
@@ -370,6 +407,15 @@ def extract(level, src_path=None, ai_dir=None):
                 sm = re.match(r'\s*,\s*(?:TRUE|FALSE)\s*,\s*"([^"]*)"', src[mm.end():mm.end() + 64])
                 if sm:
                     objects[-1]["mesh"] = sm.group(1)
+                # the flag: it stays pressed once pressed (level 8's inner radar
+                # gate switch, level 10's gate switch), or springs back (a lift's)
+                vals = _plain_args(src, mm.start())
+                if len(vals) >= 8:
+                    objects[-1]["stays"] = vals[7].upper() == "TRUE"
+            if qtype == "Door":
+                vals = _plain_args(src, mm.start())
+                if len(vals) >= 20:
+                    objects[-1]["wire"] = door_wire(vals)
             if qtype == "StationaryGun":
                 # a machine gun on its stand (326_01_1): the gun's own model
                 # (123_02_1), then its weapon and how far it swings. The level's

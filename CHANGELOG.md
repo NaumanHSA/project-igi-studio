@@ -37,6 +37,10 @@ by dragging, and fixes for a mission that stopped the game.
   the switch that opens them, with no fence panels either side.
 - **A ⋮ menu on each of Your items:** edit its name and description, or
   delete it from the inventory.
+- **Doors and gates: closes by itself, or stays open.** A door or gate of
+  yours has a section in its panel saying how it opens, and *Closes by
+  itself* (after so many seconds) or not - then once open it stays open. The
+  leaves of one gateway change together.
 - **An item's preview is all of it:** hovered, a compound shows as the whole
   compound - its fence, gate, towers, buildings and guards, as one model -
   and what it covers. It showed the first thing in it, often a guard.
@@ -46,10 +50,16 @@ by dragging, and fixes for a mission that stopped the game.
 - **Fences, walls, gates and small things are placed on their own.** Only a
   real building brings the doors, lift and furniture the game gives it: a fence
   panel came with an electricity pole and doors, a wall with doors.
-- **An area kept from a level keeps its gates and doors**, as doors of yours
-  that open, its cameras and alarm buttons (joined to the nearest alarm system)
-  and the look of its other switches. The player start and the machine guns
-  stay behind.
+- **An area kept from a level keeps its gates and doors working as they did
+  there:** each its own lock, what opens it and whether it closes - level 8's
+  outer radar gate opens from its keypad once its lock is picked, and stays
+  open; its inner gate opens from its switch. A switch a kept door opens on
+  works; its cameras and alarm buttons join the nearest alarm system. The
+  player start and the machine guns stay behind. (The level data is read
+  again once, version 7, for every door's and switch's wiring.)
+- **What stood above the ground stays at its height:** a switch on a gate
+  post, a keypad on a wall, a camera on a pole, placed from Your items, stand
+  where they stood above the ground. They were set down on it.
 - **The level's switches are named for what they do:** an alarm button only
   when an alarm system listens to it; a gate's, a lift's or a door's switch by
   its own name, or *Switch*. Every one of them was called an alarm button.

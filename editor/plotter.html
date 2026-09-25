@@ -2258,7 +2258,7 @@ function settle(o,explicit){
   if(explicit)pt.z=o.z-lift;
   var body=planContext();body.points=[pt];
   if(o.type==="building")body.objects=body.objects.filter(function(q){return !(q.x===o.x&&q.y===o.y&&q.model===o.model)});
-  fetch("api/ground",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+  return fetch("api/ground",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
     .then(function(r){return r.json()}).then(function(j){
       var a=j&&j.ok&&j.points&&j.points[0];
       if(!a||a.z==null||o._gq!==seq||o.x!==x0||o.y!==y0)return;   // gone, or moved again since
@@ -5061,7 +5061,7 @@ function previewModel(o){
   if(o.type==="soldier")return armedModel(o.model,o.weapon);
   if(o.type==="pickup")return window.MeshSprites&&MeshSprites.pickupModel(o.pickupId||o.model);
   if(o.type==="player")return "000_01_1";
-  if(o.type==="switch")return o.own?(o.gate?"202_01_1":"234_01_1"):(o.mesh||o.model);
+  if(o.type==="switch")return o.own?(o.gate?(o.model||"202_01_1"):"234_01_1"):(o.mesh||o.model);
   return o.model;
 }
 function previewHtml(o){
@@ -5217,13 +5217,15 @@ function objectInspector(el){
     if(o.type==="door")h+='<p class="hint" style="margin:7px 0 0">Doors slide to a stop position stored with them, so they are not moved here.</p>'+doorSection(o);
   }
   if(own)h+='<div class="field" style="margin-top:7px"><span class="lbl">Label</span><input id="inm" value="'+esc(o.name)+'"></div>';
+  if(own)h+=ownDoorSection(o);
   if(own&&o.type==="building"&&!segInfo(o.model))h+=mapLabelSection(o);
   if(own&&o.type==="building"&&!segInfo(o.model))h+=flattenSection(o);
   if(o.model&&!isSoldier&&!isPickup)h+=textureSection(o);
   if(hasLayout(o))h+=interiorSection(o);
   if(isSoldier)h+=patrolSection(o);
   if(o.type==="camera")h+=cameraSection(o);
-  if(/^(camera|switch|siren|alarmlight|alarmctl)$/.test(o.type)||(o.own&&o.type==="soldier"))h+=alarmSection(o);
+  if(own&&o.type==="switch"&&o.gate)h+=gateSwitchSection(o);
+  else if(/^(camera|switch|siren|alarmlight|alarmctl)$/.test(o.type)||(o.own&&o.type==="soldier"))h+=alarmSection(o);
   var acts='<button class="btn act ro-ok" id="i3d" title="V">'+IC.cube+(move&&canEditQuiet()?'View and place in 3D':'View in 3D')+'</button>';
   if(!own&&move&&o.type!=="soldier"&&o.type!=="camera")
     acts+='<button class="btn act" id="isettle" title="G">'+IC.ground+
@@ -5264,6 +5266,7 @@ function objectInspector(el){
   if(o.type==="camera")bindCameraSection(o);
   bindAlarmSection(o);
   bindDoorSection(o);
+  bindOwnDoorSection(o);
   if($("i-ai"))$("i-ai").addEventListener("change",function(){setProp(o,{ai:$("i-ai").value});renderSide();draw()});
   if($("i-team"))$("i-team").addEventListener("change",function(){
     var v=$("i-team").value,box=$("i-teamid");
@@ -6985,7 +6988,7 @@ function groupData(list){
   if(kitted.length)list=list.filter(function(o){
     return o.own||o.type==="navnode"||kitted.indexOf(o)>=0||!kitted.some(function(b){return inBody(b,o.x,o.y,0)&&withinHeight(b,o.z)});
   });
-  var c=groupCentre(list),items=[],nodes=[];
+  var c=groupCentre(list),items=[],nodes=[],kept=keptTasks(list);
   list.forEach(function(o){
     if(o.type==="navnode"){nodes.push({old:o.uid,graph:o.graph,dx:o.x-c.x,dy:o.y-c.y,z:o.z});return}
     var p;
@@ -7003,19 +7006,62 @@ function groupData(list){
     // An alarm button of the level's is an alarm button of yours; the others
     // (a gate's, a lift's) open things that don't come along, so only their look does
     else if(o.type==="switch"){
-      var ab=alarmOf(o);
+      var ab=alarmOf(o),snm=o.name&&!/^\d+$/.test(o.name)?o.name.replace(/([a-z])([A-Z])/g,"$1 $2"):"Switch";
       p=ab?{type:"switch",kind:"switch",model:(alarmKind("ALARM_BUTTON")||{}).model||"234_01_1",name:"Alarm button",mount:""}
-        :{type:"building",kind:"object",model:o.mesh||"202_01_1",name:o.name&&!/^\d+$/.test(o.name)?o.name.replace(/([a-z])([A-Z])/g,"$1 $2"):"Switch"};
+        // one a kept door opens on (level 8's inner radar gate): a switch of yours that works as it did
+        :kept[o.id]==="switch"?{type:"switch",kind:"alarm",gate:true,model:o.mesh||"202_01_1",name:snm==="Switch"?"Gate switch":snm,stays:o.stays!==false,mount:"",alarmId:null}
+        :{type:"building",kind:"object",model:o.mesh||"202_01_1",name:snm};
     }
-    // a door or a gate of the level's: one of yours that opens
-    else if(o.type==="door")p={type:"building",kind:"object",model:o.model,name:displayName(o),door:true};
+    // a door or a gate of the level's: one of yours that works as it did there,
+    // or (level data from before its wiring was read) one the player opens
+    else if(o.type==="door")p={type:"building",kind:"object",model:o.model,name:displayName(o),door:o.wire?keptDoor(o,kept):true};
     else if(o.model&&!/^\d+$/.test(o.model)){p={type:"building",kind:"object",model:o.model,name:displayName(o)};if(kitted.indexOf(o)>=0)p.kit=true}
     else return;
     p.own=true;p.dx=o.x-c.x;p.dy=o.y-c.y;p.z=o.z;p.gamma=o.gamma||0;
     delete p.x;delete p.y;
+    // what the kept doors name it by, and how high above the ground it stood
+    if(!o.own&&o.id>=0&&kept[o.id])p.old="lv:"+o.id;
+    var g0=groundAt(o.x,o.y);if(g0!=null)p.up=+(o.z-g0).toFixed(3);
     items.push(p);
   });
   return {v:1,level:LV,base:BASE_LEVEL,z:list.reduce(function(a,o){return a+o.z},0)/list.length,items:items,nodes:nodes};
+}
+// The level's doors among what is kept, and the switches they name, by task id:
+// what a kept door's expressions can go on naming ("door" or "switch")
+function keptTasks(list){
+  var kept={},sw={},doors=list.filter(function(o){return !o.own&&o.type==="door"&&o.wire});
+  doors.forEach(function(o){if(o.id>=0)kept[o.id]="door"});
+  list.forEach(function(o){if(!o.own&&o.type==="switch"&&o.id>=0)sw[o.id]=1});
+  doors.forEach(function(o){["locked","open","close"].forEach(function(k){
+    String(o.wire[k]||"").replace(/\\n/g," ").replace(/\bSwitch_(\d+)\b/g,function(m,id){if(sw[id])kept[id]="switch";return m});
+  })});
+  return kept;
+}
+// A kept door's expression, the tasks it names turned into references to what
+// the item holds ({@lv:239}, the keypad the outer radar gate of level 8 opens
+// on); null when it names something that stays behind (a timer, a terminal, an
+// alarm, a door or switch not kept)
+function wireExpr(e,kept){
+  var ok=true,out=String(e||"").replace(/\\n/g," ").replace(/\s+/g," ").trim()
+    .replace(/\b(Door|Switch)_(\d+)\b/g,function(m,t,id){
+      if(kept[id]===t.toLowerCase())return "{@lv:"+id+"}";
+      ok=false;return m;
+    });
+  if(ok&&/\b[A-Za-z]+_\d+\./.test(out))ok=false;
+  return ok?out:null;
+}
+// One of the level's doors as one of yours that works as it did: its own slide,
+// times, lock and sounds, and its locked, open and close expressions. Opened by
+// something that stays behind, it opens by hand; closed by something that
+// stays behind, it closes a while after it opens (close null)
+function keptDoor(o,kept){
+  var w=o.wire,base=(asDoor({model:o.model}).door)||{head:2,fixed:[0,0]};
+  var d=Object.assign({},base,{kind:"door",stop:(w.stop||[0,0]).slice(),slider:w.slider||0,openTime:w.openTime,maxAngle:w.maxAngle||0,
+    pickTime:w.pickTime,pickable:!!w.pickable,sounds:(w.sounds||[]).slice()});
+  var L=wireExpr(w.locked,kept),O=wireExpr(w.open,kept),C=wireExpr(w.close,kept);
+  d.wire=O==null||L==null?{locked:"",open:"",close:C}:{locked:L,open:O,close:C};
+  delete d.close;
+  return d;
 }
 function groupSummary(d){
   var n={},fits=false;
@@ -7047,7 +7093,7 @@ function pasteData(d,x,y,gamma){
     navNodes.push(o);out.push(o);
   });
   d.items.forEach(function(p){if(p.old)map["t:"+p.old]="t:"+(p._new=uid())});
-  var dropped=0,kits=[];
+  var dropped=0,kits=[],mounted=[];
   d.items.forEach(function(p){
     var o=JSON.parse(JSON.stringify(p));
     o.uid=p._new||uid();delete o.old;delete o._new;delete o.dx;delete o.dy;
@@ -7056,7 +7102,23 @@ function pasteData(d,x,y,gamma){
     if(o.alarmId&&o.alarmId.indexOf("own:")===0&&map["t:"+o.alarmId.slice(4)])o.alarmId="own:"+map["t:"+o.alarmId.slice(4)].slice(2);
     if(o.kit){delete o.kit;kits.push(o)}
     if(o.door===true){delete o.door;asDoor(o)}
+    // what a kept door names, and the switch a gate of yours opens with, are the copies now
+    if(o.door&&typeof o.door==="object"){
+      var dw=o.door.wire;
+      if(dw)["locked","open","close"].forEach(function(k){
+        if(typeof dw[k]==="string")dw[k]=dw[k].replace(/\{@([^}]+)\}/g,function(m,u){var nb=map["t:"+u];return nb?"{@"+nb.slice(2)+"}":m});
+      });
+      if(o.door.switch&&map["t:"+o.door.switch])o.door.switch=map["t:"+o.door.switch].slice(2);
+    }
     o.x=+(x+p.dx*cs-p.dy*sn).toFixed(3);o.y=+(y+p.dx*sn+p.dy*cs).toFixed(3);o.z=(p.z||0)+dz;
+    // what stood above the ground in its place - a switch on a gate post, a keypad
+    // on a wall, a camera on a pole, a guard on a tower's platform - keeps its
+    // height above the ground here, and stays there (exact: the build rests things
+    // on what is under them, and under a keypad on a wall is the ground); it was
+    // set down on the ground. The rest is set on the ground, or a floor. A guard
+    // a step up stood on something that may not have come: he is set down.
+    if(p.up!=null&&p.up>(o.type==="soldier"?2:0.25)&&!o.of){o.exact=true;o._up=true;mounted.push([o,p.up])}
+    delete o.up;
     o.gamma=+(((p.gamma||0)+gamma)%(Math.PI*2)).toFixed(5);
     if(o.type==="soldier"){
       var before=(o.patrol||[]).length;
@@ -7080,14 +7142,34 @@ function pasteData(d,x,y,gamma){
   out.forEach(function(o){
     if(o.alarmId&&!alarmByKey(o.alarmId))o.alarmId=null;
     // an alarm part with none joins the nearest system, as one placed by hand does
-    if(!o.alarmId&&/^(camera|switch|siren|alarmlight)$/.test(o.type)&&o.alarm!==false){var na=nearestAlarm(o.x,o.y);if(na)o.alarmId=na.key}
+    if(!o.alarmId&&!o.gate&&/^(camera|switch|siren|alarmlight)$/.test(o.type)&&o.alarm!==false){var na=nearestAlarm(o.x,o.y);if(na)o.alarmId=na.key}
     if(o.arriveOn&&!events.some(function(v){return v.uid===o.arriveOn})){delete o.arriveOn;delete o.arriveTimes}
   });
   kits.forEach(function(b){addBuildingDoors(b)});
+  // their heights are taken on the ground as it will be: the ground under a
+  // building that levels its own is levelled first (applyGround, the pads)
+  if(mounted.length){
+    applyGround();
+    mounted.forEach(function(m){var gu=groundAt(m[0].x,m[0].y);if(gu!=null)m[0].z=+(gu+m[1]).toFixed(3)});
+  }
   multi=out.length>1?out.slice():[];
   sel=out[out.length-1]||null;
   touch();renderSide();renderNavSection();draw();
-  out.forEach(function(o){if(o.type!=="navnode")settle(o,false)});
+  var waits=[];
+  out.forEach(function(o){if(o.type!=="navnode"&&!o._up)waits.push(settle(o,false));delete o._up});
+  // and once all is down, the heights of what stood above the ground again: a
+  // building set down carries what hangs on its walls (the switch of level 8's
+  // inner radar gate is on the barracks' side), and it is to stand as high
+  // above the ground as it stood
+  if(mounted.length)Promise.all(waits).then(function(){
+    var moved=0;
+    mounted.forEach(function(m){
+      if(placements.indexOf(m[0])<0)return;
+      var gu=groundAt(m[0].x,m[0].y);if(gu==null)return;
+      var z=+(gu+m[1]).toFixed(3);if(Math.abs(z-m[0].z)>0.005){m[0].z=z;moved++}
+    });
+    if(moved){lastChangeAt=Date.now();touch();draw()}
+  });
   if(dropped)toast(dropped+" patrol stop"+(dropped===1?"":"s")+" pointed at this level's own nodes elsewhere and were left out");
   return out;
 }
@@ -8561,7 +8643,7 @@ function model3d(o){
   if(o.type==="pickup")return MeshSprites.pickupModel(o.pickupId||o.model);
   if(o.type==="player")return "000_01_1";
   // the build writes every alarm button of yours as the shipped alarm button
-  if(o.type==="switch")return o.own?(o.gate?"202_01_1":"234_01_1"):(o.mesh||"202_01_1");
+  if(o.type==="switch")return o.own?(o.gate?(o.model||"202_01_1"):"234_01_1"):(o.mesh||"202_01_1");
   if(o.type==="camera")return o.model||CAM_MODELS.holder;
   return o.model;
 }
@@ -9910,6 +9992,110 @@ function drawObjectives(max){
   });
 }
 
+/* ---------------- doors of yours ---------------- */
+// How one of yours opens, in words, and whether it closes by itself: a door the
+// player opens, a gate its switch opens, a door kept from a level working as it
+// did (the outer radar gate of level 8 opens when its keypad is picked and
+// used, and never closes). "Closes by itself" is the door's own choice over
+// its kind's (plan.py autoClose, closeAfter); the build writes it.
+var GATE_CLOSE_S=12;                     // plan.py GATE_OPEN_S
+function byUid(u){return placements.filter(function(p){return p.uid===u})[0]||null}
+function wireRefs(e){
+  var out=[];
+  String(e||"").replace(/\{@([^}]+)\}\.(\w+)/g,function(m,u,prop){out.push({uid:u,o:byUid(u),prop:prop});return m});
+  return out;
+}
+function closeSeconds(e){var m=/nDoorOpenTicks\s*>=?\s*(\d+(?:\.\d+)?)\s*\*\s*GAME_FREQUENCY/.exec(e||"");return m?+m[1]:null}
+function doorOpens(o){
+  var d=o.door||{},w=d.wire;
+  if(d.liftFloor!=null)return "The lift works it: it opens when the cabin stops at its floor.";
+  if(w){
+    var r=wireRefs(w.open).concat(wireRefs(w.locked)).filter(function(x){return x.uid!==o.uid});
+    if(r.some(function(x){return !x.o}))return "What opened it is no longer in the mission: the player opens it by hand.";
+    var x=wireRefs(w.open).filter(function(y){return y.uid!==o.uid})[0];
+    if(x){
+      var nm=displayName(x.o);
+      if(/Pressed$/.test(x.prop))return "Opens when "+nm+" is pressed, and it is locked to the player otherwise.";
+      if(x.prop==="isOpen")return "Opens when "+nm+" opens, and it is locked to the player otherwise.";
+      if(x.prop==="isPicked")return "Opens when the lock of "+nm+" is picked.";
+      return "Opens on "+nm+", as in the level it came from.";
+    }
+    if(d.pickable)return "Locked until the player picks its lock ("+(d.pickTime||4)+" s); then it opens when used.";
+    if(w.locked==="1")return "Locked: nothing in the mission opens it.";
+    return "The player opens it.";
+  }
+  if(d.kind==="gate"){var s0=byUid(d.switch);return s0?"Opens when its switch, "+displayName(s0)+", is pressed.":"Its switch is gone: it stays shut."}
+  if(d.switch){var s1=byUid(d.switch);if(s1)return "Opens when "+displayName(s1)+" is pressed."}
+  return "The player opens it.";
+}
+// {auto, secs} or {follows}: null for a lift's door, which its lift works
+function doorCloses(o){
+  var d=o.door||{},w=d.wire;
+  if(d.liftFloor!=null)return null;
+  if(w&&d.autoClose==null&&typeof w.close==="string"){
+    var f=wireRefs(w.close).filter(function(x){return x.prop==="isClosed"&&x.o})[0];
+    if(f)return {follows:f.o};
+  }
+  var base=w?w.close!=="":d.kind==="gate"?true:!d.switch;
+  var secs=w?(w.close==null?6:closeSeconds(w.close)):d.kind==="gate"?GATE_CLOSE_S:(closeSeconds(d.close)||6);
+  return {auto:d.autoClose!=null?!!d.autoClose:base,secs:d.closeAfter||secs||(d.kind==="gate"?GATE_CLOSE_S:6)};
+}
+function ownDoorSection(o){
+  if(!o.own||!o.door||typeof o.door!=="object")return "";
+  var d=o.door,ro=!canEditQuiet(),cl=doorCloses(o);
+  var h='<div class="lbl" style="margin-top:12px">'+(d.kind==="gate"||/^304_/.test(o.model||"")?"Gate":"Door")+'</div>'+
+    '<p class="hint" style="margin:4px 0 0">'+esc(doorOpens(o))+'</p>';
+  if(!cl)return h;
+  if(cl.follows)return h+'<p class="hint" style="margin:4px 0 0">Closes when '+esc(displayName(cl.follows))+' closes: the leaves go together.</p>';
+  return h+'<label class="sg-t" style="margin-top:6px"><input type="checkbox" id="dr-auto"'+(cl.auto?' checked':'')+(ro?' disabled':'')+'> Closes by itself</label>'+
+    (cl.auto?'<div class="field" style="margin-top:5px"><span class="lbl">After it opens (s)</span><input type="number" id="dr-secs" min="1" max="600" step="1" value="'+
+      Math.round(cl.secs)+'"'+(ro?' disabled':'')+'></div>'
+      :'<p class="hint" style="margin:2px 0 0">Once open, it stays open.</p>');
+}
+// a switch of yours that opens gates or doors (a gateway's, or one kept from a
+// level): what it opens, not an alarm it would raise
+function gateSwitchSection(o){
+  var opens=placements.filter(function(p){
+    if(!p.own||!p.door||typeof p.door!=="object")return false;
+    if(p.door.switch===o.uid)return true;
+    var w=p.door.wire;return !!(w&&typeof w.open==="string"&&w.open.indexOf("{@"+o.uid+"}")>=0);
+  });
+  var names=opens.map(displayName).filter(function(n,i,a){return a.indexOf(n)===i});
+  return '<div class="lbl" style="margin-top:12px">Switch</div>'+
+    '<p class="hint" style="margin:4px 0 0">'+(opens.length?'Opens '+esc(names.slice(0,4).join(", "))+(names.length>4?' and more':'')+
+      ' ('+opens.length+(opens.length>1?' leaves':' leaf')+'). ':'Opens nothing: no gate or door of yours is on it. ')+
+    (o.stays===false?'It springs back when let go.':'It stays pressed once pressed.')+'</p>';
+}
+// the leaves of one gateway go together: those opened by the same switch, and those following this one
+function doorPartners(o){
+  var d=o.door||{};
+  return placements.filter(function(p){
+    if(p===o||!p.own||!p.door||typeof p.door!=="object")return false;
+    if(d.switch&&p.door.switch===d.switch)return true;
+    var pw=p.door.wire,ow=d.wire;
+    if(ow&&pw&&ow.open&&/\{@/.test(ow.open)&&pw.open===ow.open)return true;       // opened by the same thing
+    return !!(pw&&typeof pw.open==="string"&&pw.open.indexOf("{@"+o.uid+"}")>=0&&typeof pw.close==="string"&&pw.close.indexOf("{@"+o.uid+"}")>=0);
+  });
+}
+function bindOwnDoorSection(o){
+  var a=$("dr-auto");if(!a)return;
+  function set(f){
+    [o].concat(doorPartners(o)).forEach(function(q){
+      var nd=Object.assign({},q.door,f);
+      // a leaf following another keeps following: it closes with it
+      if(q!==o&&nd.wire&&typeof nd.wire.close==="string"&&nd.wire.close.indexOf("{@"+o.uid+"}")>=0){delete nd.autoClose;delete nd.closeAfter}
+      if(q===o)setProp(q,{door:nd});else q.door=nd;
+    });
+    lastChangeAt=Date.now();touch();renderSide();draw();
+  }
+  a.addEventListener("change",function(){
+    var cl=doorCloses(o)||{};
+    set(a.checked?{autoClose:true,closeAfter:Math.round(cl.secs||6)}:{autoClose:false});
+  });
+  var sEl=$("dr-secs");
+  if(sEl)sEl.addEventListener("change",function(){set({autoClose:true,closeAfter:Math.max(1,Math.min(600,Math.round(+sEl.value||6)))})});
+}
+
 /* ---------------- doors ---------------- */
 // A door of the level can be locked until something happens, have a lock the
 // player can pick, and open by itself on an event (apply_plan.py DOOR_SET).
@@ -10796,7 +10982,8 @@ function planOf(){
         arriveOn:p.type==="soldier"&&p.arriveOn?p.arriveOn:undefined,arriveTimes:p.type==="soldier"&&p.arriveOn?(p.arriveTimes||1):undefined,
         reinforce:p.reinforce||undefined,
         door:p.door||undefined,lift:p.lift||undefined,of:p.of||undefined,slot:p.slot||undefined,
-        onLevel:p.onLevel||undefined,gate:p.type==="switch"&&p.gate?true:undefined}}),
+        onLevel:p.onLevel||undefined,gate:p.type==="switch"&&p.gate?true:undefined,
+        stays:p.type==="switch"&&p.stays===false?false:undefined}}),
     objectives:objectives.map(function(o){return JSON.parse(JSON.stringify(o))}),failOnAlarm:failOnAlarm,objBase:objBase,
     ccwLying:true,settings:settingsPlan(),events:events.map(function(v){return JSON.parse(JSON.stringify(v))}),
     ground:groundEdits.map(function(a){
@@ -12928,6 +13115,13 @@ function localChecks(){
       " terrain nodes: there is little room left for more big shapes");
   // fence and wall runs laid before the panels were measured from their meshes
   // (2026-09-19) leave a gap at each joint in the game
+  // a door kept from a level whose opener, or closer, is no longer in the mission
+  placements.forEach(function(p){
+    var w=p.door&&typeof p.door==="object"&&p.door.wire;if(!w)return;
+    var gone=["locked","open","close"].some(function(k){return wireRefs(w[k]).some(function(x){return !x.o})});
+    if(gone)add("warn","Structures",displayName(p)+" was opened or closed by something no longer in the mission: the player opens it by hand, "+
+      "and it closes a few seconds after it opens",p,null,num(p.x)+", "+num(p.y));
+  });
   var gaps=fenceGaps();
   if(gaps.length)add("warn","Structures",gaps.length+" fence or wall joint"+(gaps.length>1?"s leave":" leaves")+" a gap of about "+
     (gaps.reduce(function(a,g){return a+g.d},0)/gaps.length).toFixed(1)+" m in the game (laid before panels were measured from their models). "+
@@ -14617,7 +14811,7 @@ var AIB=(function(){
       placements.filter(function(p){return p.of===o.uid}).forEach(function(p){ids.push(p.uid)});
       changed();
     }
-    if(o.door)notes.push("It opens in the game"+(o.door.kind==="gate"?" while its switch is pressed":" when the player uses it")+".");
+    if(o.door)notes.push(doorOpens(o));
     if(chk&&chk.level&&chk.level!=="ok"&&chk.why)notes.push(chk.why);
     if(!levelModels().has(model))notes.push("Its model comes from another level; Apply brings it in.");
     return {ok:true,placed:[r],notes:notes,ids:ids,at:{x:o.x,y:o.y}};

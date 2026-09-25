@@ -1222,6 +1222,19 @@ it and the prompt comes. The numbers come from the game itself
 how long it takes, and its sounds. A door placed inside a building goes on the
 floor there, not on the ground, so upper floors take doors too.
 
+**Closes by itself, or stays open.** Every door and gate leaf of yours has a
+*Door* (or *Gate*) section in its panel: how it opens, in words (the player
+opens it; its switch does; the keypad beside it does, once its lock is picked),
+and **Closes by itself**, after so many seconds, or not, and then once open it
+stays open (plan `door.autoClose`, `door.closeAfter`; the build writes the
+close expression, `this.nDoorOpenTicks > N*GAME_FREQUENCY` or none). Left
+alone, each keeps its kind's: a door closes 6 s after it opens, a gateway's
+leaves 12 s after, a door a switch of yours opens stays open, and one kept
+from a level does what it did there. The leaves of one gateway change
+together (opened by the same switch or keypad), and a leaf that follows
+another says so instead: it closes with it. A gateway's switch has a *Switch*
+section: which leaves it opens, and whether it stays pressed.
+
 - **A building brings its doors and its lift.** Placing one of the game's
   buildings places the doors it has in the levels, in the same doorways, each
   one that opens (the Office has six, the Guard HQ twelve, the lift's own
@@ -1632,13 +1645,34 @@ PUT to rename or re-categorise, DELETE); without the server, in the browser.
   inside it are left out, not to be there twice.
 - **An area of a level's** keeps what makes it work, made yours: its gates and
   doors (they can't be selected, as they don't move, so the ones among what is
-  selected come along by themselves, and are placed as doors of yours that
-  open), its cameras (cameras of yours, sweeping as they did, on the nearest
-  alarm system), its alarm buttons (alarm buttons of yours, on the nearest
-  system) and the look of its other switches (a gate's or a lift's switch
-  opens things of the level's, so only the switch box comes). The player start
-  and the machine guns stay behind: a mission has one start, and a gun works
-  only with its gunner. A lift's own doors stay with the lift.
+  selected come along by themselves), its cameras (cameras of yours, sweeping
+  as they did, on the nearest alarm system), its alarm buttons (alarm buttons
+  of yours, on the nearest system) and the look of its other switches. The
+  player start and the machine guns stay behind: a mission has one start, and
+  a gun works only with its gunner. A lift's own doors stay with the lift.
+- **Its doors work as they did in the level.** Each keeps its own slide,
+  times, sounds, whether its lock can be picked and in how long, and its
+  locked, open and close expressions word for word (the level data has every
+  door's since version 7, `wire`, and every switch's *stays pressed* flag,
+  `stays`). The tasks those expressions name by id become the kept things
+  that are those tasks (`{@lv:239}` in the item, `{@uid}` once placed, the new
+  task's id in the build), and a switch a kept door opens on comes as a
+  working switch of yours. Level 8's radar compound: the outer gate is locked
+  to the player, opens when the keypad beside it opens (a door that does not
+  move, locked until its lock is picked, 4 s) and never closes; the inner
+  gate opens when its switch is pressed (it stays pressed) and never closes,
+  its second leaf following the first both ways. An expression naming
+  something that stays behind (a timer, a terminal, an alarm, a door not
+  kept) is dropped: the door opens by hand, and closes a while after; the
+  check list and Apply say so. Before, kept doors opened by hand and closed
+  after 6 s, and the inner gate's switch came as a box that did nothing.
+- **What stood above the ground keeps its height above the ground:** a switch
+  on a gate post (1.1 m), a keypad on a wall, a camera on a pole, a guard on a
+  tower's platform (a guard more than 2 m up). It is set once the rest is
+  down (a building set down carries what hangs on its walls, and the ground
+  under a building that levels its own is levelled first), and kept there
+  (`exact`: the build rests things on what is under them, and under a keypad
+  on a wall is the ground). Everything was set down on the ground before.
 - **Placing:** pick it, turn it with **R**, click to stamp it (patrols follow
   copied nodes and buildings, as a paste does). An alarm system or an event it
   names that this mission does not have falls back to the automatic: the
