@@ -323,19 +323,59 @@ def level_files(level_dir):
             "textures": level_dir / "textures" / (base + ".res")}
 
 
-def check_level(f):
-    """(ok, reason, dat) - whether this level's files are in a shape we can write to."""
+def dat_from_mtp(f):
+    """The palette the level's compiled .mtp holds, as .dat rows, under the
+    header its .dat has."""
+    src = read_mtp(f["mtp"])
+    try:
+        text = open(f["dat"], encoding="latin1", newline="").read()
+    except OSError:
+        text = ""
+    nl = "\n" if text and "\r\n" not in text else "\r\n"
+    marker = "DO NOT EDIT!" + nl
+    header = (text[:text.index(marker) + len(marker)] if marker in text else
+              "*** This file is machine generated" + nl + "*** DO NOT EDIT!" + nl) + nl
+    return {"header": header, "models": [(n, list(src["models"].get(n, []))) for n in src["names"]],
+            "textures": list(src["textures"]), "tail": [], "newline": nl}
+
+
+def palette(f):
+    """(dat rows, reason) - the level's palette: its .dat, when that is what its
+    .mtp was compiled from, else the .mtp's own, when that compiles back to the
+    very same bytes. The game reads only the .mtp: level 10 ships a .dat that
+    lists four models and eleven textures fewer than its .mtp, and a mission
+    made from it could take no model from another level. (None, why) when
+    neither will do."""
+    mtp = open(f["mtp"], "rb").read()
+    why = ""
     try:
         d = read_dat(f["dat"])
+        if build_mtp(d) != mtp:
+            why = ".mtp is not what the .dat compiles to"
+        elif write_dat(d) != open(f["dat"], encoding="latin1", newline="").read():
+            why = ".dat does not round-trip"
+        else:
+            return d, ""
     except (StopIteration, ValueError) as e:
-        return False, ".dat does not parse (%s)" % type(e).__name__, None
-    if build_mtp(d) != open(f["mtp"], "rb").read():
-        return False, ".mtp is not what the .dat compiles to", d
-    if write_dat(d) != open(f["dat"], encoding="latin1", newline="").read():
-        return False, ".dat does not round-trip", d
+        why = ".dat does not parse (%s)" % type(e).__name__
+    try:
+        d = dat_from_mtp(f)
+    except (KeyError, IndexError, ValueError, struct.error):
+        return None, why
+    return (d, "") if build_mtp(d) == mtp else (None, why)
+
+
+def check_level(f):
+    """(ok, reason, dat) - whether this level's files are in a shape we can write to."""
+    d, why = palette(f)
+    if d is None:
+        return False, why, None
+    # every texture the palette names is in the archive: the game finds them by
+    # name (level 10's archive keeps the order of its stale .dat, duplicates and
+    # all, and plays), and an import appends its own to the end of both
     _, tex = res_entries(f["textures"])
-    if [s for s, *_ in tex] != d["textures"]:
-        return False, "texture archive is not in palette order", d
+    if not set(d["textures"]) <= {s for s, *_ in tex}:
+        return False, "texture archive lacks textures its palette names", d
     for key in ("models", "textures"):
         if not chain_ok(f[key]):
             return False, "%s archive has a broken chunk chain (run repair)" % key, d
@@ -618,7 +658,9 @@ def estimate(level_dir, wanted, location0):
     """What import_models would copy into level_dir for these models, without
     writing anything: [{model, source, files, textures, bytes}] and totals."""
     f = level_files(level_dir)
-    d = read_dat(f["dat"])
+    d, _ = palette(f)
+    if d is None:
+        return {"models": [], "bytes": 0, "textures": 0}
     have = {n for n, _ in d["models"]}
     tex_have = set(d["textures"])
     rows, seen = [], set()

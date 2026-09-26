@@ -118,6 +118,11 @@ by dragging, and fixes for a mission that stopped the game.
   the build took its own height for the floor under it, and the editor took
   the build's heights over. And a pickup put on a building's floor lies as
   the build lays it, asked of the build's own surfaces.
+- **A mission on level 10 could take no model from another level**: Apply
+  stopped with "cannot take imported models: .dat does not parse" (an area
+  from level 4 pasted onto level 10's empty map needed one). Level 10 ships a
+  model list that is not the one its compiled palette was made from; the
+  palette the game reads is used instead.
 - **Rooms under the ground got no walkways**, and their guards were refused:
   level 13's tunnels and rooms, pasted, stood 31-51 m below the walkways on
   the ground. They join the nearest walkways now, as a tower's platform does.

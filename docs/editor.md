@@ -2032,9 +2032,17 @@ How the files fit together:
 
 - **Palette:** `levelN.mtp` is regenerated from the text `.dat`. That
   regeneration is byte-identical for 13 shipped levels and the slot.
-- **Sources:** source levels are read from their compiled `.mtp`. Level 10's
-  `.dat` lists more models than its own count says, so it can't be written to,
-  but it can be used as a source.
+- **Level 10's `.dat` is stale:** it lists 460 models under a count of 456,
+  and textures its `.mtp` does not, in another order; the game reads only the
+  `.mtp`. So a level whose `.dat` is not what its `.mtp` was compiled from
+  takes its palette from the `.mtp` itself, when that compiles back to the very
+  same bytes (`models.py palette`), and the `.dat` is written anew from it on
+  import. Its texture archive keeps the stale order, duplicates and all: the
+  game finds textures by name, so what an import needs is every texture the
+  palette names in the archive, not the same order. A mission on level 10, its
+  empty map included, could take no model from another level before ("level
+  cannot take imported models: .dat does not parse").
+- **Sources:** source levels are read from their compiled `.mtp`.
 - **Archive chunks:** each chunk's fourth field points to the next chunk, and
   the last chunk says **0**. That's where the game stops reading, so appended
   models only count once the chain is re-linked.
