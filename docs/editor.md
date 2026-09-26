@@ -142,6 +142,9 @@ is a change to apply.
   The server plays them to the browser as WAV (`/api/music/<id>.wav`, byte
   ranges for seeking; a compressed one decoded once into `work/music/`), and a
   compressed track goes into a slot as 16-bit PCM, as the levels' own are.
+- **Choosing a track:** a click on it, or on its ▶ - what you listen to is what
+  you get. ▶ only played it, and a track listened to but not clicked was not
+  the one the mission got.
 - **The picture:** the game's mission list (Select Mission) shows a picture
   beside the list, 168 x 124 - not square. Choose a picture (or drop one on the
   box): it is cut to that shape, the middle of it at first, and the part left
@@ -153,8 +156,12 @@ is a change to apply.
 - **Into the game:** the game's pictures are in `menusystem/missionsprites.res`
   - for each mission a sprite named `LOCAL:menusystem/mission<N>.spr` (an
   84-byte LOOP header, 168 x 124 pixels of ARGB1555, a 40-byte trailer) and a
-  closing `PATH` listing every name - and `DefineMission` names each mission's.
-  Nothing answered to a custom mission's, so the list showed no picture. Apply
+  closing `PATH` listing every name - and `DefineMission` names the one the
+  list shows, by its last argument. A slot's names its base level's picture
+  (`mission2.spr` for a mission made from level 2), and a slot with a picture of
+  its own names that one, `mission<slot>.spr` (`slots.py write_definition`,
+  written again once Apply has put the picture in; the game showed the base
+  mission's picture while the entry still named it). Apply
   adds the mission's under its number, made as the game's own are (their
   header, their commonest trailer), and takes it out when the picture is
   removed or the mission leaves the game (`studio/build/covers.py`); a mission

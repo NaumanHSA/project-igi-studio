@@ -118,6 +118,11 @@ by dragging, and fixes for a mission that stopped the game.
   the build took its own height for the floor under it, and the editor took
   the build's heights over. And a pickup put on a building's floor lies as
   the build lays it, asked of the build's own surfaces.
+- **A mission's own picture did not show in the game's mission list**: the
+  mission's entry named its base mission's picture, so a mission made from
+  level 2 showed mission 2's. It names the mission's own now (apply it again).
+- **The music you listened to was not the music you got**: ▶ only played a
+  track; now it chooses it too, as a click on the track does.
 - **"Error in graph 3 routenet" stopped the game** when a guard went after the
   player: the links Apply cuts where a new building's walls stand across them
   had left the level's own walkways in pieces the game could not route between

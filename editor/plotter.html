@@ -12332,6 +12332,8 @@ function musicPicker(opts){
     r.addEventListener("keydown",function(e){if(e.key===" "||e.key==="Enter"){e.preventDefault();pick()}});
     r.querySelector(".mu-play").addEventListener("click",function(e){
       e.stopPropagation();
+      // what you listen to is what you get: playing a track chooses it too
+      if(st.value!==id)pick();
       var play=t?t.id:null;
       if(!play){toast("This map’s music is not in the list");return}
       if(PLAYER.row===r&&PLAYER.audio&&!PLAYER.audio.paused)playerStop();else playerPlay(play,r);

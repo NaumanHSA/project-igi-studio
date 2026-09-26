@@ -1683,6 +1683,8 @@ def _build_into(m, mid, game, base, n, test, pl, say):
         CV.set_cover(game, n, pic.read_bytes() if pic.exists() else None, log=say)
     except (OSError, ValueError, RuntimeError, protect.ProtectedPath) as e:
         say("the mission's picture in the game's list was left as it was: %s" % e)
+    # the list shows the picture its entry names: the mission's own, now it is there
+    SL.write_definition(game, n, base, m["name"], m.get("description"))
     with _surf_lock:
         _surfaces.clear()
     m = MS.mark_installed(mid, n, applied=applied,

@@ -117,13 +117,19 @@ def read_definition(game, n):
 
 def write_definition(game, n, base_level, name, description):
     """mission.qvm: how the game's mission list shows this slot, and the mission
-    finishing it leads on to (the next one in the game, if there is one)."""
+    finishing it leads on to (the next one in the game, if there is one). Its
+    picture is the one the mission has of its own in the game's list
+    (covers.py, mission<n>.spr), else its base level's: the list shows the
+    picture DefineMission names, and a slot with a picture of its own showed its
+    base mission's, as that is the one it named."""
     d = protect.assert_writable(slot_dir(game, n))
     nxt = next_after(game, n)
+    from studio.build import covers         # it reads the game's menu files
+    pic = n if covers.has_cover(game, n) else base_level
     src = ('DefineMission(%d, "%s", "%s", "", %s, "missions/location0/level%d", '
            '"missions/location0/common", "missions/location0/level%d", "location0", "level%d", "mission%d.spr");\r\n'
            % (n, _q(name, 40) or "Mission %d" % n, _q(description, 120),
-              nxt if nxt is not None else "MISSION_NEXT_MISSION_UNDEFINED", n, n, base_level, base_level))
+              nxt if nxt is not None else "MISSION_NEXT_MISSION_UNDEFINED", n, n, base_level, pic))
     data = QW.compile_text(src.encode("latin1", "replace").decode("latin1"))
     if not (d / "mission.qvm").exists() or (d / "mission.qvm").read_bytes() != data:
         (d / "mission.qvm").write_bytes(data)
