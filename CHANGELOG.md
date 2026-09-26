@@ -118,6 +118,18 @@ by dragging, and fixes for a mission that stopped the game.
   the build took its own height for the floor under it, and the editor took
   the build's heights over. And a pickup put on a building's floor lies as
   the build lays it, asked of the build's own surfaces.
+- **"Error in graph 3 routenet" stopped the game** when a guard went after the
+  player: the links Apply cuts where a new building's walls stand across them
+  had left the level's own walkways in pieces the game could not route between
+  (level 10's graph 3 was in four once a village was pasted onto it). Apply
+  now joins every piece that came apart to the rest - by a link, or by a line
+  of new points round what is in the way - and takes out a cut-off piece no
+  guard uses. A guard whose walkways had to be joined gets a warning in his
+  panel and in the check list, and *Lay the joining points* puts Apply's points
+  into the mission, to see and move.
+- **Your walkway points were always on show**, big and yellow, even once in the
+  game. They show with the level's nodes now, green once in the game as they
+  are, in your colour until then, and named only while you work on them.
 - **A mission on level 10 could take no model from another level**: Apply
   stopped with "cannot take imported models: .dat does not parse" (an area
   from level 4 pasted onto level 10's empty map needed one). Level 10 ships a

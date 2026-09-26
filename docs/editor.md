@@ -2064,6 +2064,59 @@ within 15 m. The generator uses the same rule, and also drops any link that
 would pass through a wall (see *Walls*). A red node has no neighbour close
 enough, so the build rejects it. Patrols can use new nodes like any other node.
 
+**How your points look.** Your walkway points show with the level's nodes (the
+Nodes layer, a patrol being edited, the Walkways tool), not all the time. One in
+the game as it is now looks like the level's own: a small green dot, its links
+faint. One not in the game yet is a dot in your colour, its links dashed. The
+big marker and its name (N12) only while working on walkways, with the point
+selected, or right up close. One that links to nothing is red, and always shown.
+
+## One network
+
+A walkway graph has to stay one network. The game routes a guard over it by a
+table, and asked for a way between two points the table has none for, it stops
+the game: "Error in graph 3 routenet, Node #154 to #18". Nothing checked it:
+the build only checked that each guard's patrol route existed. And the links
+Apply cuts where a new building's walls stand across them (see *Walls*) can
+leave the level's own walkways in pieces - level 10's graph 3 was in four once a
+village area was pasted onto it (thirteen links cut: at the houses, the fuel
+depot, the fences, a tree), and a guard in a house after the player stopped
+the game.
+
+**On Apply** (`plan.py`, after every walkway point and building floor is laid)
+each piece of a graph that came apart is joined to the largest again:
+
+1. by a link within 15 m on its floor that passes no wall;
+2. else by a line of new points on the ground between the two, every 4 m step
+   clear of walls and on a walkable slope - straight, or round what is in the
+   way by a point up to 40 m to one side (a fence's end, a building's corner);
+3. else by the shortest of the level's own links that were cut (a guard
+   brushing through a wall is better than a stopped game), with a warning;
+4. a piece a guard stands on or walks that nothing joins gets the nearest link
+   there is, with a warning; one no guard uses is taken out, as the game could
+   still send a guard after the player towards it.
+
+A piece the level ships on its own stays as it is, and so does a tower's
+platform with no way down, as the game's own do. The Apply log says what was
+joined ("graph 3 was in 4 pieces: 3 joined again; 33 new point(s) laid"), and
+the check list shows it as a note.
+
+**In the editor**, the dry run of the build (the one that gives the heights,
+`walkways.json` beside `heights.json`) says which of the level's links it cuts,
+which of its points it takes out, which pieces it joins and which guards stand
+on them. So:
+
+- the editor's walk graph leaves out what Apply takes out, and a patrol leg
+  with no way through shows red;
+- a guard on a piece Apply had to join has a warning in his panel and in the
+  check list - "his walkways are cut off from the rest" - with **Lay the
+  joining points**: the points Apply would lay become points of yours, which
+  you see and can move (or a way on foot the editor finds, where Apply would
+  only link through a wall). While he is selected the points Apply lays show on
+  the map, hollow, on a dashed line.
+- a doorway of a building of yours joins your own walkway points, as it does on
+  Apply, and not the level's points Apply takes out.
+
 Shipped nodes can be edited too. Show nodes, click one to select it, then drag it
 to move it or press Delete to remove it. A node that any guard's patrol uses
 can't be removed. The Navigation section shows each graph's used / total node

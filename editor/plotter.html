@@ -2245,9 +2245,17 @@ function makeInterior(key,o,t,own,before){
   if(gid)t.exits.forEach(function(k){
     var a=nodes[k],near=[];
     if(a.reuse)return;
+    var gone=buriedLevelNodes();
     nodesOf(gid).forEach(function(n){
+      if(gone[gid+":"+n.id]||WALKINFO.gone[gid+":"+n.id])return;
       var d=Math.hypot(n.x-a.x,n.y-a.y,n.z-a.z);
       if(d<=EXIT_R&&Math.abs(n.z-a.z)<=SAME_FLOOR&&!inBody(o,n.x,n.y,0)&&!insideOther(n,o))near.push([d,n]);
+    });
+    // and to the mission's own points, which Apply adds before the buildings
+    navNodes.forEach(function(n){
+      if(String(n.graph)!==String(gid))return;
+      var d=Math.hypot(n.x-a.x,n.y-a.y,n.z-a.z);
+      if(d<=EXIT_R&&Math.abs(n.z-a.z)<=SAME_FLOOR&&!inBody(o,n.x,n.y,0)&&!insideOther(n,o)&&nodeLinks(n).length)near.push([d,n]);
     });
     near.sort(function(p,q){return p[0]-q[0]});
     near.slice(0,EXIT_LINKS).forEach(function(p){it.exits.push([k,p[1]])});
@@ -2468,6 +2476,7 @@ function syncHeights(){
       if(!j.ok||!M||M.id!==id)return;
       if(planVer!==ver){heightsSoon();return}  // changed meanwhile: ask again
       if(j.build)BUILDV={ver:ver,id:id,ok:j.build.ok,errors:j.build.errors||[],warnings:j.build.warnings||[],notes:j.build.notes||[]};
+      if(j.walkways!==undefined)takeWalkInfo(j.walkways);
       applyHeights(j);
       if(HSYNC.again){HSYNC.again=false;heightsSoon()}
     }).catch(function(){HSYNC.busy=false});
@@ -2904,11 +2913,28 @@ function drawInteriors(){
 // "delay" commands and changing pace on "set travel speed".
 // an unhurried patrol stroll and a jog - the in-game guards amble, they don't march
 var WALK=1.05, RUN=2.8;                                  // m/s
+// The walkways as Apply leaves them, from the build's own dry run (serve.py
+// mission_heights, walkways.json): the level's links it cuts at your walls, its
+// points it takes out, and the points it lays to join what came apart. Level
+// 10's graph 3 was in four pieces once a village was pasted onto it, and a
+// guard in a house after the player stopped the game: "Error in graph 3
+// routenet". {cut:{"gid:a:b":1}, gone:{"gid:id":1}, laid:{gid:[[x,y,z]]}, pieces:[...]}
+var WALKINFO={cut:{},gone:{},laid:{},pieces:[]};
+function takeWalkInfo(w){
+  var cut={},gone={};
+  Object.keys((w&&w.cut)||{}).forEach(function(g){w.cut[g].forEach(function(e){cut[g+":"+e[0]+":"+e[1]]=1;cut[g+":"+e[1]+":"+e[0]]=1})});
+  Object.keys((w&&w.gone)||{}).forEach(function(g){w.gone[g].forEach(function(id){gone[g+":"+id]=1})});
+  var next={cut:cut,gone:gone,laid:(w&&w.laid)||{},pieces:(w&&w.pieces)||[]};
+  if(JSON.stringify(next)===JSON.stringify(WALKINFO))return;
+  WALKINFO=next;nodeVer++;draw();
+  if(sel&&sel.type==="soldier")renderSide();
+}
 function walkGraph(gid){
-  var pos={},adj={};
-  nodesOf(gid).forEach(function(n){pos[n.id]=n;adj[n.id]=[]});
+  var pos={},adj={},gone=buriedLevelNodes();
+  // the level's points Apply takes out under your buildings, and its links cut at their walls, are not there
+  nodesOf(gid).forEach(function(n){if(gone[gid+":"+n.id]||WALKINFO.gone[gid+":"+n.id])return;pos[n.id]=n;adj[n.id]=[]});
   edgesOf(gid).forEach(function(e){
-    var a=pos[e[0]],b=pos[e[1]];if(!a||!b)return;
+    var a=pos[e[0]],b=pos[e[1]];if(!a||!b||WALKINFO.cut[gid+":"+e[0]+":"+e[1]])return;
     var d=Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
     adj[e[0]].push([String(e[1]),d]);adj[e[1]].push([String(e[0]),d]);
   });
@@ -2921,7 +2947,7 @@ function walkGraph(gid){
       (adj[ka]=adj[ka]||[]).push([kb,d]);(adj[kb]=adj[kb]||[]).push([ka,d]);
     }
     it.t.edges.forEach(function(e){join(it.nodes[e[0]].ref,it.nodes[e[1]].ref)});
-    it.exits.forEach(function(x){join(it.nodes[x[0]].ref,String(x[1].id))});
+    it.exits.forEach(function(x){join(it.nodes[x[0]].ref,x[1].uid?"n:"+x[1].uid:String(x[1].id))});
   });
   navNodes.forEach(function(pn){
     if(String(pn.graph)!==String(gid))return;
@@ -2932,6 +2958,55 @@ function walkGraph(gid){
     });
   });
   return {pos:pos,adj:adj};
+}
+// A guard's walkways Apply had to join to the rest (walkways.json "pieces"):
+// the piece he stands on or walks came apart from the rest of its graph, and
+// Apply joined it - by points it lays ("line"), by a link ("link"), or through
+// what stands in the way ("cut", "alone"). [{graph,size,how,guards,laid,pair,at}]
+function walkIssues(o){
+  var who=o&&(o.uid||o.ref);if(!who)return [];
+  return (WALKINFO.pieces||[]).filter(function(pc){return (pc.guards||[]).indexOf(who)>=0});
+}
+function walkIssueText(o,pc){
+  var n=pc.size+" point"+(pc.size===1?"":"s");
+  return (o.name||"This guard")+"'s walkways ("+n+" of graph "+pc.graph+") are cut off from the rest: in the game he could not "+
+    "walk to the rest, and going after the player there stops the game (“Error in graph "+pc.graph+" routenet”). "+
+    (pc.how==="line"?"Apply joins them with "+pc.laid.length+" point"+(pc.laid.length===1?"":"s")+" of its own"
+      :pc.how==="link"?"Apply joins them with a link"
+      :"Apply joins them only through what stands in the way");
+}
+// Lay what joins a piece as points of yours: the points Apply would lay, or a
+// way on foot between the two points it would link (checkedWay). Resolves to
+// the number of points laid.
+function fixWalkIssue(pc){
+  var gid=String(pc.graph),made=[];
+  function add(q){
+    var o={uid:uid(),own:true,type:"navnode",x:+q[0].toFixed(2),y:+q[1].toFixed(2),z:+q[2].toFixed(2),graph:gid};
+    navNodes.push(o);made.push(o);
+  }
+  var done;
+  if(pc.laid&&pc.laid.length){pc.laid.forEach(add);done=Promise.resolve()}
+  else if(pc.pair){
+    var a={x:pc.pair[0][0],y:pc.pair[0][1],z:pc.pair[0][2]},b={x:pc.pair[1][0],y:pc.pair[1][1],z:pc.pair[1][2]};
+    done=checkedWay(b,a).then(function(way){
+      var pts=way?way.slice(1,-1):[];
+      if(way&&!pts.length)pts=[{x:(a.x+b.x)/2,y:(a.y+b.y)/2,z:(a.z+b.z)/2}];
+      pts.forEach(function(q){add([q.x,q.y,q.z])});
+    });
+  }else done=Promise.resolve();
+  return done.then(function(){
+    if(!made.length)return 0;
+    nodeVer++;
+    return checkPts(made).then(function(){lastChangeAt=Date.now();touch();renderNavSection();draw();return made.length});
+  });
+}
+function fixWalkIssues(o){
+  var list=walkIssues(o),laid=0;
+  function step(){
+    if(!list.length)return Promise.resolve(laid);
+    return fixWalkIssue(list.shift()).then(function(n){laid+=n;return step()});
+  }
+  return step();
 }
 function shortestPath(G,a,b){
   a=String(a);b=String(b);
@@ -3072,30 +3147,67 @@ function animTick(now){
 }
 function startAnim(){if(layers.anim&&!anim.raf)anim.raf=requestAnimationFrame(animTick)}
 document.addEventListener("visibilitychange",function(){if(!document.hidden)startAnim()});
+// A walkway point of yours. In the game as it is, it looks like the level's own
+// - a small dot, faint links - and shows with them (the Nodes layer, a patrol
+// being edited, the Walkways tool); one not in the game yet is in your colour,
+// as your other new things are, its links dashed. The big marker and its name
+// (N12) only while working on walkways, selected, or right up close. One that links
+// to nothing is red and always shown: Apply refuses it.
+function nodeInGame(pn){return !!(pn&&pn.uid&&appliedState().nodes[pn.uid])}
 function drawNavNode(pn,ghost){
-  var links=nodeLinks(pn),p=w2s(pn.x,pn.y),ok=links.length>0;
-  var col=ok?css("--accent"):css("--danger");
+  var links=nodeLinks(pn),p=w2s(pn.x,pn.y),ok=links.length>0,live=!ghost&&nodeInGame(pn);
+  var big=ghost||navTool()||sel===pn||inMulti(pn);
+  var col=!ok?css("--danger"):live?css("--node"):css("--accent");
   ctx.save();
-  ctx.globalAlpha=ghost?.65:1;
-  ctx.strokeStyle=col;ctx.lineWidth=1.3;ctx.setLineDash([4,3]);
+  ctx.globalAlpha=ghost?.65:(big?.9:.55);
+  ctx.strokeStyle=col;ctx.lineWidth=big?1.3:1;
+  if(!live)ctx.setLineDash([4,3]);
   links.forEach(function(n){
     var q=w2s(n.x,n.y);
     ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
   });
-  ctx.setLineDash([]);
+  ctx.setLineDash([]);ctx.globalAlpha=ghost?.65:1;
   var s=Math.max(5,Math.min(9,view.k*2));
-  ctx.beginPath();ctx.moveTo(p[0],p[1]-s);ctx.lineTo(p[0]+s,p[1]);ctx.lineTo(p[0],p[1]+s);ctx.lineTo(p[0]-s,p[1]);ctx.closePath();
-  ctx.fillStyle=css("--surface");ctx.fill();
-  ctx.lineWidth=(sel===pn||inMulti(pn))?2.6:1.8;ctx.stroke();
-  ctx.beginPath();ctx.arc(p[0],p[1],1.8,0,6.2832);ctx.fillStyle=col;ctx.fill();
-  if(!ghost&&view.k>.6){
-    ctx.font='500 10px "IBM Plex Mono",monospace';ctx.fillStyle=col;
-    ctx.fillText("N"+(navNodes.indexOf(pn)+1),p[0]+s+3,p[1]-s+2);
+  if(big){
+    ctx.beginPath();ctx.moveTo(p[0],p[1]-s);ctx.lineTo(p[0]+s,p[1]);ctx.lineTo(p[0],p[1]+s);ctx.lineTo(p[0]-s,p[1]);ctx.closePath();
+    ctx.fillStyle=css("--surface");ctx.fill();
+    ctx.lineWidth=(sel===pn||inMulti(pn))?2.6:1.8;ctx.stroke();
+    ctx.beginPath();ctx.arc(p[0],p[1],1.8,0,6.2832);ctx.fillStyle=col;ctx.fill();
+  }else{
+    var r=Math.max(2.2,Math.min(6,view.k*1.4));
+    ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.2832);ctx.fillStyle=col;ctx.fill();
+  }
+  if(!ghost&&(big||view.k>6)){
+    ctx.font=(big?'500 10px':'400 9px')+' "IBM Plex Mono",monospace';ctx.fillStyle=big?col:css("--faint");
+    ctx.fillText("N"+(navNodes.indexOf(pn)+1),p[0]+(big?s:4)+3,p[1]-(big?s:4)+2);
   }
   ctx.restore();
 }
+// what Apply lays to join the selected guard's walkways to the rest: hollow
+// points in your colour on a dashed line, from his piece to the rest
+function drawWalkJoins(){
+  if(!sel||sel.type!=="soldier")return;
+  var list=walkIssues(sel);if(!list.length)return;
+  var acc=css("--accent");
+  ctx.save();ctx.strokeStyle=acc;ctx.lineWidth=1.6;
+  list.forEach(function(pc){
+    var pts=(pc.pair?[pc.pair[0]]:[]).concat(pc.laid||[]).concat(pc.pair?[pc.pair[1]]:[]);
+    ctx.setLineDash([5,4]);ctx.globalAlpha=.9;ctx.beginPath();
+    pts.forEach(function(q,i){var p=w2s(q[0],q[1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1])});
+    ctx.stroke();ctx.setLineDash([]);
+    (pc.laid||[]).forEach(function(q){
+      var p=w2s(q[0],q[1]);ctx.beginPath();ctx.arc(p[0],p[1],Math.max(3,Math.min(6,view.k*1.5)),0,6.2832);
+      ctx.fillStyle=css("--surface");ctx.fill();ctx.stroke();
+    });
+  });
+  ctx.restore();
+}
 function drawNavNodes(){
-  navNodes.forEach(function(pn){drawNavNode(pn,false)});
+  drawWalkJoins();
+  var shown=nodeGraphsShown();
+  navNodes.forEach(function(pn){
+    if(shown.indexOf(String(pn.graph))>=0||sel===pn||inMulti(pn)||!nodeLinks(pn).length)drawNavNode(pn,false);
+  });
   // preview where the next node would go, and what it would link to
   if(navTool()&&!mouse.down&&mouse.inside&&GRAPHS){
     var z=groundAt(mouse.wx,mouse.wy);
@@ -5203,7 +5315,12 @@ function patrolSection(o){
     });
     h+='</div>';
   }
-  var tr=stops.length?trackFor(o):null;
+  var tr=stops.length?trackFor(o):null,wk=walkIssues(o);
+  if(wk.length){
+    h+='<div class="note bad" style="margin-top:7px">'+esc(walkIssueText(o,wk[0]))+
+      (canEditQuiet()?'<div style="margin-top:6px"><button class="btn" id="ijoin">Lay the joining points</button></div>':'')+
+      '<div class="hint" style="margin-top:4px">They show on the map while he is selected. Laid here, they are yours to see and move.</div></div>';
+  }
   h+=iss.length
     ? '<div class="note bad" style="margin-top:7px">'+esc(iss[0].msg)+(iss.length>1?' (+'+(iss.length-1)+' more)':'')+'</div>'
     : (stops.length
@@ -5502,6 +5619,13 @@ function objectInspector(el){
     editShipped(o,{interior:false});touch();renderSide();draw()});
   if($("ipat"))$("ipat").addEventListener("click",function(){patrolMode=!patrolMode;renderSide();draw()});
   if($("iclr"))$("iclr").addEventListener("click",function(){setPatrol(o,[]);patrolMode=false;renderSide();draw()});
+  if($("ijoin"))$("ijoin").addEventListener("click",function(){
+    var b=$("ijoin");b.disabled=true;b.textContent="Laying them…";
+    fixWalkIssues(o).then(function(n){
+      renderSide();
+      toast(n?n+" walkway point"+(n===1?"":"s")+" laid to join his walkways":"No way on foot joins his walkways here: Apply joins them as it says");
+    });
+  });
   el.querySelectorAll("[data-wp]").forEach(function(b){
     b.addEventListener("click",function(){
       var list=(o.patrol||[]).slice();list.splice(parseInt(b.getAttribute("data-wp"),10),1);
@@ -14015,6 +14139,11 @@ function localChecks(){
     else if(near.d>30)
       add("warn","Guards",displayName(p)+" stands "+Math.round(near.d)+" m from his walkways: in the game he walks off to them",p,null,"graph "+g);
   });
+  placements.filter(function(p){return p.type==="soldier"}).concat(editedSoldiers()).forEach(function(p){
+    var wk=walkIssues(p);
+    if(wk.length)add("warn","Guards",walkIssueText(p,wk[0]),p,
+      {label:"Lay the joining points",fn:function(){return fixWalkIssues(p)}},"a dry run of the build");
+  });
   placements.filter(function(p){return p.type==="soldier"&&!p.graph&&!graphOf(p)}).forEach(function(p){
     add("error","Guards",displayName(p)+" has no navigation graph to walk",p);
   });
@@ -14267,9 +14396,11 @@ function showChecks(thenApply){
     });
     $("sheet-body").querySelectorAll("[data-fix]").forEach(function(b){
       b.addEventListener("click",function(){
-        rows[+b.getAttribute("data-fix")].fix.fn();
-        lastChangeAt=0;touch();renderSide();renderNavSection();draw();
-        showChecks(thenApply);
+        b.disabled=true;
+        Promise.resolve(rows[+b.getAttribute("data-fix")].fix.fn()).then(function(){
+          lastChangeAt=0;touch();renderSide();renderNavSection();draw();
+          showChecks(thenApply);
+        });
       });
     });
     $("ck-close").addEventListener("click",function(){$("sheet").hidden=true});

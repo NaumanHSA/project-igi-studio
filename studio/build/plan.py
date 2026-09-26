@@ -1224,6 +1224,8 @@ def _added_before():
 
 
 _listed = {id(o) for o, _ in SOLIDS}
+CUT_EDGES = {}                  # gid -> [(edge, what it passed through)] cut at new walls
+GONE_NODES = {}                 # gid -> [node ids] of the level's the plan takes out
 for o in _added_before():
     if id(o) not in _listed:
         SOLIDS.append((o, "%s placed earlier" % (o.get("name") or o.get("modelName") or o.get("model"))))
@@ -1284,6 +1286,8 @@ if _surface is not None and SOLIDS:
                         g.edges.append(next(e for e in before if _key(e) == k))
                         warnings.append("%s still walks %d -> %d through %s on graph %s - his route "
                                         "has no other way round it" % (who, u, v, cut[k], gid))
+        CUT_EDGES.setdefault(gid, []).extend((next(e for e in before if _key(e) == k), lab)
+                                             for k, lab in cut.items() if k not in kept)
         ends = lambda edges: {x for e in edges for x in e[:2]}
         stranded = ends(before) - ends(g.edges)
         buried = []
@@ -1298,6 +1302,7 @@ if _surface is not None and SOLIDS:
                 continue
             g.remove_node(nid)
             buried.append(nid)
+            GONE_NODES.setdefault(gid, []).append(nid)
         by = collections.Counter(v for k, v in cut.items() if k not in kept)
         report.append("graph %s: %d link(s) that pass through walls cut%s%s" % (
             gid, len(cut) - len(kept),
@@ -1479,6 +1484,254 @@ for key, o, t, label in INTERIORS:
             report.append("%s: like the shipped copy, those nodes have no way down - a guard up there stays there" % label)
         else:
             SHUT_IN.append((label, gid, set(ids)))
+
+# ---------------------------------------------------------------- one network
+# A walkway graph has to stay one network. The game routes a guard over it by a
+# table, and asked for a way between two points the table has none for, it
+# stops the game: "Error in graph 3 routenet, Node #154 to #18" - a guard in a
+# pasted village house after the player, near level 10's own walkways, which
+# the links cut at the house's walls had left in four pieces. So every piece
+# that came apart (one the level ships apart stays as it is) is joined to the
+# largest again: by a link within reach that passes no wall; else by a line of
+# new points on the ground between the two, every step clear; else by the
+# shortest of the level's own links that were cut (a guard brushing through a
+# wall is better than a stopped game). A piece nothing joins that no guard
+# stands on or walks is taken out: the game can still send a guard after the
+# player towards it. A tower's platform, with no way down, stays on its own,
+# as the game's own do.
+JOIN_STEP = 4.0                 # metres between the points of a joining line
+JOIN_LINE = 80.0                # the longest joining line
+JOIN_FLOOR = 2.5                # the height two linked points may differ by (graphs.py SAME_FLOOR)
+
+
+def _pieces(g):
+    ids = {n["id"] for n in g.nodes}
+    adj = {i: set() for i in ids}
+    for e in g.edges:
+        if e[0] in ids and e[1] in ids:
+            adj[e[0]].add(e[1])
+            adj[e[1]].add(e[0])
+    seen, out = set(), []
+    for n in sorted(ids):
+        if n in seen:
+            continue
+        piece, stack = set(), [n]
+        seen.add(n)
+        while stack:
+            u = stack.pop()
+            piece.add(u)
+            for v in adj[u]:
+                if v not in seen:
+                    seen.add(v)
+                    stack.append(v)
+        out.append(piece)
+    return sorted(out, key=len, reverse=True)
+
+
+def _walked(gid, g, pos):
+    """{node: [who]} for the nodes of a graph a guard stands nearest to or walks
+    through: the level's guards by name, the plan's by uid (an edited one of the
+    level's by ref), as the editor knows them."""
+    used = collections.defaultdict(set)
+    for w, names, routes in shipped_guards(gid):
+        for n in set(names) | {n for r in routes for n in r}:
+            used[n].add(w)
+    for s in soldiers + EDIT_SOLDIERS:
+        if str(s.get("graph")) != str(gid):
+            continue
+        who = s.get("uid") or s.get("ref") or s.get("name") or "guard"
+        for n in s.get("patrol") or []:
+            if isinstance(n, int):
+                used[n].add(who)
+            elif isinstance(n, str) and n.startswith("n:") and n[2:] in node_ids:
+                used[node_ids[n[2:]]].add(who)
+            elif isinstance(n, str) and n.startswith("t:"):
+                key, _, i = n[2:].rpartition(":")
+                job = TEMPLATE_IDS.get(key)
+                if job and job[0] == str(gid) and i.isdigit() and int(i) < len(job[1]) and job[1][int(i)] is not None:
+                    used[job[1][int(i)]].add(who)
+        if s.get("x") is not None and pos:
+            here = (float(s["x"]), float(s["y"]), float(s["z"]))
+            used[min(pos, key=lambda i: math.dist(pos[i], here))].add(who)
+    return used
+
+
+def _ground_at(x, y, near):
+    if _surface is not None:
+        _src, z = _surface.height(x, y, near, reach_up=0.8)
+        if z is not None:
+            return z
+    return ground_z(x, y, near)
+
+
+def _joining_way(g, gid, a, b):
+    """New points on the ground from a to b (world), every step clear of walls
+    and on the walkable slope: straight, else round what is in the way by a
+    point to one side (a fence's end, a building's corner). None if neither."""
+    line = _joining_line(g, gid, a, b)
+    if line is not None:
+        return line
+    d = math.dist(a[:2], b[:2])
+    if d < 1.0:
+        return None
+    ux, uy = (b[0] - a[0]) / d, (b[1] - a[1]) / d
+    for off in (8.0, 16.0, 24.0, 32.0, 40.0):
+        for side in (1.0, -1.0):
+            mx, my = (a[0] + b[0]) / 2 - uy * off * side, (a[1] + b[1]) / 2 + ux * off * side
+            mz = _ground_at(mx, my, (a[2] + b[2]) / 2)
+            if mz is None:
+                continue
+            mid = (mx, my, mz)
+            first = _joining_line(g, gid, a, mid)
+            if first is None:
+                continue
+            second = _joining_line(g, gid, mid, b)
+            if second is None:
+                continue
+            return first + [mid] + second
+    return None
+
+
+def _joining_line(g, gid, a, b):
+    """New points on the ground from a to b (world), every step clear of walls
+    and on the walkable slope, or None."""
+    d = math.dist(a[:2], b[:2])
+    n = max(1, int(math.ceil(d / JOIN_STEP)))
+    pts, prev = [], a
+    for k in range(1, n):
+        f = k / n
+        x, y = a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
+        z = _ground_at(x, y, a[2] + (b[2] - a[2]) * f)
+        if z is None:
+            return None
+        cur = (x, y, z)
+        if abs(cur[2] - prev[2]) > 2.0 or not _link_ok(prev, cur):
+            return None
+        pts.append(cur)
+        prev = cur
+    if abs(b[2] - prev[2]) > 2.0 or not _link_ok(prev, b):
+        return None
+    return pts
+
+
+_tmpl_of = {k: t for k, _o, t, _l in INTERIORS}
+JOIN_LAID = {}                  # gid -> [world xyz] of the points laid to join pieces
+JOIN_PIECES = []                # what each piece that came apart was, and how it was joined
+for gid in sorted(edited_graphs):
+    g = edited_graphs[gid]
+    pieces = _pieces(g)
+    if len(pieces) < 2:
+        continue
+    try:
+        shipped = {frozenset(p) for p in _pieces(GE.Graph(str(BASE_GRAPHS / ("graph%s.dat" % gid))))}
+    except (OSError, GE.GraphError):
+        shipped = set()
+    platforms = set()
+    for key, (tg, ids) in TEMPLATE_IDS.items():
+        t = _tmpl_of.get(key)
+        if tg == gid and t is not None and not t["exits"]:
+            platforms |= {i for i in ids if i is not None}
+    pos = {n["id"]: node_world(gid, n) for n in g.nodes}
+    walkers = _walked(gid, g, pos)
+    main = set(pieces[0])
+    joined, laid, rejoined, dropped, alone = [], 0, [], [], []
+    first = {n["id"] for n in g.nodes}
+    for piece in pieces[1:]:
+        if frozenset(piece) in shipped or piece <= platforms:
+            continue                            # as the level ships it, or a tower's platform
+        pairs = sorted((math.dist(pos[u][:2], pos[v][:2]), u, v) for u in piece for v in main
+                       if abs(pos[u][2] - pos[v][2]) <= JOIN_FLOOR)
+        done, line, pair = None, [], None
+        who = sorted({w for n in piece for w in walkers.get(n, ())})
+        # 1. a link within reach that passes no wall
+        for d, u, v in pairs:
+            if d > 15.0:
+                break
+            if _link_ok(pos[u], pos[v]):
+                g.link(u, v)
+                done, pair = "link", (u, v)
+                break
+        # 2. a line of new points between the two
+        if done is None:
+            for d, u, v in [q for q in pairs if q[0] <= JOIN_LINE][:12]:
+                line = _joining_way(g, gid, pos[u], pos[v]) or []
+                if not line:
+                    continue
+                try:
+                    g.grow(len(line))
+                except GE.GraphError:
+                    break
+                prev = u
+                for w in line:
+                    nid = g.add_raw_node(w, origin_of(gid), like=g._node(u))
+                    pos[nid] = w
+                    g.link(prev, nid)
+                    prev = nid
+                g.link(prev, v)
+                laid += len(line)
+                done, pair = "line", (u, v)
+                break
+        # 3. the shortest of the level's own links that were cut
+        if done is None:
+            back = sorted((math.dist(pos[e[0]], pos[e[1]]), e, lab) for e, lab in CUT_EDGES.get(gid, [])
+                          if e[0] in pos and e[1] in pos and ((e[0] in piece) != (e[1] in piece))
+                          and (e[0] in main or e[1] in main))
+            if back:
+                _d, e, lab = back[0]
+                g.edges.append(list(e))
+                CUT_EDGES[gid] = [c for c in CUT_EDGES[gid] if _key(c[0]) != _key(e)]
+                rejoined.append("%d -> %d through %s" % (e[0], e[1], lab))
+                done, pair = "cut", (e[0], e[1]) if e[0] in piece else (e[1], e[0])
+        if done is None:
+            if who:
+                # a guard's own: the nearest link there is, walls or not
+                d, u, v = min((math.dist(pos[u], pos[v]), u, v) for u in piece for v in main)
+                g.link(u, v)
+                alone.append("%d -> %d (%.0f m)" % (u, v, d))
+                done, pair = "alone", (u, v)
+            else:
+                at = [[round(c, 3) for c in pos[n]] for n in sorted(piece)[:12]]
+                for nid in sorted(piece):
+                    g.remove_node(nid)
+                    pos.pop(nid, None)
+                    GONE_NODES.setdefault(gid, []).append(nid)
+                dropped.append(len(piece))
+                JOIN_PIECES.append({"graph": gid, "size": len(piece), "how": "dropped", "guards": [],
+                                    "at": at, "laid": [], "pair": None})
+                continue
+        JOIN_PIECES.append({"graph": gid, "size": len(piece), "how": done, "guards": who,
+                            "at": [[round(c, 3) for c in pos[n]] for n in sorted(piece)[:12]],
+                            "laid": [[round(c, 3) for c in w] for w in line] if done == "line" else [],
+                            "pair": [[round(c, 3) for c in pos[pair[0]]], [round(c, 3) for c in pos[pair[1]]]]})
+        joined.append(len(piece))
+        main |= piece
+    if joined or dropped:
+        report.append("graph %s was in %d pieces: %d joined again%s%s" % (
+            gid, len(pieces), len(joined),
+            ("; %d new point(s) laid to join them" % laid) if laid else "",
+            ("; %d cut-off point(s) no guard uses taken out" % sum(dropped)) if dropped else ""))
+    for r in rejoined:
+        warnings.append("graph %s: the level's link %s is kept - nothing else joins that part of "
+                        "the walkways to the rest (guards walk through it)" % (gid, r))
+    for r in alone:
+        warnings.append("graph %s: a guard's walkways reach the rest only by the link %s, through "
+                        "whatever stands between" % (gid, r))
+    JOIN_LAID[gid] = [[round(c, 3) for c in pos[n["id"]]] for n in g.nodes if n["id"] not in first]
+
+# What the editor needs to see the walkways as the game will route them (serve.py
+# mission_heights, with the heights): the level's links cut at your walls, its
+# points taken out, and the points laid here to join what came apart - a map's
+# own ids, a plan's new points by where they stand.
+try:
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "walkways.json").write_text(json.dumps({
+        "cut": {g: [[e[0], e[1]] for e, _ in es] for g, es in CUT_EDGES.items() if es},
+        "gone": {g: sorted(set(ns)) for g, ns in GONE_NODES.items() if ns},
+        "laid": {g: ps for g, ps in JOIN_LAID.items() if ps},
+        "pieces": JOIN_PIECES}), encoding="utf-8")
+except (OSError, TypeError, ValueError):
+    pass
+
 
 # A building whose doorways reached nothing when its floors were laid may be
 # reached from one laid after it: the rooms and tunnels of level 13 each join

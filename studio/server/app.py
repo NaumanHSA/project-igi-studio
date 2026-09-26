@@ -616,8 +616,9 @@ def mission_heights(cfg, mid):
             if mk.get("missionId") == mid and SL.slot_dir(str(game), n).exists():
                 args += ["--slot-dir", str(SL.slot_dir(str(game), n))]
         hf = out / "heights.json"
-        if hf.exists():
-            hf.unlink()
+        for stale in (hf, out / "walkways.json"):
+            if stale.exists():
+                stale.unlink()
         try:
             gen = subprocess.run(args, capture_output=True, text=True, cwd=str(ROOT), timeout=180,
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -625,6 +626,8 @@ def mission_heights(cfg, mid):
         except subprocess.TimeoutExpired:
             verdict = {"ok": None, "errors": [], "warnings": ["the dry run of the build took too long"], "notes": []}
         res = json.loads(hf.read_text(encoding="utf-8")) if hf.exists() else {"placements": {}, "edits": {}}
+        wf = out / "walkways.json"
+        res["walkways"] = json.loads(wf.read_text(encoding="utf-8")) if wf.exists() else None
         res["hash"] = key
         res["build"] = verdict
         _HEIGHTS[mid] = (key, res)
@@ -636,7 +639,7 @@ def mission_heights(cfg, mid):
 # not a guess at it. errors: why the plan would be rejected; warnings: what the
 # build changes or leaves out on its own; notes: what it did that the plan did
 # not say (a guard moved onto another walkway graph, a node with no links).
-NOTE = re.compile(r"now on that graph|linked to \[\]|left out|removed node")
+NOTE = re.compile(r"now on that graph|linked to \[\]|left out|removed node|joined again")
 
 
 def build_verdict(code, out, err):
