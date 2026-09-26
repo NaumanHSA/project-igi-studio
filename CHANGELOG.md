@@ -3,10 +3,16 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
-## Unreleased
+## 1.1.0
 
-Your items in the inventory, a repair button for the AI designer, fences laid
-by dragging, and fixes for a mission that stopped the game.
+Your items: keep a building, a guard or a whole area - from your missions or
+the original fourteen - and place it in any mission, working as it did. Music
+and a picture of your own for a mission, fences laid by dragging, doors that
+close or stay open, and big buildings standing in the ground as the game has
+them. Fixes for missions that stopped the game ("Too few parameters",
+"Error in graph routenet") and for missions on level 10.
+
+The level data is read again once when this version first starts (version 8).
 
 ### New
 

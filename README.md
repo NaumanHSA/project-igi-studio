@@ -34,6 +34,12 @@ shape the ground, or just ask the AI designer. Then apply it and play it in the 
 
 ## What's new
 
+- **Your items** (1.1). Keep a building, a guard or a whole area - from your missions
+  or the original fourteen - and place it in any mission, on any level. An area
+  brings its walkways, its guards' patrols, and its gates and doors working as they
+  did.
+- **Music and a picture of your own** (1.1). Give a mission another mission's music,
+  the main menu's or the outro's, and the picture the game's mission list shows.
 - **Soldiers on your side** (1.0.5). Any soldier, yours or the level's, can fight for
   you, for the enemy, or on a side of its own.
 - **Buildings that work as the game's do** (1.0.4, 1.0.5). A building brings its doors,
