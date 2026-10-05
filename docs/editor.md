@@ -1546,6 +1546,17 @@ no graph, in a container that runs while the real one's does not. A vehicle
 that drives neither cuts walkways nor levels the ground the way a building
 does.
 
+A level's vehicle that the game's AI drives, kept in **Your items** with
+the area round it, comes along as one of your vehicles that drives: its
+route's points are its stops, round and round, from the start.
+
+The camera of a shot of yours keeps clear of more than buildings: anything
+big (a parked jet, a truck) between it and what it shows, under the way it
+moves, or filling the foreground just ahead of it sends it to another side.
+The 3D preview of a cutscene of yours shows the level as it is in play: the
+level's own cutscene props (its intro's jets and trucks) are not there, as
+they are not in the game once your intro takes the level's place.
+
 ### Flights from the levels
 
 **Flights from the levels** (Cutscenes tab, unfold) lists every recorded
@@ -1735,6 +1746,13 @@ the level's own objectives dropped for a new mission.
   start, in the game's terse style. A level's own objective can be worded
   anew too: it keeps what it tests, and the build writes the new words under
   the mission's own key (`retext`).
+- **Cutscenes and vehicles:** `make_cutscene` makes an intro or an outro the
+  way *Make an intro* and *Make an outro* do, or an empty one for an event;
+  `add_cutscene_shot` adds a shot (kind, a thing, the player or a point,
+  seconds, a subtitle, the side it looks from), and says when no side is clear;
+  `set_vehicle_route` gives one of your APCs, tanks, trucks or the limousine a
+  route (points or places, round and round or stopping, speed, firing, from
+  the start, on the alarm or on an event).
 - **Versions and campaigns:** `make_versions` makes easy, normal or hard copies
   in the library (also *Mission menu, Easy, normal and hard versions*):
   easy has a third fewer of your guards, everyone seeing 20% less, cameras

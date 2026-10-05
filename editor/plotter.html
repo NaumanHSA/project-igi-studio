@@ -6669,7 +6669,8 @@ function describe(o){
 // game's AI along a route on a graph of their own, on rails, or by a recorded
 // drive (control inputs, so only the game knows the way it goes). An empty map
 // keeps none of them.
-var FILMING=false;          // a cutscene plays in the 3D view: its actors are shown there
+var FILMING=false;          // a cutscene plays in the 3D view: the ground and buildings reach far
+var FILMACTORS=false;       // ... and it is the level's own: its actors (cutscene objects) are shown
 // what a copy of a mission keeps of the level's own: {"<container id>": "off"}
 // leaves a cutscene out, {"<task id>": "off"} a moving vehicle that is no object
 // on the map (a train; one that is, is taken out like anything else, removeRefs)
@@ -6765,13 +6766,15 @@ function playCutscene(c,start,pre){
   for(var j=i;j<shots.length&&!spot;j++)if(terrainZ(shots[j].x,shots[j].y)!=null)spot=shots[j];
   for(j=0;j<i&&!spot;j++)if(terrainZ(shots[j].x,shots[j].y)!=null)spot=shots[j];
   if(!spot){toast("This cutscene's cameras are off the level's ground");return}
-  FILMING=true;V3D.film=null;
+  // the level's own cutscene has its actors; one of yours plays in the world as
+  // it is in play (the level's intro and its actors are left out for yours)
+  FILMING=true;FILMACTORS=!pre;V3D.film=null;
   open3dAt(spot.x,spot.y,40);
-  if(!View3D.isOpen()){FILMING=false;return}
+  if(!View3D.isOpen()){FILMING=FILMACTORS=false;return}
   View3D.film({shots:shots,start:start||0,letterbox:(c.scenes[0]&&c.scenes[0].letterbox)||0.7,
     subtitles:(c.subtitles||[]).map(function(x){return {at:x.at,dur:x.dur,text:x.text||x.key}}),
     note:"People and vehicles stand where the cutscene starts them: this plays the cameras, not the drives",
-    onEnd:function(){FILMING=false;V3D.film=null}});
+    onEnd:function(){FILMING=FILMACTORS=false;V3D.film=null}});
 }
 function fmtSecs(t){t=Math.max(0,t);var m=Math.floor(t/60),s=t-m*60;return m+":"+(s<10?"0":"")+s.toFixed(0)}
 function renderCutscenes(){
@@ -7117,8 +7120,10 @@ function camKey(x,y,z,t,fov,dur,smooth){
 function shotBlockers(S){
   var out=[];
   (LEVEL?LEVEL.objects:[]).concat(placements).forEach(function(o){
-    if(o.type!=="building"||o.x==null||o.cutscene||isRemoved(o)||(!o.own&&o.id>=0&&removals.indexOf(o.id)>=0))return;
+    // buildings, and anything big enough to fill the picture: a parked jet, a truck, a tank
+    if(!/^(building|prop|vehicle|explodable)$/.test(o.type)||o.x==null||o.cutscene||isRemoved(o)||(!o.own&&o.id>=0&&removals.indexOf(o.id)>=0))return;
     var s=MODELS&&MODELS.sizes&&MODELS.sizes[o.model];if(!s||!s.body||!s.h)return;
+    if(o.type!=="building"&&(s.h<1.4||s.w*s.d<6))return;
     if(Math.hypot(o.x-S.x,o.y-S.y)>260)return;
     if(S.o===o||inBody(o,S.x,S.y,0.5))return;          // what it looks at is not in its way
     out.push(o);
@@ -7128,6 +7133,16 @@ function shotBlockers(S){
 // is the line from the camera to the subject clear, and the camera over the ground?
 function camClear(c,t,blockers){
   var g0=groundAt(c.x,c.y);if(g0!=null&&c.z<g0+1.2)return false;
+  // nothing big just in front of it, rising near its height, to fill the picture
+  // (a parked jet's wing under the line it looks along)
+  var hx=t[0]-c.x,hy=t[1]-c.y,hl=Math.hypot(hx,hy)||1;
+  for(var d=0;d<=9;d+=1.5){
+    var fx=c.x+hx/hl*d,fy=c.y+hy/hl*d;
+    for(var j=0;j<blockers.length;j++){
+      var ob=blockers[j],sz=MODELS.sizes[ob.model],top=ob.z+(sz.z0||0)+sz.h;
+      if(top>c.z-3.5&&inBody(ob,fx,fy,0.8))return false;
+    }
+  }
   var n=Math.max(6,Math.ceil(Math.hypot(t[0]-c.x,t[1]-c.y)/2.5));
   for(var i=1;i<n;i++){
     var u=i/n,x=c.x+(t[0]-c.x)*u,y=c.y+(t[1]-c.y)*u,z=c.z+(t[2]-c.z)*u;
@@ -7135,6 +7150,19 @@ function camClear(c,t,blockers){
     for(var k=0;k<blockers.length;k++){
       var o=blockers[k],s=MODELS.sizes[o.model],b0=o.z+(s.z0||0);
       if(z>b0-0.5&&z<b0+s.h&&inBody(o,x,y,0))return false;
+    }
+  }
+  return true;
+}
+// the way a moving camera goes between two keyframes: over the ground, and not
+// through nor just over anything solid (a jet's fin under a push in)
+function pathClear(p,q,blockers){
+  for(var i=1;i<8;i++){
+    var u=i/8,x=p.x+(q.x-p.x)*u,y=p.y+(q.y-p.y)*u,z=p.z+(q.z-p.z)*u,g=groundAt(x,y);
+    if(g!=null&&z<g+1.2)return false;
+    for(var k=0;k<blockers.length;k++){
+      var o=blockers[k],sz=MODELS.sizes[o.model],b0=o.z+(sz.z0||0);
+      if(z>b0-0.5&&z<b0+sz.h+3.5&&inBody(o,x,y,1))return false;
     }
   }
   return true;
@@ -7192,7 +7220,7 @@ function shotCams(sh){
   var tries=[0,0.5,-0.5,1,-1,1.6,-1.6,2.3,-2.3,Math.PI];
   for(var i=0;i<tries.length;i++){
     var fr=shotFrames(sh,S,h0+tries[i]),T=[S.x,S.y,S.z+Math.min(S.h*0.45,6)],bad=0;
-    fr.forEach(function(c){if(!camClear(c,T,bl))bad++});
+    fr.forEach(function(c,j){if(!camClear(c,T,bl))bad++;if(c.smooth&&fr[j+1]&&!pathClear(c,fr[j+1],bl))bad++});
     if(bad<bn){bn=bad;best=fr}
     if(!bad||sh.from!=null)break;
   }
@@ -7253,11 +7281,11 @@ function makeOutro(){
   var sub=last?(last.o?thingSubject(last.o):{kind:"point",x:last.w.x,y:last.w.y,r:10,name:"the last objective"}):pl?{kind:"player"}:null;
   if(!sub){toast("Give the mission an objective first");return}
   var shots=[newShot("orbit",sub,5,"Mission complete."),newShot("rise",sub,7,"")];
+  addCutscene({name:"Outro",where:"outro",shots:shots});
   // and it ends on the mission the game goes on to, once it knows
   withLibrary(function(){
     var nx=nextMissionName();
-    if(nx)shots[1].text=("Next: "+nx+".").slice(0,160);
-    addCutscene({name:"Outro",where:"outro",shots:shots});
+    if(nx&&!shots[1].text){shots[1].text=("Next: "+nx+".").slice(0,160);touch();renderCutscenes()}
   });
 }
 function withLibrary(then){
@@ -8296,6 +8324,13 @@ function groupData(list){
     // a door or a gate of the level's: one of yours that works as it did there,
     // or (level data from before its wiring was read) one the player opens
     else if(o.type==="door")p={type:"building",kind:"object",model:o.model,name:displayName(o),door:o.wire?keptDoor(o,kept):true};
+    // a vehicle of the level's that the game's AI drives: one of yours that drives
+    // the same way (its route's points as its stops), from the start
+    else if(o.type==="vehicle"&&DRIVABLE[o.model]&&motionOf(o)&&motionOf(o).ai&&(vehiclePath(motionOf(o))||[]).length>1){
+      var mv0=motionOf(o);
+      p={type:"building",kind:"object",model:o.model,name:displayName(o),drive:{stops:vehiclePath(mv0).slice(1).map(function(q){return [+q[0].toFixed(2),+q[1].toFixed(2)]}),
+        loop:true,speed:20,fire:!!(mv0.canFire&&mv0.canFire!=="0"),start:"now"}};
+    }
     else if(o.model&&!/^\d+$/.test(o.model)){p={type:"building",kind:"object",model:o.model,name:displayName(o)};if(kitted.indexOf(o)>=0)p.kit=true}
     else return;
     p.own=true;p.dx=o.x-c.x;p.dy=o.y-c.y;p.z=o.z;p.gamma=o.gamma||0;
@@ -10381,7 +10416,7 @@ function sceneAround(o,R,noSelf){
   }
   var gone={};removeRefs.forEach(function(r){gone[r]=1});
   (LEVEL?LEVEL.objects:[]).concat(placements).forEach(function(q){
-    if(q===o||q.x==null||(q.cutscene&&!FILMING)||gone[q.ref]||q.type==="navnode"||q.type==="alarmctl")return;
+    if(q===o||q.x==null||(q.cutscene&&!FILMACTORS)||gone[q.ref]||q.type==="navnode"||q.type==="alarmctl")return;
     if(/^colbox/i.test(q.modelName||""))return;          // invisible in the game: a collision box
     if(!q.own&&removals.indexOf(q.id)>=0&&q.id>=0)return;
     if(Math.hypot(q.x-o.x,q.y-o.y)>R+reach(q))return;
@@ -17057,6 +17092,68 @@ var AIB=(function(){
     objBase=true;changed();
     return {ok:true,removed:before-objectives.length,objectives:objList()};
   };
+  // ---- cutscenes and vehicles of the mission's own (the Cutscenes tab)
+  function cutBrief(c){
+    var t=0;
+    return {name:c.name,plays:c.where==="event"?"on event "+(events.findIndex(function(v){return v.uid===c.event})+1):c.where,
+      seconds:Math.round(cutLength(c)),problem:cutProblem(c)||undefined,
+      shots:(c.shots||[]).map(function(sh,i){var S=subjectOf(sh.subject),at=t;t+=Math.max(0.5,+sh.dur||4);
+        return {number:i+1,kind:sh.kind,shows:S?S.name:"nothing yet",at_s:Math.round(at*10)/10,seconds:+sh.dur||4,subtitle:sh.text||undefined}})};
+  }
+  function cutNamed(n){
+    if(n==null||n==="")return cutscenes[cutscenes.length-1]||null;
+    if(/^\d+$/.test(String(n)))return cutscenes[+n-1]||null;
+    var k=String(n).toLowerCase();
+    return cutscenes.filter(function(c){return c.where===k||(c.name||"").toLowerCase()===k})[0]||null;
+  }
+  H.make_cutscene=function(a){
+    if(!editable())return fail(RO);
+    var w=a.plays||"intro";
+    if(w==="intro")makeIntro();
+    else if(w==="outro")makeOutro();
+    else if(w==="event"){
+      var ev=events[(+a.event_number||0)-1];
+      if(!ev)return fail("event_number is the number of one of the mission's events (add_event makes one).");
+      addCutscene({name:a.name?String(a.name).slice(0,40):"Cutscene",where:"event",event:ev.uid,shots:[]});
+    }else return fail("plays is intro, outro or event.");
+    var c=cutscenes[cutscenes.length-1];
+    if(!c||(w!=="event"&&c.where!==w))return fail("Nothing to make it of: the mission needs a player start or objectives with a place.");
+    if(a.name)c.name=String(a.name).slice(0,40);
+    changed();
+    return {ok:true,cutscene:cutBrief(c),note:"Shots are made from the mission; change them with add_cutscene_shot (or the user can in the Cutscenes tab)."};
+  };
+  H.add_cutscene_shot=function(a){
+    if(!editable())return fail(RO);
+    var c=cutNamed(a.cutscene);if(!c)return fail("No such cutscene. make_cutscene makes one; name it by intro, outro, its name or number.");
+    var kind=SHOT_KINDS.some(function(k){return k[0]===a.kind})?a.kind:"dolly",sub=null;
+    if(a.target_id==="player"||kind==="over")sub={kind:"player"};
+    else if(a.target_id){var o=byId(a.target_id);if(!o)return fail("No thing has the id "+a.target_id+".");sub=thingSubject(o)}
+    else{var w=where(a);sub={kind:"point",x:+w.x.toFixed(2),y:+w.y.toFixed(2),r:Math.max(4,Math.min(150,+a.radius||12)),name:a.place||"a spot"}}
+    var sh=newShot(kind,sub,Math.max(0.5,Math.min(60,+a.seconds||4)),String(a.subtitle||"").slice(0,160));
+    if(a.from_deg!=null&&isFinite(+a.from_deg))sh.from=((+a.from_deg%360)+360)%360;
+    var at=a.position!=null&&+a.position>=1?Math.min(c.shots.length,+a.position-1):c.shots.length;
+    c.shots.splice(at,0,sh);
+    var S=subjectOf(sh.subject),cams=shotCams(sh),T=S?[S.x,S.y,S.z+Math.min(S.h*0.45,6)]:null,bl=S?shotBlockers(S):[];
+    var clear=!!(T&&cams.every(function(k){return camClear(k,T,bl)}));
+    changed();
+    return {ok:true,cutscene:cutBrief(c),clear:clear,
+      note:clear?undefined:"Every side tried has something in the way of this shot: give it another from_deg, another kind, or another subject."};
+  };
+  H.set_vehicle_route=function(a){
+    if(!editable())return fail(RO);
+    var o=byId(a.vehicle_id);
+    if(!o||!o.own||!DRIVABLE[o.model])return fail("vehicle_id is one of your vehicles: an APC (601_01_1), a T80 tank (614_01_1), a truck (610_01_1, 622_01_1) or the limousine (616_01_1), placed with place_object.");
+    var pts=[];
+    (a.points||[]).forEach(function(q){if(Array.isArray(q)&&isFinite(+q[0])&&isFinite(+q[1]))pts.push([r1(+q[0]),r1(+q[1])])});
+    (a.places||[]).forEach(function(q){var pl=placeNamed(q);if(pl)pts.push([r1(pl.x),r1(pl.y)])});
+    if(!pts.length){setProp(o,{drive:null});changed();return {ok:true,vehicle:brief(o),note:"It stands where it is."}}
+    var st=a.starts||"now",d={stops:pts.slice(0,40),loop:a.loop!==false,speed:Math.max(5,Math.min(80,+a.speed_kmh||20)),
+      fire:a.fires!==false,start:st==="alarm"||st==="event"?st:"now"};
+    if(st==="event"){var ev=events[(+a.event_number||0)-1];if(!ev)return fail("event_number is the number of one of the mission's events.");d.event=ev.uid}
+    if(st==="alarm"&&a.alarm){var sys=alarmByKey(a.alarm);if(sys)d.alarmId=sys.key}
+    setProp(o,{drive:d});changed();
+    return {ok:true,vehicle:brief(o),stops:d.stops,problem:routeProblem(o)||undefined};
+  };
   H.add_event=function(a){
     if(!editable())return fail(RO);
     var wn=a.when||{},kind=wn.kind||"area",k=EV_WHEN.filter(function(x){return x[0]===kind})[0];
@@ -17538,6 +17635,14 @@ var AIB=(function(){
     {name:"add_event",description:"When something happens, something else happens, once. when.kind: area (the player reaches it: point or place, radius), switch, dead (a guard), hacked (a terminal), picked (an item), destroyed, seen (a camera sees the player), alarm, time (seconds after the start), after (seconds after an earlier event, by number). then: message (text, seconds), alarm (raise one), guards (your guards, by id, arrive then), doors (the level's doors open), fail (the mission fails, text).",parameters:P({name:{type:"string"},
       when:{type:"object",properties:Object.assign({kind:{type:"string",enum:["area","switch","dead","hacked","picked","destroyed","seen","alarm","time","after"]},target_id:{type:"string"},radius:{type:"number"},seconds:{type:"number"},after_event:{type:"integer"},alarm:{type:"string"}},XY),required:["kind"]},
       then:{type:"array",items:{type:"object",properties:{kind:{type:"string",enum:["message","alarm","guards","doors","fail"]},text:{type:"string"},seconds:{type:"number"},alarm:{type:"string"},guard_ids:{type:"array",items:{type:"string"}},door_ids:{type:"array",items:{type:"string"}}},required:["kind"]}}},["when","then"])},
+    {name:"make_cutscene",description:"A cutscene of the mission's own, made from it: intro (plays as the mission starts, instead of the level's: a fly-over of the area, a shot of each objective with its text as the subtitle, the player's view), outro (once the mission is won, which ends when it does: the last objective, then away), or event (when that event happens: empty, add shots). The studio places every camera clear of the ground and of buildings.",
+      parameters:P({plays:{type:"string",enum:["intro","outro","event"]},event_number:{type:"integer",description:"for event: which event (1 first)"},name:{type:"string"}},["plays"])},
+    {name:"add_cutscene_shot",description:"Add a shot to a cutscene (intro, outro, its name or number): what it shows (target_id a thing, 'player' for the player's start, or a point or place) and how: establish (a fly-over coming in), orbit, dolly (push in), pan (across it), hold (still), rise (crane up and away), follow (rides behind a vehicle), over (over the player's shoulder). seconds, a subtitle line, from_deg (which side the camera looks from, compass; default the player's side), position (1 first; default last).",
+      parameters:P(withXY({cutscene:{type:"string"},kind:{type:"string",enum:["establish","orbit","dolly","pan","hold","rise","follow","over"]},target_id:{type:"string"},radius:{type:"number",description:"for a point: how big what it shows is, m"},
+        seconds:{type:"number"},subtitle:{type:"string"},from_deg:{type:"number"},position:{type:"integer"}}),["kind"])},
+    {name:"set_vehicle_route",description:"Make one of your vehicles (an APC, T80 tank, truck or limousine placed with place_object) drive a route: the game's AI drives it from where it stands through these points in order, round and round (loop) or stopping at the last, at speed_kmh; the APC and tank fire at the player they see (fires). starts: now, alarm (when it goes off; it stands parked until then), or event (event_number). No points: it stands.",
+      parameters:P({vehicle_id:{type:"string"},points:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]"},places:{type:"array",items:{type:"string"}},
+        loop:{type:"boolean"},speed_kmh:{type:"number"},fires:{type:"boolean"},starts:{type:"string",enum:["now","alarm","event"]},event_number:{type:"integer"},alarm:{type:"string"}},["vehicle_id"])},
     {name:"set_settings",description:"Time limit (seconds, 0 for none; the mission fails at zero), rain or snow and how heavy (intensity 0 to 1), haze (0 clear to 1 thick, null as the level), and whether the mission fails when an alarm goes off.",parameters:P({time_limit_s:{type:"number"},show_timer:{type:"boolean"},weather:{type:"string",enum:["level","clear","rain","snow"]},intensity:{type:"number"},haze:{type:["number","null"]},fail_on_alarm:{type:"boolean"}})},
     {name:"set_mission_info",description:"The mission's name and a one or two sentence description.",parameters:P({name:{type:"string"},description:{type:"string"}})},
     {name:"set_player_start",description:"Where the player begins, and which way he faces.",parameters:P(Object.assign(withXY({}),FACE))},

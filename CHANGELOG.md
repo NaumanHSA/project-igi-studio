@@ -36,6 +36,10 @@ section is also that release's notes on GitHub.
   play it all in 3D. An intro plays as the mission starts (skippable), an
   outro once it is won - the mission ends when it does - and any cutscene can
   play on an event.
+- **The AI designer makes cutscenes and drives vehicles** too: "make an intro
+  and an outro", "add a shot of the radar tower", "an APC that comes out on
+  the alarm and circles the yard". A level's vehicle that drives, kept in
+  Your items, comes along driving its route.
 - **One mission into the next.** An intro made for you opens on the
   mission's number and name, an outro ends on the mission the game goes on
   to, and the library shows which of your missions have an intro and an

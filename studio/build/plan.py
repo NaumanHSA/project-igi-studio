@@ -2228,8 +2228,16 @@ def _veh_ground(x, y, near):
 
 
 def _veh_template():
+    # the smallest of the level's graphs that reads as one: only its header is
+    # used (level 8's graph20.dat is not a graph at all)
     gs = sorted(BASE_GRAPHS.glob("graph*.dat"), key=lambda f: f.stat().st_size) if BASE_GRAPHS.is_dir() else []
-    return gs[0] if gs else None
+    for g in gs:
+        try:
+            GE.Graph(str(g))
+            return g
+        except (GE.GraphError, OSError, struct.error):
+            continue
+    return None
 
 
 for o in OWN_CARS:
