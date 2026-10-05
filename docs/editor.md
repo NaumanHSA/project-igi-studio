@@ -1433,6 +1433,12 @@ The **Cutscenes** tab on the left edge shows what the level has of its own:
   map. A selected vehicle says how it moves and when it is there. While the
   tab is open, the AI vehicles' routes are drawn amber and the tracks blue.
 
+While a cutscene plays there is no fog: the whole level is loaded, and the
+ground runs out to wherever the level's cutscenes go, read from the game's
+own terrain (`studio/extract/terrainfar.py`, `GET /api/terrainfar?level=N`,
+read once a level and kept as `terrain/levelN.far.json` in the level data;
+coarser than the editor's own ground, round it).
+
 What the preview cannot show: people and vehicles stand where the cutscene
 starts them. A recorded drive is control inputs fed to the game's own
 physics (throttle, steering, a helicopter's lift), so only the game knows the

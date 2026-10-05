@@ -6754,8 +6754,30 @@ function cutShots(c){
   return out;
 }
 function shotStarts(shots){var t=0;return shots.map(function(s){var a=t;t+=Math.max(0,s.dur||0);return a})}
+// the ground everywhere the level's cutscenes go, beyond the studio's own grid
+// (studio/extract/terrainfar.py), with a hole where that grid's detail is
+var FARG={};
+function farGround(then){
+  var lv=LV;
+  if(!SRV||!(lv>=1&&lv<=14)||!TERR){then(null);return}
+  if(FARG[lv]!==undefined){then(FARG[lv]);return}
+  toast("Reading the ground round the cutscenes…");
+  fetch("api/terrainfar?level="+lv).then(function(r){return r.json()}).then(function(j){
+    var g=j&&j.grid;if(!g){FARG[lv]=null;then(null);return}
+    var raw=atob(g.z),n=g.w*g.h,z=new Float32Array(n),hole=new Uint8Array(n),m=TERR.meta;
+    var fx0=m.x0+g.cell,fx1=m.x0+(m.w-1)*m.cell-g.cell,fy0=m.y0+g.cell,fy1=m.y0+(m.h-1)*m.cell-g.cell;
+    for(var k=0;k<n;k++){
+      var v=raw.charCodeAt(k*2)|(raw.charCodeAt(k*2+1)<<8),i=k%g.w,j2=(k/g.w)|0,x=g.x0+i*g.cell,y=g.y0+j2*g.cell;
+      z[k]=v===g.nodata?NaN:g.zmin+v*g.step-0.35;          // a little under the detailed ground where they meet
+      if(x>fx0&&x<fx1&&y>fy0&&y<fy1)hole[k]=1;
+    }
+    FARG[lv]={x0:g.x0,y0:g.y0,cell:g.cell,w:g.w,h:g.h,z:z,hole:hole};
+    then(FARG[lv]);
+  }).catch(function(){then(null)});
+}
 function playCutscene(c,start,pre){
   if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
+  if(FARG[LV]===undefined&&SRV&&LV<=14){farGround(function(){playCutscene(c,start,pre)});return}
   var shots=pre?pre.map(function(s){return Object.assign({},s,{lb:(c.scenes[0]||{}).letterbox})}):cutShots(c);
   if(!shots.length){toast("This cutscene has no cameras");return}
   var at=shotStarts(shots),i=0;
@@ -6771,7 +6793,7 @@ function playCutscene(c,start,pre){
   FILMING=true;FILMACTORS=!pre;V3D.film=null;
   open3dAt(spot.x,spot.y,40);
   if(!View3D.isOpen()){FILMING=FILMACTORS=false;return}
-  View3D.film({shots:shots,start:start||0,letterbox:(c.scenes[0]&&c.scenes[0].letterbox)||0.7,
+  View3D.film({shots:shots,start:start||0,letterbox:(c.scenes[0]&&c.scenes[0].letterbox)||0.7,far:FARG[LV]||null,
     subtitles:(c.subtitles||[]).map(function(x){return {at:x.at,dur:x.dur,text:x.text||x.key}}),
     note:"People and vehicles stand where the cutscene starts them: this plays the cameras, not the drives",
     onEnd:function(){FILMING=FILMACTORS=false;V3D.film=null}});
@@ -10312,16 +10334,14 @@ function explore3d(x,y,z,ground){
   V3D.at=at;
   var out={objects:scene3d(at,q),nav:nav3d(at,reach3d(V3D.radius),q),splines:splines3d(at,reach3d(V3D.radius))};
   if(FILMING){
-    // a cutscene's camera high over the level sees far: the ground that far
-    // round it (coarser the further), and the buildings on it - asked each time
-    // the camera goes somewhere, given again only when it needs more or less
-    var g=terrainZ(x,y),E=filmReach(g==null?0:z-g),F=V3D.film;
-    out.objects=out.objects.concat(farBuildings(at,reach3d(V3D.radius),E,out.objects));
-    if(!F||Math.hypot(x-F.x,y-F.y)>F.E*0.35||E>F.E*1.2||E<F.E*0.6){
-      V3D.film={x:x,y:y,E:E};
-      out.terrain=terrain3d(at,V3D.radius,E);
-    }
-    return out;
+    // a cutscene shows the whole level, once: every thing on it, all of the
+    // ground the studio has in detail (the far ground round it comes with the
+    // film), every road and track; after that the camera only moves
+    if(V3D.film)return {};
+    V3D.film={all:true};
+    var M0=TERR&&TERR.meta,ctr=M0?{type:"spot",x:M0.x0+(M0.w-1)*M0.cell/2,y:M0.y0+(M0.h-1)*M0.cell/2,z:z}:at;
+    return {objects:sceneAround(ctr,1e7,true),splines:splines3d(ctr,1e7),nav:null,
+      terrain:M0?terrain3d(ctr,V3D.radius,Math.max(M0.w,M0.h)*M0.cell/2+2,260000):undefined};
   }
   if(ground)out.terrain=terrain3d(at,V3D.radius);
   return out;
@@ -10452,14 +10472,14 @@ function gunModelOf(q){return q&&q.qtype==="StationaryGun"&&q.weapon&&window.Mes
 // the ground round it, as the map has it (with the mission's own shaping), out
 // well past the things drawn on it - twice the radius, or 40 m more - so it runs
 // into the fog rather than ending in a cliff; every other cell when that is big
-function terrain3d(o,R,far){
+function terrain3d(o,R,far,maxPts){
   if(!TERR)return null;
   var m=TERR.meta,E=far||Math.min(160,Math.max(R*2.5,R+40)),c=cellsOf(o.x-E,o.x+E,o.y-E,o.y+E);
   // past the edge of the level's ground (level 9's track runs off it) there is
   // none to give: the close-up keeps what it has instead of failing to gather
   if(c[1]-c[0]<1||c[3]-c[2]<1)return null;
   // no more than about 90 000 points: every other one, or fewer, over a wide stretch
-  var st=Math.max(1,Math.ceil(Math.sqrt((c[1]-c[0])*(c[3]-c[2])/90000)));
+  var st=Math.max(1,Math.ceil(Math.sqrt((c[1]-c[0])*(c[3]-c[2])/(maxPts||90000))));
   var w=Math.floor((c[1]-c[0])/st)+1,h=Math.floor((c[3]-c[2])/st)+1;
   var G=TERR.ground,z=new Float32Array(w*h),shade=G?new Float32Array(w*h):null;
   var rgb=G&&G.rgb?new Float32Array(w*h*3):null,count={};

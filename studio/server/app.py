@@ -28,6 +28,7 @@
 #   GET    /api/recoverable, POST /api/recover   missions in the game that this studio can take back in
 #   GET    /api/missions/<id>/cover.png
 #   GET    /api/missions/<id>/picture.png    the mission's own picture (PUT {picture: data URL or null})
+#   GET    /api/terrainfar?level=N           the ground everywhere the level's cutscenes go
 #   GET    /api/music                        the game's music a mission can have
 #   GET    /api/music/<id>.wav               one of them to listen to (byte ranges)
 #   GET    /api/trash, POST /api/trash/<tid>/restore,
@@ -1162,6 +1163,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._texture()
         if self.path.startswith("/api/groundtex"):
             return self._groundtex()
+        if self.path.startswith("/api/terrainfar"):
+            # the ground everywhere a level's cutscenes go (studio/extract/terrainfar.py)
+            from studio.extract import terrainfar as TF
+            return self._guard(lambda: self._json({"ok": True, "grid": TF.grid(int(self._query().get("level") or 0))}))
         if self.path.startswith("/api/library"):
             return self._guard(lambda: self._json({"ok": True, **library(load_config())}))
         if re.match(r"^/api/music/?(?:\?.*)?$", self.path):

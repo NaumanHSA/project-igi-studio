@@ -894,7 +894,7 @@ function explore(now) {
     S.root.add(terrainMesh(O.terrain));
     fogFor();
   }
-  update({ objects: got.objects, nav: got.nav });
+  if (got.objects) update({ objects: got.objects, nav: got.nav });
   if (got.splines) {
     const keys = got.splines.map(t => t.key).sort().join("|");
     if (keys !== S.splineKeys) {
@@ -1733,7 +1733,11 @@ function tip(it, e) {
 //   F.letterbox  the game's viewport height factor (0.7: a bar above and below)
 //   F.note       a line under the controls (what the preview cannot show)
 //   F.start      where to begin, seconds
+//   F.far        the ground beyond the close-up's ({x0, y0, cell, w, h, z, hole}),
+//                drawn round it while the cutscene plays
 //   F.onEnd()    stopped (Esc, Stop, or the view closed)
+// While it plays there is no fog and the camera sees as far as the level goes:
+// the host gives the whole level at once (explore).
 // The mouse is not taken while it plays; Space pauses, the arrows go a shot back
 // or on, Esc stops it and leaves the camera where it is.
 const FILM_FOV = 60;                // degrees, the view at the game's FOV factor 1
@@ -1750,6 +1754,11 @@ function film(F) {
   S.film = { shots, at, total: t, t: Math.max(0, Math.min(t, +F.start || 0)), playing: F.paused ? false : true, last: 0,
     subs: (F.subtitles || []).slice().sort((p, q) => p.at - q.at), lb: Math.max(0.2, Math.min(1, F.letterbox || 1)),
     onEnd: F.onEnd || null };
+  // everything visible: no fog, the camera's far plane past the level's edge
+  S.scene.fog = null;
+  S.camera.far = 40000;
+  if (S.farMesh) { S.root.remove(S.farMesh); drop(S.farMesh); S.farMesh = null; }
+  if (F.far) { S.farMesh = terrainMesh(F.far); S.farMesh.userData.item = { key: "farground", name: "the ground", type: "terrain" }; S.root.add(S.farMesh); }
   const el = S.el.querySelector(".v3d-film");
   el.hidden = false;
   el.style.top = S.canvas.offsetTop + "px";
@@ -1893,7 +1902,10 @@ function filmStop() {
   S.el.classList.remove("filming");
   S.camera.up.set(0, 0, 1);
   S.camera.fov = 60;
+  S.camera.far = 3000;
   S.camera.updateProjectionMatrix();
+  if (S.farMesh) { S.root.remove(S.farMesh); drop(S.farMesh); S.farMesh = null; }
+  S.scene.fog = new THREE.Fog(0x9fb2ba, 1, 2);
   applyLook();
   fogFor();
   hint();
