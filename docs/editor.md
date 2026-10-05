@@ -1411,61 +1411,40 @@ of trigger and of action.
 
 ## Cutscenes and moving vehicles
 
-The **Cutscenes** tab on the left edge shows what the level has of its own:
+The **Cutscenes** tab on the left edge is where a mission of yours gets
+cutscenes of its own (below). A built-in mission has no Cutscenes tab: it is
+only looked at, and the studio does not play the levels' own cutscenes.
 
-- **Its cutscenes.** The game's levels each have an intro, which plays as the
-  mission starts (the skip key skips it), and all but level 14 an outro,
-  which plays once the mission is won: the mission ends when the outro does.
-  Each card gives the length, the scenes, the shots and the lines of
-  subtitles.
-  - **▶ plays it in the 3D view** as the game plays it: the cameras one after
-    another, each moving or holding, in the letterbox, with the subtitles.
-    Space pauses, ← and → go a shot back or on, the slider scrubs, a click on
-    the picture pauses, and Esc (or Stop) stops it and leaves you looking from
-    where the camera was. The ground and buildings reach as far as a high
-    camera sees.
-  - **Unfold a card** for its scenes and shots, each with how long it lasts
-    and what it does (moves, holds, rides with a vehicle, looks at someone,
-    zoomed in), and its subtitles. Click a shot or a line to play from there.
-    The map marks where each camera stands and which way it looks.
-- **Vehicles that move**: driven by the game's AI along a route (level 6's
-  APC, out of its garage once the alarm goes off), on rails (the trains), on
-  a recorded drive (helicopters, planes, the trucks in cutscenes), or parked
-  stand-ins that wait for the one that drives. Click one to find it on the
-  map. A selected vehicle says how it moves and when it is there. While the
-  tab is open, the AI vehicles' routes are drawn amber and the tracks blue.
+The tab also lists **the level's vehicles that move**: driven by the game's AI
+along a route (level 6's APC, out of its garage once the alarm goes off), on
+rails (the trains), on a recorded drive (helicopters, planes, the trucks in
+cutscenes), or parked stand-ins that wait for the one that drives. Click one
+to find it on the map. A selected vehicle says how it moves and when it is
+there. While the tab is open, the AI vehicles' routes are drawn amber and the
+tracks blue. In a copy of a mission, **✕** leaves one out (**↶** puts it
+back): its recorded drive goes with it, and a camera of the level's that rode
+with it or looked at it stays where it is set instead. A vehicle on the map is
+taken out like anything else of the level's (Delete works too); a train, which
+is not on the map, is left out from here. It shows in the change log under
+*Removed*, with undo. An empty map has none.
+
+In the game, a copy of a mission plays the level's own intro and outro unless
+it has its own, which take their place: the intro as the mission starts (the
+skip key skips it), the outro once the mission is won, the mission ending
+when it does. (A mission that had the level's intro or outro left out keeps
+that; the change log lists it under *Removed*, and ↶ puts it back.)
 
 While a cutscene plays there is no fog: the whole level is loaded, and the
-ground runs out to wherever the level's cutscenes go, read from the game's
-own terrain (`studio/extract/terrainfar.py`, `GET /api/terrainfar?level=N`,
-read once a level and kept as `terrain/levelN.far.json` in the level data;
-coarser than the editor's own ground, round it). Out there it wears the
-level's own ground - the same materials and textures as close by, painted
-from the level's texture masks the same way (`ground.paint`) - not a plain
-colour. A helicopter's rotors turn while it is off the ground, its blades
-see-through as the game draws them (a texture see-through all over, like
-glass, is blended; one with holes, like a fence, is cut out).
-
-What the preview cannot show: people and vehicles stand where the cutscene
-starts them. A recorded drive is control inputs fed to the game's own
-physics (throttle, steering, a helicopter's lift), so only the game knows the
-way it goes; a camera riding with one stays where the vehicle starts. The
-field of view is the game's factor times 60°.
-
-**In a copy of a mission** you choose what stays:
-
-- **Plays / Left out** on the intro and the outro. Left out, the intro is
-  skipped at once and the mission starts straight away; left out, the outro
-  never plays and the mission ends on its *Mission complete* message. Kept,
-  the outro plays once the mission is won and the mission ends when it does.
-- **✕ on a vehicle** leaves it out (**↶** puts it back). Its recorded drive
-  goes with it, and a cutscene camera that rode with it or looked at it stays
-  where it is set instead. A vehicle on the map is taken out like anything
-  else of the level's (Delete works too); a train, which is not on the map, is
-  left out from here.
-
-Both show in the change log under *Removed*, with undo. A built-in mission is
-only looked at, and an empty map keeps none of them.
+ground runs out beyond the play area, read from the game's own terrain
+(`studio/extract/terrainfar.py`, `GET /api/terrainfar?level=N`, read once a
+level and kept as `terrain/levelN.far.json` in the level data; coarser than
+the editor's own ground, round it, as far as the level's own cutscenes go).
+Out there it wears the level's own ground - the same materials and textures
+as close by, painted from the level's texture masks the same way
+(`ground.paint`) - not a plain colour. A helicopter's rotors turn while it is
+off the ground, its blades see-through as the game draws them (a texture
+see-through all over, like glass, is blended; one with holes, like a fence,
+is cut out). The field of view is the game's factor times 60°.
 
 ### Cutscenes of your own
 

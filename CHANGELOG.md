@@ -7,20 +7,15 @@ section is also that release's notes on GitHub.
 
 ### New
 
-- **The level's cutscenes, played in the studio.** A Cutscenes tab lists each
-  level's intro and outro and plays them in the 3D view as the game does:
-  every camera, moving or holding, in the letterbox, with the subtitles.
-  Pause, scrub, go shot by shot, or play from any shot or line.
-- **Vehicles that move.** The same tab lists the vehicles that drive in a
+- **Vehicles that move.** A Cutscenes tab lists the vehicles that drive in a
   level - by the game's AI along a route, on rails, or on a recorded drive -
   and when they are there; their routes and the railway are drawn on the map,
-  and a selected vehicle says how it moves.
-- **Keep or leave out the level's intro, outro and moving vehicles** in a copy
-  of a mission. A left-out intro is skipped at once; a kept outro now plays
-  once the mission is won, and the mission ends when it does (it used to be
-  cut short, or never to play, when the mission had objectives of its own).
-  A vehicle left out takes its recorded drive with it, and no cutscene camera
-  is left following something that is gone.
+  and a selected vehicle says how it moves. In a copy of a mission, leave one
+  out: its recorded drive goes with it, and no cutscene camera is left
+  following something that is gone.
+- **The level's outro plays** in a copy of a mission once it is won, and the
+  mission ends when it does (it used to be cut short, or never to play, when
+  the mission had objectives of its own).
 - **Vehicles of your own that drive.** Give an APC, a T80 tank, a truck or the
   limousine a route by clicking its stops on the map: the game's AI drives it
   there, round and round or stopping at the last, at the speed you set,

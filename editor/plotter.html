@@ -646,6 +646,7 @@ details.aplog summary{cursor:pointer;font-size:12px;color:var(--muted);margin:0 
 /* ---- side panels, chosen by tabs on the left wall ---- */
 .tabs{flex:none;width:28px;display:flex;flex-direction:column;justify-content:center;gap:8px;
   background:var(--ground);border-right:1px solid var(--line)}
+.tab[hidden]{display:none}
 .tab{writing-mode:vertical-rl;transform:rotate(180deg);display:flex;align-items:center;gap:7px;
   border:1px solid var(--line);border-right:none;background:var(--surface);color:var(--muted);
   font:600 12px "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;
@@ -6793,7 +6794,6 @@ var FILMACTORS=false;       // ... and it is the level's own: its actors (cutsce
 // leaves a cutscene out, {"<task id>": "off"} a moving vehicle that is no object
 // on the map (a train; one that is, is taken out like anything else, removeRefs)
 var levelScenes={},levelVehicles={};
-var CUTOPEN={};             // the cutscenes whose shots are unfolded in the panel (and drawn on the map)
 var KIND_NAME={car:"Car",heli:"Helicopter",plane:"Plane",train:"Train"};
 function levelMotion(){
   var m=MODE!=="empty"&&LEVEL&&LEVEL.motion;
@@ -6984,56 +6984,8 @@ function renderCutscenes(){
     return;
   }
   h+=ownCutsHtml();
-  h+='<p class="hint" style="margin:0 0 8px">The level\'s own cutscenes, played in the 3D view as the game plays them, and the vehicles that move in it.</p>';
-  h+='<div class="lbl" style="margin:4px 0 6px">The level\'s cutscenes ('+M.cutscenes.length+')</div>';
-  if(!M.cutscenes.length)h+='<p class="hint">This level has none.</p>';
-  M.cutscenes.forEach(function(c,ci){
-    var key=String(c.id),open=!!CUTOPEN[key],shots=c.scenes.reduce(function(a,sc){return a+sc.shots.filter(function(x){return x.dur>0}).length},0);
-    var when=c.role==="intro"?"Plays as the mission starts"+(c.skip!=null?"; the skip key skips it":"")
-      :c.role==="outro"?"Plays once the mission is won"+(c.ends?"; the mission ends when it does":"")
-      :"Plays during the mission";
-    h+='<div class="ob cut'+(open?' open':'')+'" data-c="'+ci+'">'+
-      '<div class="ob-h" data-a="toggle"><span class="cut-role '+esc(c.role)+'">'+esc(c.role)+'</span>'+
-      '<span class="ob-k">'+esc(c.name||"Cutscene")+'</span><span class="ob-acts">'+
-      '<button class="iconbtn" data-a="play" title="Play it in the 3D view" aria-label="Play">'+CUT_IC.play+'</button>'+
-      '<span class="ev-chev" aria-hidden="true">'+EV_IC.open+'</span></span></div>'+
-      '<p class="ob-txt">'+fmtSecs(c.seconds)+' · '+c.scenes.length+' scene'+(c.scenes.length>1?'s':'')+' · '+shots+' shot'+(shots===1?'':'s')+
-      (c.subtitles&&c.subtitles.length?' · '+c.subtitles.length+' line'+(c.subtitles.length>1?'s':'')+' of subtitles':'')+'. '+
-      (ownReplaces(c)?"Your "+c.role+" plays instead":sceneKept(c)?when:c.role==="intro"?"Left out: the mission starts at once, as when the intro is skipped":
-        c.role==="outro"?"Left out: the mission ends on its Mission complete message":"Left out")+'.</p>'+
-      (canKeepLevel()&&(c.role==="intro"||c.role==="outro")&&!ownReplaces(c)?'<div class="cut-keep" role="group" aria-label="In this mission">'+
-        '<button type="button" data-a="keep" class="'+(sceneKept(c)?'on':'')+'" aria-pressed="'+sceneKept(c)+'">Plays</button>'+
-        '<button type="button" data-a="leave" class="'+(sceneKept(c)?'':'on')+'" aria-pressed="'+!sceneKept(c)+'">Left out</button></div>':'');
-    if(open){
-      var shotList=cutShots(c),at=shotStarts(shotList),k=0;
-      c.scenes.forEach(function(sc){
-        h+='<div class="cut-sc"><b>'+esc(sc.name||"Scene")+'</b><span>'+fmtSecs(sc.start)+' · '+sc.seconds.toFixed(1)+' s</span></div>';
-        sc.shots.forEach(function(s,i){
-          var q=shotList[k],t=at[k];k++;
-          if(!(s.dur>0))return;
-          var nx=sc.shots[i+1],how=s.smooth&&nx?"moves":"holds";
-          var bits=[how];
-          if(s.link!=null)bits.push("rides with "+thingName(s.link));
-          if(s.target!=null)bits.push("looks at "+thingName(s.target));
-          if(s.fov&&Math.abs(s.fov-1)>0.05)bits.push(s.fov<1?"zoomed in":"wide");
-          if(s.filter)bits.push(s.filter.replace("_"," ")+" filter");
-          h+='<button type="button" class="cut-shot" data-a="shot" data-t="'+t.toFixed(3)+'" title="Play from this shot">'+
-            '<span class="n">'+fmtSecs(t)+'</span><span class="t"><b>'+esc(s.name||"Shot")+'</b><i>'+s.dur.toFixed(1)+' s · '+esc(bits.join(" · "))+'</i></span></button>';
-        });
-      });
-      if(c.subtitles&&c.subtitles.length){
-        h+='<div class="cut-sc"><b>Subtitles</b><span>'+c.subtitles.length+'</span></div>';
-        c.subtitles.forEach(function(x){
-          h+='<button type="button" class="cut-shot sub" data-a="shot" data-t="'+x.at.toFixed(3)+'" title="Play from this line">'+
-            '<span class="n">'+fmtSecs(x.at)+'</span><span class="t"><i>'+esc(x.text||x.key)+'</i></span></button>';
-        });
-      }
-      if(c.when)h+='<p class="hint cut-when" title="The level\'s own condition for it">Runs while: <code>'+esc(c.when)+'</code></p>';
-    }
-    h+='</div>';
-  });
   var mv=M.vehicles.filter(moves);
-  h+='<div class="lbl" style="margin:14px 0 6px">Vehicles that move ('+mv.length+')</div>';
+  h+='<div class="lbl" style="margin:14px 0 6px">The level\'s vehicles that move ('+mv.length+')</div>';
   if(!mv.length)h+='<p class="hint">None in this level.</p>';
   mv.forEach(function(v){
     var i=M.vehicles.indexOf(v),kept=vehicleKept(v);
@@ -7042,7 +6994,7 @@ function renderCutscenes(){
     h+='<button type="button" class="cut-veh" data-a="veh" data-v="'+i+'"><span class="t"><b>'+esc(v.name||KIND_NAME[v.kind]||"Vehicle")+(kept?'':' · left out')+'</b>'+
       '<i>'+esc(vehicleMoves(v))+(v.parked?'':' · '+esc(thereWhen(v)))+'</i></span></button></div>';
   });
-  h+='<p class="hint" style="margin:12px 0 0">With this panel open, the map shows the AI vehicles\' routes (amber) and the trains\' tracks (blue), and the cameras of an unfolded cutscene.</p>';
+  h+='<p class="hint" style="margin:12px 0 0">With this panel open, the map shows the AI vehicles\' routes (amber) and the trains\' tracks (blue), and the cameras of your unfolded cutscenes.</p>';
   h+=flightList();
   host.innerHTML=h;
   host.scrollTop=top;
@@ -8017,16 +7969,12 @@ function bindCutscenes(){
   bindOwnCuts(host);
   host.addEventListener("click",function(e){
     var b=e.target.closest("[data-a]");if(!b||!host.contains(b))return;
-    var M=levelMotion(),card=b.closest(".cut"),c=card?M.cutscenes[+card.getAttribute("data-c")]:null,a=b.getAttribute("data-a");
-    if(a==="toggle"&&c){var k=String(c.id);CUTOPEN[k]=!CUTOPEN[k];renderCutscenes();draw();return}
-    if(a==="play"&&c){e.stopPropagation();playCutscene(c,0);return}
-    if((a==="keep"||a==="leave")&&c){setLevelScene(c,a==="keep");return}
+    var M=levelMotion(),a=b.getAttribute("data-a");
     if(a==="vout"||a==="vin"){var vv=M.vehicles[+b.getAttribute("data-v")];if(vv)setLevelVehicle(vv,a==="vin");return}
     if(a==="fly"){var f=(FLIGHTS||[])[+b.getAttribute("data-f")];if(!f||!canEdit())return;
       FLIGHTPICK=FLIGHTPICK===f?null:f;if(FLIGHTPICK){if(tool)selectTool(null,null);VROUTE=null;toast("Click the map where it starts. Esc to stop")}
       renderCutscenes();draw();return}
     if(a==="flights"){FLIGHTS_OPEN=!FLIGHTS_OPEN;renderCutscenes();return}
-    if(a==="shot"&&c){playCutscene(c,+b.getAttribute("data-t"));return}
     if(a==="veh"){
       var v=M.vehicles[+b.getAttribute("data-v")];if(!v)return;
       var o=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="vehicle"&&q.id===v.id})[0];
@@ -8038,13 +7986,13 @@ function bindCutscenes(){
     }
   });
 }
-// the moving vehicles' ways and an unfolded cutscene's cameras, while the
+// the moving vehicles' ways and your unfolded cutscenes' cameras, while the
 // panel is open; a selected vehicle's way, always
 function drawMotion(){
   if(!LEVEL||MAPCOMP)return;
   drawOwnRoutes();
   if(PANEL==="cut"){ctx.save();drawOwnCuts();ctx.restore()}
-  var M=levelMotion();if(!M.vehicles.length&&!M.cutscenes.length)return;
+  var M=levelMotion();if(!M.vehicles.length)return;
   var all=PANEL==="cut",one=sel&&sel.type==="vehicle"?motionOf(sel):null;
   if(!all&&!one)return;
   ctx.save();ctx.lineJoin="round";ctx.lineCap="round";
@@ -8065,20 +8013,6 @@ function drawMotion(){
       ctx.beginPath();ctx.moveTo(m[0]+ux*6,m[1]+uy*6);ctx.lineTo(m[0]-ux*4-uy*5,m[1]-uy*4+ux*5);ctx.lineTo(m[0]-ux*4+uy*5,m[1]-uy*4-ux*5);ctx.closePath();
       ctx.fillStyle=ctx.strokeStyle;ctx.fill();
     }
-  });
-  if(all)M.cutscenes.forEach(function(c){
-    if(!CUTOPEN[String(c.id)])return;
-    var shots=cutShots(c),n=0;
-    ctx.font='600 10px "IBM Plex Mono",monospace';
-    shots.forEach(function(s){
-      if(!(s.dur>0))return;n++;
-      var p=w2s(s.x,s.y),f=s.target?[s.target.x-s.x,s.target.y-s.y,s.target.z-s.z]:camFwd(s),h=Math.hypot(f[0],f[1]);
-      ctx.strokeStyle="rgba(255,226,120,.95)";ctx.fillStyle="rgba(255,226,120,.95)";ctx.lineWidth=1.5;
-      if(h>0.15){var L=22;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+f[0]/h*L,p[1]-f[1]/h*L);ctx.stroke()}
-      ctx.beginPath();ctx.arc(p[0],p[1],h>0.15?3.5:5,0,6.2832);h>0.15?ctx.fill():ctx.stroke();
-      ctx.fillStyle="rgba(10,20,12,.85)";var lb=String(n),w=ctx.measureText(lb).width;
-      ctx.fillRect(p[0]+5,p[1]-15,w+6,12);ctx.fillStyle="rgba(255,226,120,.95)";ctx.fillText(lb,p[0]+8,p[1]-6);
-    });
   });
   ctx.restore();
 }
@@ -14183,6 +14117,9 @@ function viewBuiltin(level){
 }
 function applyModeUi(){
   $("app").classList.toggle("readonly",READONLY);
+  // a built-in mission is only looked at: no cutscenes to make, none of its own shown
+  $("tab-cut").hidden=READONLY;
+  if(READONLY&&PANEL==="cut")showPanel("inv");
   $("mname").value=MISSION;$("mname").disabled=READONLY||!M;
   $("btnapply").hidden=!(Store&&!Store.local&&M);
   buildPalette();paintStatus();
