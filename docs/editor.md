@@ -1454,6 +1454,51 @@ field of view is the game's factor times 60°.
 Both show in the change log under *Removed*, with undo. A built-in mission is
 only looked at, and an empty map keeps none of them.
 
+### Cutscenes of your own
+
+At the top of the Cutscenes tab (a mission of yours):
+
+- **Make an intro** makes one from the mission: a fly-over of the area (the
+  mission's description as its subtitle), a push in, orbit or pan on each
+  objective that has a place (its text as the subtitle), and a last shot over
+  the player's shoulder before he takes over. **Make an outro**: an orbit of
+  the last objective's place ("Mission complete."), then the camera rising
+  away from it. **New cutscene** starts an empty one, for an event.
+- **A shot** is a kind, what it shows, how long, and a line of subtitle:
+  *Fly-over* (comes in high and settles towards it), *Orbit*, *Push in*, *Pan
+  across*, *Still*, *Crane up*, *Follow* (rides behind a vehicle - one of yours
+  that drives, or the level's) and *Over the shoulder* (from behind the
+  player's start, the way he looks). **Pick what it shows**, then click the
+  map: a thing (a building, a guard, a vehicle, the player's start) or a spot.
+  The studio places the camera: from the side the player comes from, clear of
+  the ground, with nothing solid between it and what it shows (it tries other
+  sides until one is clear). *from* sets the side yourself (compass degrees),
+  *dist* and *height* move it further or closer, higher or lower. ↑ ↓ reorder
+  the shots, ✕ removes one, ▶ plays from it.
+- **Plays** as the mission starts (the level's own intro is then left out; the
+  skip key skips it unless you say not), once the mission is won (the level's
+  outro is left out; the mission ends when yours does), or when an event
+  happens. **Letterbox** on or off.
+- **▶ plays it in the 3D view**, as the game will: the cameras the plan keeps
+  are the ones the preview plays. Unfolded, its cameras are on the map in blue,
+  numbered by shot.
+
+How the build does it (*cutscenes of yours*): one `ConditionalContainer` per
+cutscene holding a `CutScene` (its `EditCamera`s in order; a shot's last one
+ends it, the next one cuts), a `LevelTimer` that runs with it and a
+`StatusMessage` per subtitle line (a *Cutscene message*; text in
+`messages.res` under the mission's prefix). An intro's condition is
+`!CutScene_N.isFinished && !<skip>.nValue` (an `EditVariable` raised by
+`LevelFlow_GetBreakCutSceneKey()`); an outro's waits for the *Mission complete*
+message, its start adds `Game_CutsceneDelete()` as the levels' do, and
+`LevelFlow`'s *Complete* becomes `CutScene_N.isFinished`. The player is held
+as in the levels: the container he lives in gets `&& !<yours>.isRun` (on an
+empty map one is made round him). One on an event holds his controls where
+he stands instead (`Game_DisablePlayerInput()` / `Game_EnablePlayerInput()`,
+which the levels never use - **to be confirmed in the game**). A *Follow*
+camera's link and target are the vehicle's task id. The plan keeps each
+shot's cameras as the editor worked them out (`cams`).
+
 ### Vehicles of your own that drive
 
 The APC, the T80 tank, the two trucks and the limousine (Inventory, *Vehicles

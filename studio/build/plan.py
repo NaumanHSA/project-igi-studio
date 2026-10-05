@@ -3556,6 +3556,96 @@ if errors:
     sys.exit(1)
 
 
+# ---------------------------------------------------------------- cutscenes of yours
+# plan["cutscenes"]: [{uid, name, where intro|outro|event, event, letterbox,
+# skippable, shots: [{kind, dur, text, cams: [{x, y, z, a, b, g, fov, dur,
+# smooth, follow}]}]}] - the cameras worked out by the editor (shotCams), so the
+# 3D view plays what the game gets. Each is written the way the levels write
+# theirs (studio/extract/motion.py): a ConditionalContainer holding a CutScene
+# (its EditCameras in order; a shot's last camera ends it, the next one cuts), a
+# LevelTimer that runs with it and a StatusMessage for each line of subtitle (a
+# "Cutscene message", its text in messages.res). An intro plays at once, until
+# done or skipped (an EditVariable the skip key raises); an outro waits for the
+# "Mission complete" message, and LevelFlow's Complete becomes its end (in "the
+# level's own cutscenes", below, which also leaves the level's own intro or
+# outro out where one of yours takes its place); one on an event waits for it.
+# While an intro or an outro plays the player is not there: the container he
+# lives in waits for them, as in the levels. One on an event holds his controls
+# instead (Game_DisablePlayerInput, which no level uses), where he stands.
+OWN_SCENES = []                 # [(where, container id, CutScene id)]
+_cut_n = 0
+for _c in [c for c in (plan.get("cutscenes") or []) if isinstance(c, dict)]:
+    _shots = [sh for sh in (_c.get("shots") or []) if isinstance(sh, dict) and sh.get("cams")]
+    _where = _c.get("where") if _c.get("where") in ("intro", "outro", "event") else "intro"
+    _cn = _qstr(_c.get("name") or _where.capitalize(), 40)
+    if not _shots:
+        warnings.append("cutscene %s has no shots - left out" % _cn)
+        continue
+    if _where == "outro" and not OBJ_TASK_IDS.get("done"):
+        warnings.append("cutscene %s plays once the mission is won, and the mission has no objectives of its own "
+                        "to win it - left out" % _cn)
+        continue
+    if _where == "event" and not event_fired(_c.get("event")):
+        warnings.append("cutscene %s waits for an event that is not there - left out" % _cn)
+        continue
+    if any(w == _where for w, _, _ in OWN_SCENES) and _where != "event":
+        warnings.append("a second %s (%s) - left out: a mission has one" % (_where, _cn))
+        continue
+    _cut_n += 1
+    _box, _cs, _timer = take_id(), take_id(), take_id()
+    _cams, _subs, _t, _first = [], [], 0.0, None
+    for _si, _sh in enumerate(_shots):
+        _ks = [k for k in _sh["cams"] if isinstance(k, dict)]
+        _len = 0.0
+        for _i, _k in enumerate(_ks):
+            _f, _link = _k.get("follow"), -1
+            if isinstance(_f, dict):
+                _link = OWN_CAR_IDS.get(_f.get("uid")) if _f.get("uid") else (
+                    int(_f["id"]) if str(_f.get("id", "")).lstrip("-").isdigit() else -1)
+                _link = _link if isinstance(_link, int) and _link >= 0 else -1
+            _dur = max(0.0, min(120.0, float(_k.get("dur") or 0)))
+            _len += _dur
+            _first = _first or _k
+            _cams.append('Task_New(-1, "EditCamera", "%s %d", %s, %s, %s, %s, %s, %s, %s, %s, %d, TRUE, %d, TRUE, %s, -1, '
+                         '"CAMERAFILTER_TYPE_NONE", 0, 0, 0, 0, 0)'
+                         % (_qstr(_sh.get("kind") or "shot", 20), _si + 1, q(_k["x"]), q(_k["y"]), q(_k["z"]),
+                            repr(round(float(_k.get("a") or 0), 5)), repr(round(float(_k.get("b") or 0), 5)),
+                            repr(round(float(_k.get("g") or 0), 5)), repr(round(max(0.05, min(3.0, float(_k.get("fov") or 1))), 3)),
+                            repr(round(_dur, 3)), _link, _link,
+                            "TRUE" if _k.get("smooth") and _i < len(_ks) - 1 else "FALSE"))
+        _text = _qstr(_sh.get("text"), 160).strip()
+        if _text:
+            _key = PREFIX + "CUT%d_%d" % (_cut_n, _si + 1)
+            LANG["messages.res"][_key] = _text
+            _subs.append('Task_New(%d, "StatusMessage", "%s", 0, 0, 0, 0, 0, 0, "LevelTimer_%d.nTick > %d", "%s", "", "", TRUE, TRUE, %s)'
+                         % (take_id(), _key, _timer, max(1, int(round(_t * 30))), _key, repr(round(min(max(_len, 1.0), 9.0), 2))))
+        _t += _len
+    _lb = "0.7" if _c.get("letterbox", True) is not False else "1"
+    _kids = ['Task_New(%d, "LevelTimer", "", 0, 0, 0, 0, 0, 0, "ConditionalContainer_%d.isRun", "", FALSE)' % (_timer, _box)] + _subs
+    _kids.append('Task_New(%d, "CutScene", "%s", %s, %s, %s, 0, 0, 0, "!CutScene_%d.isFinished", "", "", 0, FALSE, 1, %s, 0, 0, 0, "", "", '
+                 % (_cs, _cn, q(_first["x"]), q(_first["y"]), q(_first["z"]), _cs, _lb) + EOL
+                 + (", " + EOL).join(_cams) + ")")
+    _on, _off = "MenuManager_SetEnabled(FALSE) && Game_DisableMusic()", "MenuManager_SetEnabled(TRUE) && Game_EnableMusic()"
+    if _where == "intro":
+        _cond = "!CutScene_%d.isFinished" % _cs
+        if _c.get("skippable", True) is not False:
+            _sv = take_id()
+            blocks.append('Task_New(%d, "EditVariable", "Skip %s", 0, 0, 0, 0, "EditVariable_%d.nValue == 0 && LevelFlow_GetBreakCutSceneKey()", ""), %s'
+                          % (_sv, _cn, _sv, EOL))
+            _cond += " && !EditVariable_%d.nValue" % _sv
+    elif _where == "outro":
+        _cond = "StatusMessage_%d.nTicksSinceFinishedDisplay > 1 * GAME_FREQUENCY && !CutScene_%d.isFinished" % (OBJ_TASK_IDS["done"], _cs)
+        _on += " && Game_CutsceneDelete()"
+    else:
+        _cond = "%s && !CutScene_%d.isFinished" % (event_fired(_c.get("event")), _cs)
+        _on, _off = "Game_DisablePlayerInput() && MenuManager_SetEnabled(FALSE)", "Game_EnablePlayerInput() && MenuManager_SetEnabled(TRUE)"
+    blocks.append('Task_New(%d, "ConditionalContainer", "%s", "%s", "%s", "%s", ' % (_box, _cn, _cond, _on, _off) + EOL
+                  + (", " + EOL).join(_kids) + "), " + EOL)
+    OWN_SCENES.append((_where, _box, _cs))
+    report.append("cutscene %s: %s, %d shot(s), %.0f s, %d line(s) of subtitle"
+                  % (_cn, {"intro": "as the mission starts", "outro": "once the mission is won, which ends when it does",
+                           "event": "when %s happens" % event_name(_c.get("event"))}[_where], len(_shots), _t, len(_subs)))
+
 # ---------------------------------------------------------------- splice
 # A marker goes in first, the shipped soldiers are stripped around it if this is
 # a new mission, and only then does the marker become our blocks. That way the
@@ -4133,7 +4223,11 @@ if OBJ_TASK_IDS.get("done") or EVENT_FAILS:
 #            message has shown - and the mission ends when it does: LevelFlow's
 #            Complete is its last scene finishing, as in the levels. Left out,
 #            it never runs, and the mission ends on the message.
-LEVEL_SCENES = plan.get("levelScenes") or {}
+LEVEL_SCENES = dict(plan.get("levelScenes") or {})
+# an intro or an outro of yours takes the place of the level's own
+for _c in MOTION["cutscenes"]:
+    if _c["id"] is not None and any(w == _c["role"] for w, _, _ in OWN_SCENES):
+        LEVEL_SCENES[str(_c["id"])] = "off"
 
 
 def _task_by_id(text, tid, kind):
@@ -4195,6 +4289,39 @@ for _c in MOTION["cutscenes"]:
             out_src = out_src[:_sp[2][0]] + '"CutScene_%d.isFinished"' % _last + out_src[_sp[2][1]:]
             report.append("the level's outro plays once the mission is won (%.0f s), and the mission ends when it does"
                           % _c["seconds"])
+
+# the mission ends when an outro of yours does
+for _w, _box, _cs in OWN_SCENES:
+    if _w == "outro":
+        _sp = _complete_spans(out_src)
+        if _sp:
+            out_src = out_src[:_sp[2][0]] + '"CutScene_%d.isFinished"' % _cs + out_src[_sp[2][1]:]
+# while an intro or an outro of yours plays, the player is not there: the
+# container he lives in waits for them (a copy's already waits for the level's),
+# or one is made round him (an empty map has him on his own)
+_hold = [b for w, b, _ in OWN_SCENES if w in ("intro", "outro")]
+if _hold:
+    _terms = " && ".join("!ConditionalContainer_%d.isRun" % b for b in _hold)
+    _hp = next((t for t in MOTION_X.tasks(out_src) if t.kind == "HumanPlayer"), None)
+    _pbox = None
+    if _hp is not None:
+        _a = _hp.parent
+        while _a is not None and _a.kind != "ConditionalContainer":
+            _a = _a.parent
+        _pbox = _a if _a is not None and isinstance(_a.id, int) and _a.id >= 0 else None
+    if _pbox is not None:
+        _at = _task_by_id(out_src, _pbox.id, "ConditionalContainer")
+        _sp = _quoted_spans(out_src, _at[0], _at[1])
+        _old = out_src[_sp[2][0] + 1:_sp[2][1] - 1].strip()
+        out_src = out_src[:_sp[2][0]] + '"%s"' % (("(%s) && " % _old if _old else "") + _terms) + out_src[_sp[2][1]:]
+    else:
+        _m = re.search(r'Task_New\(-?\d+, "HumanPlayer", ', out_src)
+        if _m:
+            _e = task_end(out_src, _m.start())
+            out_src = (out_src[:_m.start()] + 'Task_New(%d, "ConditionalContainer", "Player", "%s", "StatusMessageScreen_ClearMessages()", "", '
+                       % (take_id(), _terms) + EOL + out_src[_m.start():_e] + ")" + out_src[_e:])
+        else:
+            warnings.append("the level has no player to hold while a cutscene of yours plays")
 
 # ---------------------------------------------------------------- mission settings
 # plan["settings"]: a time limit, rain or snow, haze. Each rewrites a task every

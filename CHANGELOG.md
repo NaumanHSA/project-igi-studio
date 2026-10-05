@@ -26,6 +26,16 @@ section is also that release's notes on GitHub.
   there, round and round or stopping at the last, at the speed you set,
   firing at the player if it is armed. It starts at once, when the alarm goes
   off, or when an event happens, parked until then.
+- **Cutscenes of your own, made with you.** *Make an intro* builds one from
+  the mission - a fly-over of the area, a shot of each objective with its text
+  as the subtitle, the player's view as he takes over - and *Make an outro*
+  one for its end. Each shot is a kind (fly-over, orbit, push in, pan, still,
+  crane up, follow a vehicle, over the shoulder) and what it shows; the studio
+  places the camera clear of the ground and of buildings, from the player's
+  side, and you can turn, move, lengthen, reorder and caption every shot and
+  play it all in 3D. An intro plays as the mission starts (skippable), an
+  outro once it is won - the mission ends when it does - and any cutscene can
+  play on an event.
 - **The levels' flights in your missions.** Any of the game's recorded
   flights - a helicopter landing, a plane taking off, an attack helicopter's
   round - placed where you click, turned as you like, starting when you say.

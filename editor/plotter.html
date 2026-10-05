@@ -960,6 +960,21 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .cut-keep button:first-child{border-radius:4px 0 0 4px}.cut-keep button:last-child{border-radius:0 4px 4px 0}
 .cut-keep button.on{background:var(--sunken);color:var(--ink);border-color:var(--accent)}
 .cut-vrow{display:flex;align-items:flex-start;gap:2px}
+.cut-role.event{color:var(--electric,#9ad)}
+.own-f{display:flex;flex-direction:column;gap:6px;margin:6px 10px;font-size:12.5px}
+.own-f label{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.own-f input[type=text]{width:100%}
+.shot{margin:6px 8px;padding:6px 7px;border:1px solid var(--line);border-radius:5px;background:var(--surface)}
+.shot-h{display:flex;align-items:center;gap:5px;font-size:12px}
+.shot-h .n{font:11px "IBM Plex Mono",monospace;color:var(--faint);min-width:30px}
+.shot-h select{flex:1;min-width:0}
+.shot-h input[type=number]{width:48px}
+.shot-acts{display:flex;gap:1px;margin-left:auto}
+.shot-b{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px;font-size:11.5px;color:var(--muted)}
+.shot-b .btn{flex:1 1 100%;text-align:left}
+.shot-b input[type=number]{width:52px}
+.shot-b input[type=range]{width:64px}
+.shot-t{width:100%;margin-top:5px;font-size:12px}
 .cut-veh.on{border-color:var(--accent);background:var(--sunken)}
 .drv .cut-keep{margin:0}
 .drv-f{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12.5px}
@@ -5826,13 +5841,14 @@ function appliedIndex(){
   (a.objectives||[]).forEach(function(o){ix.objectives[o.uid]=JSON.stringify(o)});
   (a.ground||[]).forEach(function(g){ix.ground[g.uid]=JSON.stringify(g);ix.groundObj[g.uid]=g});
   ix.levelScenes=a.levelScenes||{};ix.levelVehicles=a.levelVehicles||{};
+  ix.cutscenes={};(a.cutscenes||[]).forEach(function(c){ix.cutscenes[c.uid]=JSON.stringify(c)});
   return APPLIED_IX=ix;
 }
 function appliedState(){
   var ix=appliedIndex();
   if(APPLIED_ST.ver===planVer&&APPLIED_ST.ix===ix)return APPLIED_ST;
   var st={ver:planVer,ix:ix,placements:{},edits:{},removeRefs:{},nodes:{},nodeEdits:{},objectives:{},ground:{},brush:false,sculpt:false,paint:false,settings:false,events:{},
-    levelScenes:{},levelVehicles:{},n:0};
+    levelScenes:{},levelVehicles:{},cutscenes:{},n:0};
   if(ix){
     var cur=planOf();
     function mark(list,key,into,idx){list.forEach(function(q){var k=key(q);if(k!=null&&idx[k]===JSON.stringify(q)){into[k]=1;st.n++}})}
@@ -5848,6 +5864,7 @@ function appliedState(){
     if(cur.paint.length&&JSON.stringify(cur.paint)===ix.paint){st.paint=true;st.n++}
     if(Object.keys(cur.settings).length&&JSON.stringify(cur.settings)===ix.settings){st.settings=true;st.n++}
     mark(cur.events,function(v){return v.uid},st.events,ix.events);
+    mark(cur.cutscenes,function(c){return c.uid},st.cutscenes,ix.cutscenes);
     ["levelScenes","levelVehicles"].forEach(function(k){
       Object.keys(cur[k]).forEach(function(id){if(ix[k][id]===cur[k][id]){st[k][id]=1;st.n++}})});
   }
@@ -5945,6 +5962,15 @@ function renderList(){
       go:function(){GSEL=null;GMODE.mode="brush";openGround();jumpTo((bbx[0]+bbx[1])/2,(bbx[2]+bbx[3])/2)},
       undo:canEditQuiet()?clearBrush:null,undoTip:"Clear all brush strokes",undoIcon:IC.trash});
   }
+  cutscenes.forEach(function(c){
+    if(AS.cutscenes[c.uid])return;
+    var pr=cutProblem(c);
+    rows.added.push({thumb:function(){return iconSwatch("dot",pr?css("--danger"):css("--accent"),18)},
+      name:(c.name||"Cutscene"),meta:pr||((c.where||"intro")+" · "+fmtSecs(cutLength(c))),bad:!!pr,
+      go:function(){showPanel("cut");OWNOPEN[c.uid]=true;renderCutscenes();draw()},
+      undo:canEditQuiet()?function(){cutscenes=cutscenes.filter(function(x){return x!==c});touch();renderCutscenes();renderList();draw()}:null,
+      undoTip:"Remove it",undoIcon:IC.trash});
+  });
   Object.keys(levelScenes).forEach(function(id){
     if(levelScenes[id]!=="off"||AS.levelScenes[id])return;
     var c=cutOf(+id);if(!c)return;
@@ -6727,9 +6753,10 @@ function cutShots(c){
   return out;
 }
 function shotStarts(shots){var t=0;return shots.map(function(s){var a=t;t+=Math.max(0,s.dur||0);return a})}
-function playCutscene(c,start){
+function playCutscene(c,start,pre){
   if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
-  var shots=cutShots(c);if(!shots.length){toast("This cutscene has no cameras");return}
+  var shots=pre?pre.map(function(s){return Object.assign({},s,{lb:(c.scenes[0]||{}).letterbox})}):cutShots(c);
+  if(!shots.length){toast("This cutscene has no cameras");return}
   var at=shotStarts(shots),i=0;
   for(var k=0;k<shots.length;k++)if(shots[k].dur>0&&at[k]<=(start||0))i=k;
   // open where the first camera of the moment stands; under it, the ground
@@ -6752,11 +6779,12 @@ function renderCutscenes(){
   var M=levelMotion(),h="",top=host.scrollTop;
   if(!LEVEL){host.innerHTML="";return}
   if(MODE==="empty"){
-    host.innerHTML='<p class="hint" style="margin:0">An empty map keeps none of the level\'s cutscenes or moving vehicles: '+
+    host.innerHTML=ownCutsHtml()+'<p class="hint" style="margin:0">An empty map keeps none of the level\'s cutscenes or moving vehicles: '+
       'the mission starts with the player standing at the start, and ends when its objectives are done.</p>'+flightList();
     host.scrollTop=top;
     return;
   }
+  h+=ownCutsHtml();
   h+='<p class="hint" style="margin:0 0 8px">The level\'s own cutscenes, played in the 3D view as the game plays them, and the vehicles that move in it.</p>';
   h+='<div class="lbl" style="margin:4px 0 6px">The level\'s cutscenes ('+M.cutscenes.length+')</div>';
   if(!M.cutscenes.length)h+='<p class="hint">This level has none.</p>';
@@ -6772,9 +6800,9 @@ function renderCutscenes(){
       '<span class="ev-chev" aria-hidden="true">'+EV_IC.open+'</span></span></div>'+
       '<p class="ob-txt">'+fmtSecs(c.seconds)+' · '+c.scenes.length+' scene'+(c.scenes.length>1?'s':'')+' · '+shots+' shot'+(shots===1?'':'s')+
       (c.subtitles&&c.subtitles.length?' · '+c.subtitles.length+' line'+(c.subtitles.length>1?'s':'')+' of subtitles':'')+'. '+
-      (sceneKept(c)?when:c.role==="intro"?"Left out: the mission starts at once, as when the intro is skipped":
+      (ownReplaces(c)?"Your "+c.role+" plays instead":sceneKept(c)?when:c.role==="intro"?"Left out: the mission starts at once, as when the intro is skipped":
         c.role==="outro"?"Left out: the mission ends on its Mission complete message":"Left out")+'.</p>'+
-      (canKeepLevel()&&(c.role==="intro"||c.role==="outro")?'<div class="cut-keep" role="group" aria-label="In this mission">'+
+      (canKeepLevel()&&(c.role==="intro"||c.role==="outro")&&!ownReplaces(c)?'<div class="cut-keep" role="group" aria-label="In this mission">'+
         '<button type="button" data-a="keep" class="'+(sceneKept(c)?'on':'')+'" aria-pressed="'+sceneKept(c)+'">Plays</button>'+
         '<button type="button" data-a="leave" class="'+(sceneKept(c)?'':'on')+'" aria-pressed="'+!sceneKept(c)+'">Left out</button></div>':'');
     if(open){
@@ -6823,7 +6851,8 @@ function renderCutscenes(){
 // a copy of a mission decides what it keeps of the level's own; a built-in
 // mission is only looked at, an empty map has none of it
 function canKeepLevel(){return MODE!=="empty"&&canEditQuiet()}
-function sceneKept(c){return levelScenes[String(c.id)]!=="off"}
+function sceneKept(c){return levelScenes[String(c.id)]!=="off"&&!ownReplaces(c)}
+function ownReplaces(c){return (c.role==="intro"||c.role==="outro")&&cutscenes.some(function(x){return x.where===c.role})}
 function setLevelScene(c,keep){
   if(!canEdit())return;
   if(keep)delete levelScenes[String(c.id)];else levelScenes[String(c.id)]="off";
@@ -7038,6 +7067,356 @@ function bindFlightSection(o){
   if($("f-alarm"))$("f-alarm").addEventListener("change",function(){set({alarmId:this.value||undefined})});
   if($("f-event"))$("f-event").addEventListener("change",function(){set({event:this.value||undefined})});
 }
+/* ---------------- cutscenes of your own ---------------- */
+// A cutscene of yours is a list of shots. A shot is a kind (a fly-over, an
+// orbit, a push in...), a subject (a point, one of the level's things or yours,
+// the player's start), how long it lasts and a line of subtitle. The studio
+// works out its cameras: where they stand - clear of the ground, nothing solid
+// between them and the subject, from the side the player comes from - and
+// where they look, as the game's EditCameras (alpha about x with the camera
+// looking up at zero, gamma the heading; studio/extract/motion.py). Those
+// cameras are what the plan keeps, so the 3D view plays what the game will.
+// It plays as the mission's intro (the level's own is then left out), as its
+// outro once it is won (the mission ends when it does), or when an event
+// happens (the player keeps his place, his controls held).
+var cutscenes=[];           // plan.cutscenes
+var CUTPICK=null;           // {cut, shot}: a map click sets that shot's subject
+var OWNOPEN={};             // the cutscenes of yours unfolded in the panel
+var SHOT_KINDS=[["establish","Fly-over","comes in high and settles towards it"],["orbit","Orbit","circles it"],
+  ["dolly","Push in","moves in towards it"],["pan","Pan across","turns across it from one spot"],
+  ["hold","Still","looks at it, still"],["rise","Crane up","rises and pulls away"],
+  ["follow","Follow","rides behind a vehicle"],["over","Over the shoulder","from behind the player's start, the way he looks"]];
+function shotKind(k){return SHOT_KINDS.filter(function(x){return x[0]===k})[0]||SHOT_KINDS[0]}
+// what a subject stands for: where, how big, which way it faces, what task
+function subjectOf(sub){
+  if(!sub)return null;
+  var o=null;
+  if(sub.kind==="player")o=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="player"})[0]||null;
+  else if(sub.uid)o=placements.filter(function(p){return p.uid===sub.uid})[0]||null;
+  else if(sub.ref)o=objByRef(sub.ref);
+  if(sub.kind==="point"||!o){
+    if(sub.x==null)return null;
+    var gz=groundAt(sub.x,sub.y);
+    return {x:sub.x,y:sub.y,z:gz!=null?gz:(sub.z||0),r:sub.r||12,h:0,name:sub.name||"a spot"};
+  }
+  var s=(MODELS&&MODELS.sizes&&MODELS.sizes[o.model])||{};
+  var r=o.type==="soldier"||o.type==="player"?1.5:s.w?Math.max(2,Math.hypot(s.w,s.d)/2):3;
+  var top=s.h?s.h+(s.z0||0):o.type==="soldier"||o.type==="player"?1.8:2;
+  return {x:o.x,y:o.y,z:o.z,r:r,h:top,gamma:o.gamma||0,o:o,name:sub.kind==="player"?"the player's start":displayName(o),
+    vehicle:o.type==="vehicle"||!!(o.own&&DRIVABLE[o.model]&&o.drive)};
+}
+function lookFrom(x,y,z,tx,ty,tz){
+  var dx=tx-x,dy=ty-y,dz=tz-z,l=Math.hypot(dx,dy,dz)||1;
+  return {a:-Math.acos(Math.max(-1,Math.min(1,dz/l))),g:Math.atan2(-dx,dy)};
+}
+function camKey(x,y,z,t,fov,dur,smooth){
+  var la=lookFrom(x,y,z,t[0],t[1],t[2]);
+  return {x:+x.toFixed(2),y:+y.toFixed(2),z:+z.toFixed(2),a:+la.a.toFixed(5),b:0,g:+la.g.toFixed(5),fov:fov||1,dur:+(+dur).toFixed(2),smooth:!!smooth};
+}
+// solid things a camera may not look through, near the line it looks along
+function shotBlockers(S){
+  var out=[];
+  (LEVEL?LEVEL.objects:[]).concat(placements).forEach(function(o){
+    if(o.type!=="building"||o.x==null||o.cutscene||isRemoved(o)||(!o.own&&o.id>=0&&removals.indexOf(o.id)>=0))return;
+    var s=MODELS&&MODELS.sizes&&MODELS.sizes[o.model];if(!s||!s.body||!s.h)return;
+    if(Math.hypot(o.x-S.x,o.y-S.y)>260)return;
+    if(S.o===o||inBody(o,S.x,S.y,0.5))return;          // what it looks at is not in its way
+    out.push(o);
+  });
+  return out;
+}
+// is the line from the camera to the subject clear, and the camera over the ground?
+function camClear(c,t,blockers){
+  var g0=groundAt(c.x,c.y);if(g0!=null&&c.z<g0+1.2)return false;
+  var n=Math.max(6,Math.ceil(Math.hypot(t[0]-c.x,t[1]-c.y)/2.5));
+  for(var i=1;i<n;i++){
+    var u=i/n,x=c.x+(t[0]-c.x)*u,y=c.y+(t[1]-c.y)*u,z=c.z+(t[2]-c.z)*u;
+    var g=groundAt(x,y);if(g!=null&&z<g-0.2&&u<0.95)return false;
+    for(var k=0;k<blockers.length;k++){
+      var o=blockers[k],s=MODELS.sizes[o.model],b0=o.z+(s.z0||0);
+      if(z>b0-0.5&&z<b0+s.h&&inBody(o,x,y,0))return false;
+    }
+  }
+  return true;
+}
+// the heading (radians, maths' way: 0 east) from the subject to where the
+// player comes from: a shot looks at a thing from the player's side of it
+function playerSide(S){
+  var p=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="player"})[0];
+  if(!p||Math.hypot(p.x-S.x,p.y-S.y)<1)return -Math.PI/2;
+  return Math.atan2(p.y-S.y,p.x-S.x);
+}
+// the cameras of one shot at heading h (where the camera is, seen from the subject)
+function shotFrames(sh,S,h){
+  var D=Math.max(0.5,+sh.dur||4),r=S.r,k=sh.kind,f=[];
+  var tz=S.z+Math.min(S.h*0.45,6),T=[S.x,S.y,tz],far=(sh.dist||1),hi=(sh.up||1);
+  function at(a,d,up){var x=S.x+Math.cos(a)*d,y=S.y+Math.sin(a)*d,g=groundAt(x,y);return [x,y,(g!=null?g:S.z)+up]}
+  if(k==="establish"){
+    // in from far and high, never so far that the game's fog hides what it shows
+    var p0=at(h-0.26,Math.min(Math.max(3.2*r,45),220)*far,Math.min(Math.max(1.4*r,26),95)*hi),
+        p1=at(h,Math.min(Math.max(1.7*r,22),120)*far,Math.min(Math.max(0.7*r,10),45)*hi);
+    f=[camKey(p0[0],p0[1],p0[2],T,1,D,true),camKey(p1[0],p1[1],p1[2],T,1,0,false)];
+  }else if(k==="orbit"){
+    var d=Math.max(2.2*r,12)*far,up=Math.max(0.8*r,5)*hi,n=5,span=1.75;
+    for(var i=0;i<n;i++){var p=at(h-span/2+span*i/(n-1),d,up);f.push(camKey(p[0],p[1],p[2],T,1,i<n-1?D/(n-1):0,i<n-1))}
+  }else if(k==="dolly"){
+    var q0=at(h,Math.max(3*r,18)*far,(0.35*r+2.2)*hi),q1=at(h,Math.max(1.3*r,7)*far,(0.3*r+2)*hi);
+    f=[camKey(q0[0],q0[1],q0[2],T,1,D,true),camKey(q1[0],q1[1],q1[2],T,0.9,0,false)];
+  }else if(k==="pan"){
+    var c=at(h,Math.max(2.5*r,15)*far,(0.5*r+3)*hi),sx=-Math.sin(h)*r*1.3,sy=Math.cos(h)*r*1.3;
+    f=[camKey(c[0],c[1],c[2],[S.x+sx,S.y+sy,tz],1,D,true),camKey(c[0],c[1],c[2],[S.x-sx,S.y-sy,tz],1,0,false)];
+  }else if(k==="rise"){
+    var w0=at(h,Math.max(1.5*r,10)*far,3*hi),w1=at(h,Math.max(3*r,30)*far,Math.max(2*r,30)*hi);
+    f=[camKey(w0[0],w0[1],w0[2],T,1,D,true),camKey(w1[0],w1[1],w1[2],T,1.1,0,false)];
+  }else if(k==="follow"){
+    // behind the vehicle as it starts, riding with it and turned to it
+    var gm=S.gamma||0,fx=-Math.sin(gm),fy=Math.cos(gm),bd=Math.max(2.4*r,12)*far;
+    var cx=S.x-fx*bd,cy=S.y-fy*bd,gz=groundAt(cx,cy),cz=(gz!=null?gz:S.z)+Math.max(0.6*r,4)*hi;
+    var fk=camKey(cx,cy,cz,T,1,D,false);fk.follow=true;f=[fk];
+  }else if(k==="over"){
+    var pg=S.gamma||0,ox=-Math.sin(pg),oy=Math.cos(pg),rx=Math.cos(pg),ry=Math.sin(pg),ahead=[S.x+ox*15,S.y+oy*15,S.z+1.3];
+    f=[camKey(S.x-ox*2.9+rx*0.7,S.y-oy*2.9+ry*0.7,S.z+2.1*hi,ahead,1,D,true),
+       camKey(S.x-ox*1.7+rx*0.5,S.y-oy*1.7+ry*0.5,S.z+1.9*hi,ahead,1,0,false)];
+  }else{
+    var hp=at(h,Math.max(2.5*r,14)*far,(0.6*r+3)*hi);
+    f=[camKey(hp[0],hp[1],hp[2],T,1,D,false)];
+  }
+  return f;
+}
+// a shot's cameras: from the side asked for (sh.from, degrees on the compass,
+// or the player's side), or the nearest heading from which nothing is in the way
+function shotCams(sh){
+  var S=subjectOf(sh.subject);if(!S)return [];
+  if(sh.kind==="over"||sh.kind==="follow")return shotFrames(sh,S,0);
+  var h0=sh.from!=null?(90-sh.from)*Math.PI/180:playerSide(S),bl=shotBlockers(S),best=null,bn=1e9;
+  var tries=[0,0.5,-0.5,1,-1,1.6,-1.6,2.3,-2.3,Math.PI];
+  for(var i=0;i<tries.length;i++){
+    var fr=shotFrames(sh,S,h0+tries[i]),T=[S.x,S.y,S.z+Math.min(S.h*0.45,6)],bad=0;
+    fr.forEach(function(c){if(!camClear(c,T,bl))bad++});
+    if(bad<bn){bn=bad;best=fr}
+    if(!bad||sh.from!=null)break;
+  }
+  return best||[];
+}
+function cutLength(c){return (c.shots||[]).reduce(function(a,s){return a+Math.max(0.5,+s.dur||4)},0)}
+// the shape the player, the panel and the map share with the level's own
+function ownAsScene(c){
+  var shots=[],subs=[],t=0;
+  (c.shots||[]).forEach(function(sh){
+    var fr=shotCams(sh),S=subjectOf(sh.subject);
+    fr.forEach(function(k,i){shots.push(Object.assign({},k,{name:shotKind(sh.kind)[1]+(S?" · "+S.name:""),
+      target:k.follow&&S?{x:S.x,y:S.y,z:S.z+Math.min(S.h*0.45,6)}:null,end:i===fr.length-1}))});
+    if((sh.text||"").trim())subs.push({at:t,dur:Math.min(Math.max(0.5,+sh.dur||4),9),text:sh.text.trim()});
+    t+=Math.max(0.5,+sh.dur||4);
+  });
+  return {shots:shots,subtitles:subs,seconds:t};
+}
+function playOwn(c,start){
+  var sc=ownAsScene(c);
+  if(!sc.shots.length){toast("Give it a shot first: pick what it shows");return}
+  playCutscene({scenes:[{name:c.name||"Cutscene",letterbox:c.letterbox===false?1:0.7,shots:sc.shots.map(function(s){var q=Object.assign({},s);delete q.end;return q})}],
+    subtitles:sc.subtitles.map(function(x){return {at:x.at,dur:x.dur,text:x.text}})},start||0,sc.shots);
+}
+function newShot(kind,subject,dur,text){return {uid:uid(),kind:kind,subject:subject,dur:dur||4,text:text||""}}
+function thingSubject(o){
+  if(!o)return null;
+  if(o.type==="player")return {kind:"player"};
+  if(o.own)return {kind:"thing",uid:o.uid};
+  if(o.ref)return {kind:"thing",ref:o.ref};
+  return {kind:"point",x:o.x,y:o.y,z:o.z};
+}
+// "Make an intro": the area, each objective that has a place, then the player's start
+function makeIntro(){
+  if(!canEdit())return;
+  var places=objectives.map(function(ob){return {ob:ob,w:objWhere(ob),o:objTarget(ob)}}).filter(function(p){return p.w}).slice(0,4);
+  var pl=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="player"})[0];
+  var pts=places.map(function(p){return p.w}).concat(pl?[{x:pl.x,y:pl.y}]:[]);
+  if(!pts.length){toast("Place the player's start or an objective first");return}
+  var cx=pts.reduce(function(a,p){return a+p.x},0)/pts.length,cy=pts.reduce(function(a,p){return a+p.y},0)/pts.length;
+  var spread=pts.reduce(function(a,p){return Math.max(a,Math.hypot(p.x-cx,p.y-cy))},0);
+  var shots=[newShot("establish",{kind:"point",x:+cx.toFixed(2),y:+cy.toFixed(2),r:Math.max(30,Math.min(150,spread)),name:"the area"},7,
+    (M&&M.description||"").split(/(?<=[.!?])\s/)[0].slice(0,160))];
+  places.forEach(function(p){
+    var o=p.o,k=!o||p.ob.kind==="reach"?"pan":o.type==="soldier"?"orbit":o.type==="building"||o.type==="vehicle"||o.type==="terminal"?"dolly":"dolly";
+    shots.push(newShot(k,o?thingSubject(o):{kind:"point",x:p.w.x,y:p.w.y,r:10,name:"the marked area"},4.5,((p.ob.text||"").trim()||objDefaultText(p.ob)).slice(0,160)));
+  });
+  if(pl)shots.push(newShot("over",{kind:"player"},4,""));
+  addCutscene({name:"Intro",where:"intro",skippable:true,shots:shots});
+}
+// "Make an outro": the last objective done, then away from it into the sky
+function makeOutro(){
+  if(!canEdit())return;
+  var last=objectives.slice().reverse().map(function(ob){return {ob:ob,w:objWhere(ob),o:objTarget(ob)}}).filter(function(p){return p.w})[0];
+  var pl=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="player"})[0];
+  var sub=last?(last.o?thingSubject(last.o):{kind:"point",x:last.w.x,y:last.w.y,r:10,name:"the last objective"}):pl?{kind:"player"}:null;
+  if(!sub){toast("Give the mission an objective first");return}
+  addCutscene({name:"Outro",where:"outro",shots:[newShot("orbit",sub,5,"Mission complete."),newShot("rise",sub,7,"")]});
+}
+function addCutscene(c){
+  if(!canEdit())return;
+  c.uid=uid();c.shots=c.shots||[];
+  // one intro and one outro: a new one takes the place of the old
+  if(c.where==="intro"||c.where==="outro")cutscenes=cutscenes.filter(function(x){return x.where!==c.where});
+  cutscenes.push(c);OWNOPEN[c.uid]=true;
+  touch();renderCutscenes();renderList();draw();
+}
+function cutProblem(c){
+  if(!(c.shots||[]).length)return "No shots yet.";
+  if(c.shots.some(function(s){return !subjectOf(s.subject)}))return "A shot has nothing to show: pick its subject.";
+  if(c.where==="outro"&&!objectives.length)return "An outro plays once the mission is won: give it an objective.";
+  if(c.where==="event"&&!events.some(function(v){return v.uid===c.event}))return "Pick the event it plays on.";
+  if(c.shots.some(function(s){return s.kind==="follow"&&!(subjectOf(s.subject)||{}).vehicle}))return "A Follow shot follows a vehicle: pick one.";
+  // a vehicle of yours that starts later is not there before it starts
+  if(c.shots.some(function(s){var S=subjectOf(s.subject),d=S&&S.o&&S.o.drive;
+    return s.kind==="follow"&&d&&d.start&&d.start!=="now"&&!(c.where==="event"&&d.start==="event"&&d.event===c.event)}))
+    return "A Follow shot follows a vehicle that only starts later: play it on the same event, or start the vehicle from the start.";
+  return null;
+}
+function ownCutsHtml(){
+  if(!canEditQuiet())return "";
+  var h='<div class="lbl" style="margin:4px 0 6px">Your cutscenes ('+cutscenes.length+')</div>'+
+    '<div class="sec-tools"><button type="button" class="sec-tool" data-a="mkintro"><span class="t"><b>Make an intro</b><i>the area, each objective, the player</i></span></button>'+
+    '<button type="button" class="sec-tool" data-a="mkoutro"><span class="t"><b>Make an outro</b><i>the last objective, then away</i></span></button>'+
+    '<button type="button" class="sec-tool" data-a="mknew"><span class="t"><b>New cutscene</b><i>empty, for an event</i></span></button></div>';
+  cutscenes.forEach(function(c,ci){
+    var open=!!OWNOPEN[c.uid],pr=cutProblem(c);
+    h+='<div class="ob cut own'+(open?' open':'')+(pr?' bad':'')+'" data-o="'+ci+'">'+
+      '<div class="ob-h" data-a="otoggle"><span class="cut-role '+esc(c.where||"intro")+'">'+esc(c.where==="event"?"event":c.where||"intro")+'</span>'+
+      '<span class="ob-k">'+esc(c.name||"Cutscene")+'</span><span class="ob-acts">'+
+      '<button class="iconbtn" data-a="oplay" title="Play it in the 3D view" aria-label="Play">'+CUT_IC.play+'</button>'+
+      '<button class="iconbtn danger" data-a="odel" title="Remove this cutscene" aria-label="Remove">'+OB_IC.del+'</button>'+
+      '<span class="ev-chev" aria-hidden="true">'+EV_IC.open+'</span></span></div>'+
+      '<p class="ob-txt'+(pr?' ev-bad':'')+'">'+fmtSecs(cutLength(c))+' · '+(c.shots||[]).length+' shot'+((c.shots||[]).length===1?'':'s')+'. '+
+      esc(pr||(c.where==="outro"?"Plays once the mission is won; the mission ends when it does.":c.where==="event"?"Plays when its event happens; the player keeps his place.":
+        "Plays as the mission starts"+(c.skippable!==false?"; the skip key skips it":"")+"."))+'</p>';
+    if(open){
+      h+='<div class="own-f"><input type="text" data-a="oname" maxlength="40" value="'+esc(c.name||"")+'" placeholder="Name">'+
+        '<label>Plays <select data-a="owhere"><option value="intro"'+(c.where==="intro"?' selected':'')+'>as the mission starts</option>'+
+        '<option value="outro"'+(c.where==="outro"?' selected':'')+'>once the mission is won</option>'+
+        '<option value="event"'+(c.where==="event"?' selected':'')+'>when an event happens</option></select></label>'+
+        (c.where==="event"?'<label>Event <select data-a="oevent"><option value="">pick one</option>'+events.map(function(v,i){
+          return '<option value="'+esc(v.uid)+'"'+(c.event===v.uid?' selected':'')+'>'+(i+1)+'. '+esc(eventLabel(v))+'</option>'}).join("")+'</select></label>':'')+
+        '<label><input type="checkbox" data-a="obox"'+(c.letterbox!==false?' checked':'')+'> Letterbox</label>'+
+        (c.where==="intro"?'<label><input type="checkbox" data-a="oskip"'+(c.skippable!==false?' checked':'')+'> The skip key skips it</label>':'')+'</div>';
+      var t=0;
+      (c.shots||[]).forEach(function(sh,si){
+        var S=subjectOf(sh.subject),picking=CUTPICK&&CUTPICK.shot===sh;
+        h+='<div class="shot" data-s="'+si+'"><div class="shot-h"><span class="n">'+fmtSecs(t)+'</span>'+
+          '<select data-a="skind">'+SHOT_KINDS.map(function(k){return '<option value="'+k[0]+'"'+(sh.kind===k[0]?' selected':'')+'>'+k[1]+'</option>'}).join("")+'</select>'+
+          '<input type="number" data-a="sdur" min="0.5" max="60" step="0.5" value="'+(+sh.dur||4)+'" title="Seconds">s'+
+          '<span class="shot-acts"><button class="iconbtn" data-a="splay" title="Play from this shot">'+CUT_IC.play+'</button>'+
+          '<button class="iconbtn" data-a="sup" title="Earlier"'+(si?'':' disabled')+'>↑</button>'+
+          '<button class="iconbtn" data-a="sdown" title="Later"'+(si<c.shots.length-1?'':' disabled')+'>↓</button>'+
+          '<button class="iconbtn danger" data-a="sdel" title="Remove this shot">'+OB_IC.del+'</button></span></div>'+
+          '<div class="shot-b"><button type="button" class="btn act'+(picking?' on':'')+'" data-a="spick" title="Click the map: a thing, or a spot">'+
+          (picking?'Click the map…':(S?esc(S.name):'Pick what it shows'))+'</button>'+
+          (sh.kind!=="over"&&sh.kind!=="follow"?'<label title="Where the camera stands, seen from what it shows (compass degrees; empty: from the player\'s side)">from <input type="number" data-a="sfrom" min="0" max="359" step="15" value="'+(sh.from!=null?sh.from:"")+'" placeholder="auto">°</label>':'')+
+          '<label title="Further away or closer">dist <input type="range" data-a="sfar" min="0.5" max="2" step="0.1" value="'+(sh.dist||1)+'"></label>'+
+          '<label title="Higher or lower">height <input type="range" data-a="sup2" min="0.3" max="2.5" step="0.1" value="'+(sh.up||1)+'"></label></div>'+
+          '<input type="text" class="shot-t" data-a="stext" maxlength="160" value="'+esc(sh.text||"")+'" placeholder="Subtitle (optional)"></div>';
+        t+=Math.max(0.5,+sh.dur||4);
+      });
+      h+='<div class="sec-tools" style="margin-top:6px"><button type="button" class="sec-tool" data-a="sadd"><span class="t"><b>Add a shot</b><i>then pick what it shows</i></span></button></div>';
+    }
+    h+='</div>';
+  });
+  return h+'<div style="height:6px"></div>';
+}
+function bindOwnCuts(host){
+  host.addEventListener("click",function(e){
+    var b=e.target.closest("[data-a]");if(!b||!host.contains(b))return;
+    var a=b.getAttribute("data-a"),card=b.closest(".own"),c=card?cutscenes[+card.getAttribute("data-o")]:null;
+    var row=b.closest(".shot"),sh=row&&c?c.shots[+row.getAttribute("data-s")]:null;
+    if(a==="mkintro"){makeIntro();return}
+    if(a==="mkoutro"){makeOutro();return}
+    if(a==="mknew"){addCutscene({name:"Cutscene",where:"event",shots:[]});return}
+    if(!c)return;
+    if(a==="otoggle"){OWNOPEN[c.uid]=!OWNOPEN[c.uid];renderCutscenes();draw();return}
+    if(a==="oplay"){e.stopPropagation();playOwn(c,0);return}
+    if(a==="odel"){e.stopPropagation();if(!canEdit())return;cutscenes=cutscenes.filter(function(x){return x!==c});if(CUTPICK&&CUTPICK.cut===c)CUTPICK=null;touch();renderCutscenes();renderList();draw();return}
+    if(a==="sadd"){if(!canEdit())return;var nsh=newShot("dolly",null,4,"");c.shots.push(nsh);CUTPICK={cut:c,shot:nsh};touch();renderCutscenes();toast("Click the map: a thing, or a spot");return}
+    if(!sh)return;
+    if(a==="splay"){var st=0;for(var i=0;i<c.shots.indexOf(sh);i++)st+=Math.max(0.5,+c.shots[i].dur||4);playOwn(c,st);return}
+    if(a==="spick"){CUTPICK=CUTPICK&&CUTPICK.shot===sh?null:{cut:c,shot:sh};if(CUTPICK){if(tool)selectTool(null,null);toast("Click the map: a thing, or a spot")}renderCutscenes();draw();return}
+    if(!canEdit())return;
+    var k=c.shots.indexOf(sh);
+    if(a==="sup"&&k>0){c.shots.splice(k,1);c.shots.splice(k-1,0,sh)}
+    else if(a==="sdown"&&k<c.shots.length-1){c.shots.splice(k,1);c.shots.splice(k+1,0,sh)}
+    else if(a==="sdel"){c.shots.splice(k,1);if(CUTPICK&&CUTPICK.shot===sh)CUTPICK=null}
+    else return;
+    touch();renderCutscenes();renderList();draw();
+  });
+  host.addEventListener("change",function(e){
+    var b=e.target.closest("[data-a]");if(!b||!host.contains(b)||!canEdit())return;
+    var a=b.getAttribute("data-a"),card=b.closest(".own"),c=card?cutscenes[+card.getAttribute("data-o")]:null;if(!c)return;
+    var row=b.closest(".shot"),sh=row?c.shots[+row.getAttribute("data-s")]:null,v=b.type==="checkbox"?b.checked:b.value;
+    if(a==="oname")c.name=String(v).slice(0,40);
+    else if(a==="owhere"){
+      if((v==="intro"||v==="outro")&&cutscenes.some(function(x){return x!==c&&x.where===v})){toast("There is already an "+v+": change that one, or remove it");renderCutscenes();return}
+      c.where=v;
+    }
+    else if(a==="oevent")c.event=v||undefined;
+    else if(a==="obox")c.letterbox=!!v;
+    else if(a==="oskip")c.skippable=!!v;
+    else if(sh&&a==="skind")sh.kind=v;
+    else if(sh&&a==="sdur")sh.dur=Math.max(0.5,Math.min(60,+v||4));
+    else if(sh&&a==="sfrom")sh.from=v===""?undefined:((+v%360)+360)%360;
+    else if(sh&&a==="sfar")sh.dist=+v;
+    else if(sh&&a==="sup2")sh.up=+v;
+    else if(sh&&a==="stext")sh.text=String(v).slice(0,160);
+    else return;
+    touch();renderCutscenes();renderList();draw();
+  });
+}
+// a map click while picking: the thing under it, else the spot
+function cutPick(sx,sy,wx,wy){
+  var P=CUTPICK;if(!P)return;
+  var o=pick(sx,sy),sub=null;
+  if(o&&o.type!=="navnode"&&o.type!=="graphnode")sub=thingSubject(o);
+  if(!sub)sub={kind:"point",x:+wx.toFixed(2),y:+wy.toFixed(2),r:12,name:"a spot"};
+  if(P.shot.kind==="over"&&sub.kind!=="player"){P.shot.kind=o&&o.type==="vehicle"?"follow":"hold"}
+  if(sub.kind==="player"&&P.shot.kind!=="over"&&P.shot.kind==="dolly")P.shot.kind="over";
+  if(o&&(o.type==="vehicle"||(o.own&&DRIVABLE[o.model]&&o.drive))&&P.shot.kind==="dolly")P.shot.kind="follow";
+  P.shot.subject=sub;CUTPICK=null;
+  touch();renderCutscenes();renderList();draw();
+}
+// the cameras of an open cutscene of yours, on the map
+function drawOwnCuts(){
+  cutscenes.forEach(function(c){
+    if(!OWNOPEN[c.uid])return;
+    var sc=ownAsScene(c),n=0;
+    ctx.font='600 10px "IBM Plex Mono",monospace';
+    sc.shots.forEach(function(s,i){
+      var p=w2s(s.x,s.y),la=s.target?[s.target.x-s.x,s.target.y-s.y,0]:camFwd(s),hh=Math.hypot(la[0],la[1]);
+      if(!(s.dur>0)&&!s.end)return;
+      if(s.dur>0)n++;
+      ctx.strokeStyle="rgba(140,220,255,.95)";ctx.fillStyle="rgba(140,220,255,.95)";ctx.lineWidth=1.5;
+      if(hh>0.15){ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+la[0]/hh*20,p[1]-la[1]/hh*20);ctx.stroke()}
+      ctx.beginPath();ctx.arc(p[0],p[1],3.5,0,6.2832);ctx.fill();
+      var nx=sc.shots[i+1];
+      if(s.smooth&&nx&&!s.end){var q=w2s(nx.x,nx.y);ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();ctx.setLineDash([])}
+      if(s.dur>0){ctx.fillStyle="rgba(10,20,12,.85)";var lb=String(n),w=ctx.measureText(lb).width;
+        ctx.fillRect(p[0]+5,p[1]-15,w+6,12);ctx.fillStyle="rgba(140,220,255,.95)";ctx.fillText(lb,p[0]+8,p[1]-6)}
+    });
+  });
+}
+// what the plan keeps: each shot with the cameras worked out now
+function cutscenesPlan(){
+  return cutscenes.map(function(c){
+    var o=JSON.parse(JSON.stringify(c));
+    o.shots=(c.shots||[]).map(function(sh){
+      var q=JSON.parse(JSON.stringify(sh)),S=subjectOf(sh.subject);
+      q.cams=shotCams(sh).map(function(k){
+        var r={x:k.x,y:k.y,z:k.z,a:k.a,b:k.b,g:k.g,fov:k.fov,dur:k.dur,smooth:k.smooth};
+        if(k.follow&&S&&S.o){r.follow=S.o.own?{uid:S.o.uid}:{id:S.o.id}}
+        return r;
+      });
+      return q;
+    });
+    return o;
+  });
+}
+
 function thingName(id){
   var vs=levelMotion().vehicles,v=vs.filter(function(q){return q.id===id})[0];
   if(v)return v.name||"the "+(KIND_NAME[v.kind]||"vehicle").toLowerCase();
@@ -7051,6 +7430,7 @@ var CUT_IC={play:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l
 function bindCutscenes(){
   var host=$("cutbody");if(!host||host.dataset.bound)return;
   host.dataset.bound="1";
+  bindOwnCuts(host);
   host.addEventListener("click",function(e){
     var b=e.target.closest("[data-a]");if(!b||!host.contains(b))return;
     var M=levelMotion(),card=b.closest(".cut"),c=card?M.cutscenes[+card.getAttribute("data-c")]:null,a=b.getAttribute("data-a");
@@ -7079,6 +7459,7 @@ function bindCutscenes(){
 function drawMotion(){
   if(!LEVEL||MAPCOMP)return;
   drawOwnRoutes();
+  if(PANEL==="cut"){ctx.save();drawOwnCuts();ctx.restore()}
   var M=levelMotion();if(!M.vehicles.length&&!M.cutscenes.length)return;
   var all=PANEL==="cut",one=sel&&sel.type==="vehicle"?motionOf(sel):null;
   if(!all&&!one)return;
@@ -12291,7 +12672,7 @@ function planOf(){
     nodeEdits:Object.keys(nodeEdits).map(function(k){return nodeEdits[k]}),
     textures:MTEX.map(function(x){return {name:x.name,png:x.png.replace(/^data:[^,]*,/,""),format:x.format||undefined}}),
     edits:Object.keys(edits).map(function(k){return edits[k]}),removeRefs:removeRefs.slice(),
-    levelScenes:Object.assign({},levelScenes),levelVehicles:Object.assign({},levelVehicles)};
+    levelScenes:Object.assign({},levelScenes),levelVehicles:Object.assign({},levelVehicles),cutscenes:cutscenesPlan()};
 }
 function payload(){
   return {format:"igi-mission-studio",version:2,name:MISSION,description:M?M.description||"":"",
@@ -13153,6 +13534,8 @@ function openMission(id){
     objectives=(p.objectives||[]).map(function(o){o=JSON.parse(JSON.stringify(o));if(!o.uid)o.uid=uid();return o});
     failOnAlarm=!!p.failOnAlarm;OBJPICK=null;objBase=!!p.objBase;MSET=JSON.parse(JSON.stringify(p.settings||{}));
     levelScenes=Object.assign({},p.levelScenes||{});levelVehicles=Object.assign({},p.levelVehicles||{});
+    cutscenes=(p.cutscenes||[]).map(function(c){c=JSON.parse(JSON.stringify(c));if(!c.uid)c.uid=uid();
+      (c.shots||[]).forEach(function(sh){delete sh.cams;if(!sh.uid)sh.uid=uid()});return c});CUTPICK=null;
     events=(p.events||[]).map(function(v){v=JSON.parse(JSON.stringify(v));if(!v.uid)v.uid=uid();v.do=v.do||[];v.when=v.when||{kind:"area"};return v});EVPICK=null;EVOPEN=null;
     nodeVer++;planVer++;sel=null;tool=null;patrolMode=false;coverAt=0;
     rememberLast(id);
@@ -13195,7 +13578,7 @@ function viewBuiltin(level){
   var b=builtin(level);
   M=null;READONLY=true;MODE="copy";MISSION=b?b.name:"Level "+level;
   placements=[];removals=[];navNodes=[];nodeEdits={};edits={};removeRefs=[];nodeVer++;planVer++;
-  objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];levelScenes={};levelVehicles={};groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
+  objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];levelScenes={};levelVehicles={};cutscenes=[];CUTPICK=null;groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
   sel=null;tool=null;patrolMode=false;
   rememberLast(null);
   $("start").hidden=true;
@@ -13419,7 +13802,7 @@ function bind(){
     if(AIPICK){AIPICK.d={x0:mouse.wx,y0:mouse.wy,x1:mouse.wx,y1:mouse.wy,sx:mouse.x,sy:mouse.y};return}
     if(SKETCH){SKETCH.cur={c:SKETCH.color,pts:[[mouse.wx,mouse.wy]]};SKETCH.strokes.push(SKETCH.cur);present();return}
     if(measure.on)return;
-    if(VROUTE||FLIGHTPICK)return;     // a click adds a stop, or puts a flight down (on release); a drag pans
+    if(VROUTE||FLIGHTPICK||CUTPICK)return;   // a click adds a stop, puts a flight down, picks a shot's subject (on release); a drag pans
     if(groundTool()&&canEdit()){
       if(GMODE.mode==="paint"){
         if(!materials().length){toast("This level's ground materials are not loaded");return}
@@ -13523,6 +13906,7 @@ function bind(){
         setPatrol(sel,(sel.patrol||[]).concat([nd.id]));renderSide();draw();
       }else if(VROUTE){routeStop(mouse.wx,mouse.wy)}
       else if(FLIGHTPICK){placeFlight(mouse.wx,mouse.wy)}
+      else if(CUTPICK){cutPick(mouse.x,mouse.y,mouse.wx,mouse.wy)}
       else if(OBJPICK){objectivePick(mouse.x,mouse.y)}
       else if(EVPICK){eventPick(mouse.x,mouse.y)}
       else if(DOORPICK){doorPick(mouse.x,mouse.y)}
@@ -14155,6 +14539,7 @@ function onKey(e){
   if(!$("sheet").hidden&&k!=="Escape")return;
   if(VROUTE&&(k==="Escape"||k==="Enter")){e.preventDefault();endRoute();return}
   if(FLIGHTPICK&&k==="Escape"){e.preventDefault();FLIGHTPICK=null;renderCutscenes();draw();return}
+  if(CUTPICK&&k==="Escape"){e.preventDefault();CUTPICK=null;renderCutscenes();draw();return}
   if(VROUTE&&(k==="Backspace"||k==="Delete")){e.preventDefault();routeStop(null);return}
   if(ctrl&&!e.shiftKey&&(k==="z"||k==="Z")){e.preventDefault();undo();return}
   if(ctrl&&((k==="y"||k==="Y")||(e.shiftKey&&(k==="z"||k==="Z")))){e.preventDefault();redo();return}
@@ -14236,7 +14621,7 @@ var undoStack=[],redoStack=[],lastState=null,lastChangeAt=0,restoring=false;
 function planState(){
   return JSON.stringify({placements:placements,navNodes:navNodes,nodeEdits:nodeEdits,textures:MTEX,
     edits:edits,removeRefs:removeRefs,removals:removals,objectives:objectives,failOnAlarm:failOnAlarm,settings:MSET,events:events,
-    levelScenes:levelScenes,levelVehicles:levelVehicles,
+    levelScenes:levelScenes,levelVehicles:levelVehicles,cutscenes:cutscenes,
     ground:groundEdits.map(function(a){var c=Object.assign({},a);delete c._seed;return c}),brush:groundBrush,paint:groundPaint});
 }
 function resetHistory(){undoStack=[];redoStack=[];lastState=planState();lastChangeAt=0}
@@ -14261,7 +14646,7 @@ function restoreState(json){
     edits=d.edits||{};removeRefs=d.removeRefs||[];removals=d.removals||[];MTEX=d.textures||[];
     groundEdits=d.ground||[];groundBrush=d.brush||{};GBRUSH_CV=null;groundPaint=d.paint||{};GPAINT_CV=null;applyGround();renderGround();buildGroundBar();
     objectives=d.objectives||[];failOnAlarm=!!d.failOnAlarm;objBase=!!d.objBase;MSET=d.settings||{};events=d.events||[];EVPICK=null;renderObjectives();renderEvents();
-    levelScenes=d.levelScenes||{};levelVehicles=d.levelVehicles||{};renderCutscenes();
+    levelScenes=d.levelScenes||{};levelVehicles=d.levelVehicles||{};cutscenes=d.cutscenes||[];CUTPICK=null;renderCutscenes();
     applyEditsToLevel();
     nodeVer++;planVer++;sel=null;multi=[];patrolMode=false;
     save();renderSide();renderNavSection();draw();
@@ -14680,6 +15065,7 @@ function localChecks(){
     bv.notes.forEach(function(t){add("info","Build",t,null,null,"a dry run of the build")});
   }
   if(MSET.timeLimit>0&&MSET.timeLimit<60)add("warn","Objectives","The time limit is under a minute ("+clock(MSET.timeLimit)+")");
+  cutscenes.forEach(function(c){var pr=cutProblem(c);if(pr)add(c.where==="outro"&&!objectives.length?"warn":"warn","Cutscenes",(c.name||"Cutscene")+": "+pr)});
   // your vehicles that drive, and the flights: a route with no stops, a start with nothing to start it
   placements.forEach(function(o){
     if(drives(o)){var pr=routeProblem(o);if(pr)add("warn","Vehicles",displayName(o)+": "+pr,o,null,num(o.x)+", "+num(o.y))}
