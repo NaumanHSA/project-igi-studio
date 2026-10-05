@@ -1454,6 +1454,52 @@ field of view is the game's factor times 60°.
 Both show in the change log under *Removed*, with undo. A built-in mission is
 only looked at, and an empty map keeps none of them.
 
+### Vehicles of your own that drive
+
+The APC, the T80 tank, the two trucks and the limousine (Inventory, *Vehicles
+& helipads*) stand where they are put. Select one and choose **Drives a
+route**: click the map for each stop (Backspace takes the last away, Esc or
+Enter ends; **Draw the route** carries on later). It drives from where it
+stands to each stop in turn, and **round and round** or stopping at the last;
+**speed** in km/h; the APC and the tank **fire at the player** they see. It
+**starts** from the start, when the alarm goes off (the one you pick, or the
+nearest), or when an event happens, and stands parked until then. Its route
+is drawn on the map with the stops numbered. Moving or turning a group moves
+its stops with it, and copying it keeps them.
+
+How the build does it (*vehicles of yours that drive*): a `Car` with a
+`CarAI` child, as the levels' APCs and trucks are. The route is a
+`PatrolPath` (set speed, drive to each stop) on an `AIGraph` of its own,
+`graph<id>.dat`, laid along the route a node every 12 m at the ground's
+height, with links 8.3 m wide as level 6's APC graph has them
+(`graphs.fresh`, a blank routing table worked out from its links). Round and
+round is level 8's APC's way: the circuit, then a `6` ("only runs commands
+after this one"), then the circuit again, which the game repeats; stopping at
+the last is level 7's T80's: the stops, then a `6` with nothing after it. One
+that starts later is the levels' parked stand-in: a `Car` whose `CarAI` names
+no graph, in a container that runs while the real one's does not. A vehicle
+that drives neither cuts walkways nor levels the ground the way a building
+does.
+
+### Flights from the levels
+
+**Flights from the levels** (Cutscenes tab, unfold) lists every recorded
+flight of the fourteen levels: a helicopter landing, a plane taking off, the
+attack helicopters' rounds - by level, length, and whether it takes off or
+flies in from how high. Pick one and click the map where it starts. It flies
+the way it did in its level, from there, turned as you turn it, starting as
+high over the ground as it did there; mind what stands in its way, since the
+recording does not see this ground. It **starts** from the start, on the
+alarm or on an event; one that starts in the air appears when it starts.
+
+How: `studio/extract/flights.py` (data step *flights*) writes
+`flights.json`: each `Heli` and `Plane` with an `AnimTask`, and how high over
+its level's terrain it starts. The build copies the aircraft and its
+`AnimTask` from the level's script word for word, the aircraft where it is
+placed (as high over the ground here), the drive's *Run* the start chosen
+(a latch, so an alarm that stops does not stop the flight). What the
+aircraft's own expressions named in its level is left out.
+
 How the build does it (`studio/build/plan.py`, *the level's own cutscenes*):
 
 - **An intro left out** is skipped the way the game skips it: the variable its

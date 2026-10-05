@@ -21,6 +21,14 @@ section is also that release's notes on GitHub.
   cut short, or never to play, when the mission had objectives of its own).
   A vehicle left out takes its recorded drive with it, and no cutscene camera
   is left following something that is gone.
+- **Vehicles of your own that drive.** Give an APC, a T80 tank, a truck or the
+  limousine a route by clicking its stops on the map: the game's AI drives it
+  there, round and round or stopping at the last, at the speed you set,
+  firing at the player if it is armed. It starts at once, when the alarm goes
+  off, or when an event happens, parked until then.
+- **The levels' flights in your missions.** Any of the game's recorded
+  flights - a helicopter landing, a plane taking off, an attack helicopter's
+  round - placed where you click, turned as you like, starting when you say.
 
 ### Fixed
 

@@ -31,6 +31,7 @@ EXTRACT = {
     "library": "studio.extract.library",
     "terrain": "studio.extract.terrain",
     "graphs": "studio.extract.graphs",
+    "flights": "studio.extract.flights",
 }
 
 

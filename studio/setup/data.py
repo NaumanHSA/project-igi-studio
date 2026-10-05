@@ -31,6 +31,8 @@ STEPS = [
     ("terrain", "studio.extract.terrain", "reference", "the height of the ground", ["--cell", "1"]),
     # how deep each model stands in that ground, as the levels have it (a barracks' foundation)
     ("seats", "studio.extract.seats", None, "how each model stands on the ground", []),
+    # the helicopters' and planes' recorded flights, to place in a mission
+    ("flights", "studio.extract.flights", "reference", "the levels' recorded flights", []),
     ("ground", "studio.extract.ground", "game", "what the ground is made of", []),
     ("meshes", "studio.extract.meshes", "game", "the buildings, seen from above", []),
     ("navtemplates", "studio.build.navtemplates", "reference", "the walkways inside buildings", []),
@@ -40,7 +42,7 @@ STEPS = [
 
 #: What must be there for the editor to work. Checked, not assumed.
 REQUIRED = (["index.json", "models.json", "catalog.json", "meshes.bin", "meshes.json",
-             "navtemplates.json", "doors.json", "builtins.json"]
+             "navtemplates.json", "doors.json", "builtins.json", "flights.json"]
             + ["level%d.json" % n for n in range(1, 15)]
             + ["graphs%d.json" % n for n in range(1, 15)])
 

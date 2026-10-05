@@ -330,6 +330,31 @@ class Graph:
         return sorted({c if a == nid else a for a, c, _ in self.edges if nid in (a, c)})
 
 
+def fresh(template, points, links, origin, radius=4.0, material=1):
+    """A graph of its own: nodes at `points` (world metres, ids 1..n in order),
+    `links` between them (pairs of indexes into points), its routing table
+    worked out from a blank one (no route anywhere, the diagonal included, as
+    the shipped files have it). Only the template's header is kept, its size
+    set to fit. Returns (graph, node ids, bytes to write)."""
+    g = Graph(template)
+    cap = 100
+    while len(points) > cap - 1:
+        cap += 100
+    if cap > 1000:
+        raise GraphError("a graph of more than 1000 nodes is beyond anything the game ships")
+    head = bytearray(g.raw[:HEADER])
+    struct.pack_into("<i", head, 12, cap)
+    struct.pack_into("<I", head, 26, cap * cap * 8)
+    g.raw = bytes(head) + NO_ROUTE * (cap * cap)
+    g.max_nodes = g.orig_max = cap
+    g.table_end = HEADER + cap * cap * 8
+    g.nodes, g.edges, g.edge_cost = [], [], {}
+    ids = [g.add_raw_node(p, origin, like={"radius": radius, "material": material}) for p in points]
+    for a, b in links:
+        g.link(ids[a], ids[b])
+    return g, ids, g.serialise(g.build_table())
+
+
 def graphdata_counts(qsc_text, gid, nodes, edges, capacity=None):
     """Patch 'node count, capacity, edge count' in the level script's AIGraph task."""
     pat = re.compile(r'(Task_New\(%d, "AIGraph", "[^"]*", -?[\d.]+, -?[\d.]+, -?[\d.]+, '

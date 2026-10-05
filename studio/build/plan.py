@@ -18,6 +18,7 @@ from studio import paths
 from studio.qvm import source as qvm_source
 from studio.build.objects import set_soldier_team
 from studio.build import taskargs as TASKARGS
+from studio.extract import motion as MOTION_X
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.build.plan), do not import it. The guard below
 # turns an accidental import into a clear error instead of a surprise.
@@ -92,6 +93,17 @@ def graph_facts(gid):
 soldiers = [p for p in PLACE if p.get("type") == "soldier"]
 pickups = [p for p in PLACE if p.get("type") == "pickup"]
 objects = [p for p in PLACE if p.get("type") == "building"]
+# a vehicle of yours given a route is a Car the game's AI drives ("vehicles of
+# yours that drive", below), not a building: it neither cuts walkways nor holds
+# up what is placed on it
+DRIVABLE = {"601_01_1": "APC", "614_01_1": "T80 tank", "610_01_1": "truck", "622_01_1": "truck", "616_01_1": "limousine"}
+ARMED = ("601_01_1", "614_01_1")
+OWN_CARS = [o for o in objects if isinstance(o.get("drive"), dict) and o.get("model") in DRIVABLE
+            and len(o["drive"].get("stops") or []) >= 1]
+# and a flight of the levels' placed in the mission: that aircraft and its recording
+OWN_FLIGHTS = [o for o in objects if isinstance(o.get("flight"), dict) and str(o["flight"].get("level", "")).isdigit()
+               and str(o["flight"].get("id", "")).isdigit()]
+objects = [o for o in objects if o not in OWN_CARS and o not in OWN_FLIGHTS]
 cameras = [p for p in PLACE if p.get("type") == "camera"]
 alarm_kit = [p for p in PLACE if p.get("type") in ("switch", "siren", "alarmlight", "alarmctl")]
 ALARM_IDS = {}                  # plan key ("own:<uid>") -> AlarmControl task id
@@ -376,7 +388,7 @@ BASE_HMP = GAME / "missions" / "location0" / ("level%d" % LV) / "terrain" / "ter
 
 
 def wants_flat(p):
-    if p.get("type") != "building":
+    if p.get("type") != "building" or p in OWN_CARS or p in OWN_FLIGHTS:
         return False
     if "flatten" in p:
         return bool(p["flatten"])
@@ -2184,6 +2196,226 @@ for o in objects:
                   % (ob_id, o.get("name", "Object"), q(o["x"]), q(o["y"]), q(o["z"]),
                      round(o.get("gamma", 0), 5), o.get("model") or "219_01_1", EOL))
 
+# ---------------------------------------------------------------- vehicles of yours that drive
+# A vehicle placed with a route (o["drive"]: stops [[x, y], ...], loop, speed in
+# km/h, fire, sees in m, start "now" | "alarm" | "event", alarmId, event) is a
+# Car the game's AI drives, as the levels' APCs and trucks are (levels 6, 7, 8,
+# 10, 14): a CarAI child naming a PatrolPath - set speed, drive to each stop -
+# on an AIGraph of its own. That graph is laid along the route, a node every
+# VEH_STEP metres at the ground's height, links as wide as level 6's APC graph
+# has them (8.3 m), and written as graph<id>.dat beside the level's. A route
+# that goes round again runs the levels' way: level 8's APC drives the circuit
+# once, then a 6 ("only runs commands after this one"), then the circuit again,
+# which the game repeats; one that stops ends on a 6 with nothing after it, as
+# level 7's T80 does. One that starts later stands parked where it starts until
+# then: a stand-in Car (its CarAI naming no graph) in a container that runs
+# while the real one's does not, the way levels 6 and 8 park theirs.
+VEH_STEP = 12.0
+NEW_GRAPHS = {}                 # graph id -> bytes, staged with the level's graphs
+OWN_CAR_IDS = {}                # placement uid -> Car task id (events: "destroyed")
+
+
+def _veh_ground(x, y, near):
+    z = None
+    try:
+        t = _surface.terrain if _surface is not None and _surface.terrain is not None else TERR0
+        z = t.z(x, y) if t is not None else None
+    except Exception:                                   # noqa: BLE001
+        z = None
+    if z is None:
+        z = rest_z(x, y, near)[0]
+    return near if z is None else z
+
+
+def _veh_template():
+    gs = sorted(BASE_GRAPHS.glob("graph*.dat"), key=lambda f: f.stat().st_size) if BASE_GRAPHS.is_dir() else []
+    return gs[0] if gs else None
+
+
+for o in OWN_CARS:
+    d = o["drive"]
+    name = _qstr_early(o.get("name") or DRIVABLE[o["model"]], 60)
+    tmpl = _veh_template()
+    if tmpl is None:
+        errors.append("%s: the level has no walkway graph to make its route's graph from" % name)
+        continue
+    stops = [(float(a), float(b)) for a, b in (d.get("stops") or [])[:40]]
+    loop = bool(d.get("loop", True)) and len(stops) >= 2
+    speed = max(5, min(80, int(d.get("speed") or 20)))
+    # the way: from where it stands, through each stop, and round to the first again
+    way = [(float(o["x"]), float(o["y"]))] + stops + ([stops[0]] if loop else [])
+    pts, links, stop_ix = [], [], []
+    for i, (a, b) in enumerate(way):
+        if i:
+            (pa, pb) = way[i - 1]
+            n = max(1, int(math.ceil(math.hypot(a - pa, b - pb) / VEH_STEP)))
+            for k in range(1, n):
+                pts.append((pa + (a - pa) * k / n, pb + (b - pb) * k / n))
+                links.append((len(pts) - 2, len(pts) - 1))
+        if loop and i == len(way) - 1:
+            links.append((len(pts) - 1, stop_ix[0]))        # the circuit closes on the first stop
+            break
+        pts.append((a, b))
+        if i:
+            links.append((len(pts) - 2, len(pts) - 1))
+            stop_ix.append(len(pts) - 1)
+    z0 = o.get("z") or 0.0
+    world = [(x, y, _veh_ground(x, y, z0)) for x, y in pts]
+    gid, rid, cid, aid = take_id(), take_id(), take_id(), take_id()
+    if None in (gid, rid, cid, aid):
+        continue
+    origin = world[0]
+    try:
+        _g, _ids, NEW_GRAPHS[gid] = GE.fresh(tmpl, world, links, origin)
+    except GE.GraphError as e:
+        errors.append("%s: its route could not be made a graph (%s)" % (name, e))
+        continue
+    blocks.append('Task_New(%d, "AIGraph", "%s route", %s, %s, %s, FALSE, %d, %d, %d, 1, 2.0, 3.0, 8.3, 1, TRUE, 0.05), %s'
+                  % (gid, name, q(origin[0]), q(origin[1]), q(origin[2]), len(_g.nodes), _g.max_nodes, len(_g.edges), EOL))
+    cmds = []
+    for k in stop_ix:
+        cmds.append('Task_New(-1, "PatrolPathCommand", "Set travel speed to %d km/h", 8, %d)' % (speed, speed))
+        cmds.append('Task_New(-1, "PatrolPathCommand", "Walks to node id %d", 2, %d)' % (_ids[k], _ids[k]))
+    body = list(cmds)
+    cmds.append('Task_New(-1, "PatrolPathCommand", "End script, only runs commands after this one. Takes no paramet", 6, -1)')
+    if loop:
+        cmds += body
+    blocks.append('Task_New(%d, "PatrolPath", "%s route", ' % (rid, name) + EOL + (", " + EOL).join(cmds) + "), " + EOL)
+    # the vehicle: standing on the ground at its start, turned as placed
+    sz = _sizes.get(o["model"]) or {}
+    cz = _veh_ground(float(o["x"]), float(o["y"]), z0) - min(0.0, float(sz.get("z0") or 0.0)) + 0.2
+    fire = "1" if d.get("fire", True) and o["model"] in ARMED else ""
+    sees = max(5, min(300, int(d.get("sees") or 50)))
+
+    def car(tid, ai):
+        return ('Task_New(%d, "Car", "%s", %s, %s, %s, 0, 0, %s, 0, 0, 0, 0, "%s", TRUE, FALSE, "", "%s", "", 180, 360, %d, '
+                % (tid, name, q(o["x"]), q(o["y"]), q(cz), round(float(o.get("gamma") or 0), 5), o["model"], fire, sees)
+                + EOL + ai + ")")
+    real = car(cid, 'Task_New(%d, "CarAI", "", %d, %d, %d)' % (aid, cid, gid, rid))
+    start = d.get("start") or "now"
+    _near = alarm_control_near(o["x"], o["y"], reach=1e9) if start == "alarm" and not d.get("alarmId") else None
+    cond = ((alarm_expr_of(d.get("alarmId")) or ("AlarmControl_%d.isAlarm" % _near if _near is not None else None))
+            if start == "alarm" else event_fired(d.get("event")) if start == "event" else None)
+    if start in ("alarm", "event") and not cond:
+        warnings.append("%s starts %s, and there is none to start it: it drives at once"
+                        % (name, "on the alarm" if start == "alarm" else "on an event"))
+    if cond:
+        box, park, fid = take_id(), take_id(), take_id()
+        blocks.append('Task_New(%d, "ConditionalContainer", "%s", "%s || this.isRun", "", "", ' % (box, name, cond) + EOL
+                      + real + "), " + EOL)
+        blocks.append('Task_New(%d, "ConditionalContainer", "%s parked", "!ConditionalContainer_%d.isRun", "", "", ' % (park, name, box)
+                      + EOL + car(fid, 'Task_New(-1, "CarAI", "", %d, -1, -1)' % fid) + "), " + EOL)
+    else:
+        blocks.append(real + ", " + EOL)
+    o["_tid"] = cid
+    OWN_CAR_IDS[o.get("uid")] = cid
+    report.append("%s drives a route of %d stop(s)%s at %d km/h, %s (graph %d, %d nodes)"
+                  % (name, len(stops), ", round and round" if loop else "", speed,
+                     "from the start" if not cond else "once %s" % ("the alarm goes off" if start == "alarm" else event_name(d.get("event"))),
+                     gid, len(_g.nodes)))
+
+# ---------------------------------------------------------------- flights of yours
+# A flight placed from the levels' (o["flight"]: level, id, start, alarmId,
+# event; studio/extract/flights.py lists them) is that level's helicopter or
+# plane and its recorded drive, copied: the aircraft where it is put, turned as
+# it is turned, as high over the ground as it started in its level (rel); the
+# drive (an AnimTask) word for word, its Run the start chosen here. A drive is
+# control inputs, so from here it flies the same way, turned with it - over
+# this ground, not its own. One that starts on the ground stands there until it
+# goes; one that starts in the air appears when it goes. What the aircraft's
+# own expressions named in its level (a door, a gun's target) is left out.
+_FLIGHT_SRC = {}
+_FLIGHTS = None
+
+
+def _flight_tasks(lv):
+    if lv not in _FLIGHT_SRC:
+        _FLIGHT_SRC[lv] = MOTION_X.tasks(qvm_source.level_qsc(lv, arg("--game")).read_text(encoding="latin1"))
+    return _FLIGHT_SRC[lv]
+
+
+def _qv(v):
+    if v is True:
+        return "TRUE"
+    if v is False:
+        return "FALSE"
+    if isinstance(v, str):
+        return '"%s"' % v.replace("\n", "\\n").replace('"', '\\"')
+    return repr(v) if isinstance(v, float) else str(v)
+
+
+for o in OWN_FLIGHTS:
+    fl, name = o["flight"], _qstr_early(o.get("name") or "Flight", 60)
+    lv_, vid_ = int(fl["level"]), int(fl["id"])
+    try:
+        ts_ = _flight_tasks(lv_)
+    except Exception as e:                                  # noqa: BLE001
+        errors.append("%s: level %d's flights cannot be read (%s)" % (name, lv_, e))
+        continue
+    veh = [t for t in ts_ if t.id == vid_ and t.kind in ("Heli", "Plane")]
+    anim = [t for t in ts_ if t.kind == "AnimTask" and len(t.args) > 9 and t.args[6] == vid_]
+    if not veh or not anim:
+        errors.append("%s: level %d has no flight %d to copy" % (name, lv_, vid_))
+        continue
+    veh, anim = veh[0], anim[0]
+    if _FLIGHTS is None:
+        try:
+            _FLIGHTS = {(f["level"], f["id"]): f for f in json.load(open(DATA / "flights.json"))}
+        except (OSError, ValueError):
+            _FLIGHTS = {}
+    rel = (_FLIGHTS.get((lv_, vid_)) or {}).get("rel")
+    on_ground = rel is not None and rel < 4.0
+    rel = max(1.3, rel) if on_ground else (rel if rel is not None else 20.0)
+    vid, aid = take_id(), take_id()
+    if vid is None or aid is None:
+        continue
+    gz = _veh_ground(float(o["x"]), float(o["y"]), o.get("z") or 0.0)
+    z = gz + rel
+    va = list(veh.args)
+    head = round(float(o.get("gamma") if o.get("gamma") is not None else va[5]), 5)
+    va[0], va[1], va[2], va[5] = q(o["x"]), q(o["y"]), q(z), head
+    # what the level's expressions named is not here: none of it
+    for k in range(10, len(va)):
+        if isinstance(va[k], str) and re.search(r"[A-Za-z]+_\d+\.", va[k]):
+            va[k] = re.sub(r"AnimTask_%d\b" % anim.id, "AnimTask_%d" % aid, va[k]) if anim.id >= 0 else va[k]
+            if re.search(r"[A-Za-z]+_\d+\.", re.sub(r"AnimTask_%d\." % aid, "", va[k])):
+                va[k] = ""
+    vtask = 'Task_New(%d, "%s", "%s", %s)' % (vid, veh.kind, name, ", ".join(x if isinstance(x, str) and k < 3 else _qv(x)
+                                                                           for k, x in enumerate(va)))
+    start = fl.get("start") or "now"
+    _near = alarm_control_near(o["x"], o["y"], reach=1e9) if start == "alarm" and not fl.get("alarmId") else None
+    cond = ((alarm_expr_of(fl.get("alarmId")) or ("AlarmControl_%d.isAlarm" % _near if _near is not None else None))
+            if start == "alarm" else event_fired(fl.get("event")) if start == "event" else None)
+    if start in ("alarm", "event") and not cond:
+        warnings.append("%s starts %s, and there is none to start it: it flies at once"
+                        % (name, "on the alarm" if start == "alarm" else "on an event"))
+    run = "1"
+    if cond:
+        # once started it flies on, whatever the alarm does after: a latch
+        lid = take_id()
+        blocks.append('Task_New(%d, "EditVariable", "%s goes", 0, 0, 0, 0, "EditVariable_%d.nValue == 0 && (%s)", ""), %s'
+                      % (lid, name, lid, cond, EOL))
+        run = "EditVariable_%d.nValue == 1" % lid
+    aa = list(anim.args)
+    dz = float(aa[2]) - float(veh.args[2])
+    aa[0], aa[1], aa[2] = q(o["x"]), q(o["y"]), q(z + dz / SCALE)
+    aa[3], aa[4], aa[5] = va[3], va[4], head
+    aa[6], aa[7], aa[8] = vid, run, False
+    atask = 'Task_New(%d, "AnimTask", "", %s)' % (aid, ", ".join(x if isinstance(x, str) and k < 3 else _qv(x)
+                                                                 for k, x in enumerate(aa)))
+    if cond and not on_ground:
+        box = take_id()
+        blocks.append('Task_New(%d, "ConditionalContainer", "%s", "%s || this.isRun", "", "", ' % (box, name, run) + EOL
+                      + vtask + ", " + EOL + atask + "), " + EOL)
+    else:
+        blocks.append(vtask + ", " + EOL + atask + ", " + EOL)
+    o["_tid"] = vid
+    OWN_CAR_IDS[o.get("uid")] = vid
+    report.append("%s: level %d's %s flight (%.0f s) from %.1f m over the ground, %s"
+                  % (name, lv_, "helicopter" if veh.kind == "Heli" else "plane",
+                     (_FLIGHTS.get((lv_, vid_)) or {}).get("seconds") or 0, rel,
+                     "at once" if not cond else "once %s" % ("the alarm goes off" if start == "alarm" else event_name(fl.get("event")))))
+
 # ---------------------------------------------------------------- cameras
 # SCamera: holder position and heading, holder model, camera tilt and pan, the
 # camera and its wreck, how far it sweeps right and left (degrees), how fast
@@ -3528,7 +3760,6 @@ def patrol_commands(route, terminal):
 GONE_CAMS = []
 # the level's cutscenes and what moves in it (studio/extract/motion.py), read
 # from the stock level: ids are the same in this build. An empty map has none.
-from studio.extract import motion as MOTION_X
 MOTION = {"vehicles": [], "cutscenes": [], "complete": ""}
 if not EMPTY:
     try:
@@ -4335,6 +4566,11 @@ if BASE_GRAPHS.is_dir():
         else:
             dst.write_bytes(gp.read_bytes())
         staged_graphs.append(gp.name)
+# the graphs of the routes your vehicles drive
+for _gid, _bytes in NEW_GRAPHS.items():
+    (OUT / "graphs").mkdir(parents=True, exist_ok=True)
+    (OUT / "graphs" / ("graph%d.dat" % _gid)).write_bytes(_bytes)
+    staged_graphs.append("graph%d.dat" % _gid)
 
 def ai_script(spec):
     """An AI script in the shape 825 of the game's 855 have: CREATE -> default (+ alarm

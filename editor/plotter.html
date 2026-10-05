@@ -960,6 +960,11 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .cut-keep button:first-child{border-radius:4px 0 0 4px}.cut-keep button:last-child{border-radius:0 4px 4px 0}
 .cut-keep button.on{background:var(--sunken);color:var(--ink);border-color:var(--accent)}
 .cut-vrow{display:flex;align-items:flex-start;gap:2px}
+.cut-veh.on{border-color:var(--accent);background:var(--sunken)}
+.drv .cut-keep{margin:0}
+.drv-f{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12.5px}
+.drv-f label{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.drv-f input[type=number]{width:64px}
 .cut-vrow .iconbtn{margin-top:3px;flex:none}
 .cut-vrow.gone .cut-veh b{color:var(--muted);text-decoration:line-through}
 .ob{border:1px solid var(--line);border-radius:6px;padding:0 0 7px;margin-bottom:7px;background:var(--sunken)}
@@ -5074,6 +5079,7 @@ function inspHead(o){
 function fld(id,label,v){return '<div class="field"><span class="lbl">'+label+'</span><input id="'+id+'" value="'+v+'"></div>'}
 function renderSide(){
   var el=$("insp");
+  if(VROUTE&&placements.indexOf(VROUTE)<0)VROUTE=null;
   if(MAPCOMP)renderMapComputer();
   if(!$("panel-sec").hidden)renderSecurity();
   multi=multi.filter(function(o){return o.type==="navnode"?navNodes.indexOf(o)>=0:o.own?placements.indexOf(o)>=0:!isRemoved(o)});
@@ -5544,6 +5550,8 @@ function objectInspector(el){
   }
   if(own)h+='<div class="field" style="margin-top:7px"><span class="lbl">Label</span><input id="inm" value="'+esc(o.name)+'"></div>';
   if(own)h+=ownDoorSection(o);
+  if(own)h+=driveSection(o);
+  if(own&&o.flight)h+=flightSection(o);
   if(own&&o.type==="building"&&!segInfo(o.model))h+=mapLabelSection(o);
   if(own&&o.type==="building"&&!segInfo(o.model))h+=flattenSection(o);
   if(o.model&&!isSoldier&&!isPickup)h+=textureSection(o);
@@ -5593,6 +5601,8 @@ function objectInspector(el){
   bindAlarmSection(o);
   bindDoorSection(o);
   bindOwnDoorSection(o);
+  bindDriveSection(o);
+  bindFlightSection(o);
   if($("i-ai"))$("i-ai").addEventListener("change",function(){setProp(o,{ai:$("i-ai").value});renderSide();draw()});
   if($("i-team"))$("i-team").addEventListener("change",function(){
     var v=$("i-team").value,box=$("i-teamid");
@@ -6743,7 +6753,8 @@ function renderCutscenes(){
   if(!LEVEL){host.innerHTML="";return}
   if(MODE==="empty"){
     host.innerHTML='<p class="hint" style="margin:0">An empty map keeps none of the level\'s cutscenes or moving vehicles: '+
-      'the mission starts with the player standing at the start, and ends when its objectives are done.</p>';
+      'the mission starts with the player standing at the start, and ends when its objectives are done.</p>'+flightList();
+    host.scrollTop=top;
     return;
   }
   h+='<p class="hint" style="margin:0 0 8px">The level\'s own cutscenes, played in the 3D view as the game plays them, and the vehicles that move in it.</p>';
@@ -6805,6 +6816,7 @@ function renderCutscenes(){
       '<i>'+esc(vehicleMoves(v))+(v.parked?'':' · '+esc(thereWhen(v)))+'</i></span></button></div>';
   });
   h+='<p class="hint" style="margin:12px 0 0">With this panel open, the map shows the AI vehicles\' routes (amber) and the trains\' tracks (blue), and the cameras of an unfolded cutscene.</p>';
+  h+=flightList();
   host.innerHTML=h;
   host.scrollTop=top;
 }
@@ -6838,6 +6850,194 @@ function setLevelVehicle(v,keep){
   else levelVehicles[String(v.id)]="off";
   touch();renderSide();renderCutscenes();renderList();draw();
 }
+/* ---------------- vehicles of yours that drive ---------------- */
+// A vehicle placed from the inventory stands where it is put. Given a route
+// (its panel: Drives a route), the build makes it a Car the game's AI drives,
+// as the levels' APCs and trucks are, on a graph of its own laid along the
+// route (studio/build/plan.py, vehicles of yours that drive): from where it
+// stands to each stop in turn, round again or stopping at the last, starting at
+// once, when the alarm goes off or when an event happens - parked until then.
+var DRIVABLE={"601_01_1":{name:"APC",armed:true},"614_01_1":{name:"T80 tank",armed:true},
+  "610_01_1":{name:"Truck"},"622_01_1":{name:"Truck"},"616_01_1":{name:"Limousine"}};
+var VROUTE=null;            // the vehicle whose route is being drawn: map clicks add its stops
+function addDrivable(){
+  if(!CATALOG||!CATALOG.structures)return;
+  [["601_01_1","APC"],["614_01_1","T80 tank"]].forEach(function(m){
+    if(!CATALOG.structures.some(function(x){return x.model===m[0]}))CATALOG.structures.push({model:m[0],name:m[1],cat:"vehicles"});
+  });
+}
+function drives(o){return !!(o&&o.own&&DRIVABLE[o.model]&&o.drive)}
+function driveSection(o){
+  if(!DRIVABLE[o.model])return "";
+  var d=o.drive,V=DRIVABLE[o.model],ro=!canEditQuiet();
+  var h='<div class="drv"><div class="lbl" style="margin:12px 0 5px">Drives</div>'+
+    '<div class="cut-keep" role="group" aria-label="Drives">'+
+    '<button type="button" id="v-stand" class="'+(d?'':'on')+'" aria-pressed="'+!d+'"'+(ro?' disabled':'')+'>Stands</button>'+
+    '<button type="button" id="v-drive" class="'+(d?'on':'')+'" aria-pressed="'+!!d+'"'+(ro?' disabled':'')+'>Drives a route</button></div>';
+  if(!d)return h+'<p class="hint" style="margin:6px 0 0">It stands where it is. Give it a route and the game\'s AI drives it, as the levels\' APCs and trucks are.</p></div>';
+  var n=(d.stops||[]).length,drawing=VROUTE===o,sys=alarmSystems(),evs=events;
+  h+='<p class="hint" style="margin:6px 0">'+(n?n+' stop'+(n>1?'s':'')+'. ':'No stops yet. ')+
+    (drawing?'Click the map for each stop; Backspace takes the last one away, Esc or Enter ends.':'It drives from where it stands to each stop in turn.')+'</p>'+
+    '<div class="ins-acts" style="margin-top:0"><button class="btn act'+(drawing?' on':'')+'" id="v-draw"'+(ro?' disabled':'')+'>'+(drawing?'Done drawing':'Draw the route')+'</button>'+
+    (n?'<button class="btn act" id="v-clear"'+(ro?' disabled':'')+'>Clear the stops</button>':'')+'</div>'+
+    '<div class="drv-f"><label>Speed <input type="number" id="v-speed" min="5" max="80" value="'+(d.speed||20)+'"'+(ro?' disabled':'')+'> km/h</label>'+
+    '<label><input type="checkbox" id="v-loop"'+(d.loop!==false?' checked':'')+(ro?' disabled':'')+'> Round and round <span class="hint">(else it stops at the last)</span></label>'+
+    (V.armed?'<label><input type="checkbox" id="v-fire"'+(d.fire!==false?' checked':'')+(ro?' disabled':'')+'> Fires at the player it sees</label>':'')+
+    '<label>Starts <select id="v-start"'+(ro?' disabled':'')+'>'+
+      '<option value="now"'+(d.start==="now"||!d.start?' selected':'')+'>from the start</option>'+
+      '<option value="alarm"'+(d.start==="alarm"?' selected':'')+'>when the alarm goes off</option>'+
+      '<option value="event"'+(d.start==="event"?' selected':'')+'>when an event happens</option></select></label>';
+  if(d.start==="alarm")h+='<label>Alarm <select id="v-alarm"'+(ro?' disabled':'')+'><option value="">the nearest</option>'+sys.map(function(a){
+      return '<option value="'+esc(a.key)+'"'+(d.alarmId===a.key?' selected':'')+'>'+esc(a.name)+'</option>'}).join("")+'</select></label>';
+  if(d.start==="event")h+='<label>Event <select id="v-event"'+(ro?' disabled':'')+'><option value="">pick one</option>'+evs.map(function(v,i){
+      return '<option value="'+esc(v.uid)+'"'+(d.event===v.uid?' selected':'')+'>'+(i+1)+'. '+esc(eventLabel(v))+'</option>'}).join("")+'</select></label>'+
+      (evs.length?'':'<p class="hint">Add one in the Events tab first.</p>');
+  h+='</div>'+(d.start&&d.start!=="now"?'<p class="hint" style="margin:6px 0 0">Until then it stands parked where it is.</p>':'');
+  var pr=routeProblem(o);
+  if(pr)h+='<div class="note bad" style="margin-top:8px">'+esc(pr)+'</div>';
+  return h+'</div>';
+}
+function routeProblem(o){
+  var d=o.drive;if(!d)return null;
+  if(!(d.stops||[]).length)return "No stops yet: it would stand where it is. Draw the route.";
+  if(d.start==="event"&&!events.some(function(v){return v.uid===d.event}))return "Pick the event it starts on.";
+  if(d.start==="alarm"&&!alarmSystems().length)return "There is no alarm in this mission to start it.";
+  return null;
+}
+function setDrive(o,ch){
+  if(!canEdit())return;
+  var d=ch===null?null:Object.assign({},o.drive||{stops:[],loop:true,speed:20,fire:true,start:"now"},ch||{});
+  setProp(o,{drive:d});
+  if(!d&&VROUTE===o)VROUTE=null;
+  renderSide();draw();
+}
+function bindDriveSection(o){
+  if(!$("v-stand"))return;
+  $("v-stand").addEventListener("click",function(){setDrive(o,null)});
+  $("v-drive").addEventListener("click",function(){if(!o.drive){setDrive(o,{});startRoute(o)}});
+  if($("v-draw"))$("v-draw").addEventListener("click",function(){if(VROUTE===o)endRoute();else startRoute(o)});
+  if($("v-clear"))$("v-clear").addEventListener("click",function(){setDrive(o,{stops:[]})});
+  if($("v-speed"))$("v-speed").addEventListener("change",function(){setDrive(o,{speed:Math.max(5,Math.min(80,+this.value||20))})});
+  if($("v-loop"))$("v-loop").addEventListener("change",function(){setDrive(o,{loop:this.checked})});
+  if($("v-fire"))$("v-fire").addEventListener("change",function(){setDrive(o,{fire:this.checked})});
+  if($("v-start"))$("v-start").addEventListener("change",function(){setDrive(o,{start:this.value})});
+  if($("v-alarm"))$("v-alarm").addEventListener("change",function(){setDrive(o,{alarmId:this.value||undefined})});
+  if($("v-event"))$("v-event").addEventListener("change",function(){setDrive(o,{event:this.value||undefined})});
+}
+function startRoute(o){
+  if(!canEdit()||!o||!o.drive)return;
+  VROUTE=o;sel=o;multi=[];
+  if(tool)selectTool(null,null);
+  toast("Click the map for each stop of its route. Backspace takes the last away; Esc or Enter ends");
+  renderSide();draw();
+}
+function endRoute(){VROUTE=null;renderSide();draw()}
+// a stop where the map is clicked, or (at null) the last one taken away
+function routeStop(x,y){
+  var o=VROUTE;if(!o||!o.drive)return;
+  var st=(o.drive.stops||[]).slice();
+  if(x==null)st.pop();
+  else{
+    if(st.length>=40){toast("A route has at most 40 stops");return}
+    st.push([+x.toFixed(2),+y.toFixed(2)]);
+  }
+  setDrive(o,{stops:st});
+  VROUTE=o;
+}
+// your vehicles' routes: always drawn, the selected one's brighter, its stops numbered
+function drawOwnRoutes(){
+  var list=placements.filter(function(p){return drives(p)&&(p.drive.stops||[]).length});
+  if(!list.length&&!VROUTE)return;
+  ctx.save();ctx.lineJoin="round";ctx.lineCap="round";ctx.font='600 10px "IBM Plex Mono",monospace';
+  list.forEach(function(o){
+    var d=o.drive,pts=[[o.x,o.y]].concat(d.stops),on=o===sel||o===VROUTE;
+    if(d.loop!==false&&d.stops.length>=2)pts.push(d.stops[0]);
+    var P=pts.map(function(q){return w2s(q[0],q[1])});
+    ctx.strokeStyle=on?"rgba(255,214,90,.95)":"rgba(255,214,90,.55)";ctx.lineWidth=on?3:2;
+    ctx.setLineDash([8,5]);strokePts(P);ctx.setLineDash([]);
+    d.stops.forEach(function(q,i){
+      var p=w2s(q[0],q[1]);
+      ctx.fillStyle="rgba(20,30,16,.9)";ctx.strokeStyle=on?"rgba(255,214,90,1)":"rgba(255,214,90,.6)";ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(p[0],p[1],7,0,6.2832);ctx.fill();ctx.stroke();
+      ctx.fillStyle=ctx.strokeStyle;var t=String(i+1),w=ctx.measureText(t).width;ctx.fillText(t,p[0]-w/2,p[1]+3.5);
+    });
+  });
+  // drawing: the next stop follows the pointer
+  if(VROUTE&&VROUTE.drive&&mouse.inside){
+    var st=VROUTE.drive.stops||[],last=st.length?st[st.length-1]:[VROUTE.x,VROUTE.y],a=w2s(last[0],last[1]);
+    ctx.strokeStyle="rgba(255,214,90,.7)";ctx.lineWidth=1.5;ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(mouse.x,mouse.y);ctx.stroke();ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+/* ---------------- flights from the levels ---------------- */
+// The levels' helicopters and planes fly recordings (studio/extract/flights.py
+// lists them, data/flights.json): any of them can be put in a mission, where
+// the build copies the aircraft and its recording (plan.py, flights of yours).
+// It flies the way it did in its level, from where it is put, turned as it is
+// turned, as high over the ground as it started there.
+var FLIGHTS=null,FLIGHTS_OPEN=false,FLIGHTPICK=null;
+function loadFlights(){
+  if(FLIGHTS!==null)return;
+  FLIGHTS=[];
+  fetch("data/flights.json?v="+DATAV).then(function(r){return r.json()}).then(function(d){FLIGHTS=Array.isArray(d)?d:[];renderCutscenes()})
+    .catch(function(){FLIGHTS=[]});
+}
+function flightTitle(f){
+  var k=f.kind==="plane"?"Plane":"Helicopter";
+  var how=f.takeoff?(f.kind==="plane"?"taking off":"taking off"):"flying in";
+  return k+" "+how+(f.name&&f.name.length>2?" · "+f.name.replace(/\s+/g," ").slice(0,40):"");
+}
+function flightWhere(f){return "level "+f.level+(f.role?" "+f.role:"")+" · "+Math.round(f.seconds)+" s"}
+function flightList(){
+  loadFlights();
+  if(!canEditQuiet())return "";
+  var h='<div class="lbl" style="margin:14px 0 6px;display:flex;align-items:center;gap:6px">Flights from the levels'+
+    '<button type="button" class="iconbtn" data-a="flights" style="margin-left:auto" aria-expanded="'+FLIGHTS_OPEN+'" title="'+(FLIGHTS_OPEN?'Fold':'Unfold')+'">'+EV_IC.open+'</button></div>';
+  if(!FLIGHTS_OPEN)return h+'<p class="hint">Any of the levels\' recorded flights - a helicopter landing, a plane taking off - can fly in this mission. Unfold to pick one.</p>';
+  if(!FLIGHTS||!FLIGHTS.length)return h+'<p class="hint">Loading…</p>';
+  h+='<p class="hint" style="margin:0 0 6px">Pick one, then click the map where it starts. It flies the way it did in its level, turned as you turn it: mind what stands in its way.</p>';
+  FLIGHTS.forEach(function(f,i){
+    h+='<button type="button" class="cut-veh'+(FLIGHTPICK===f?' on':'')+'" data-a="fly" data-f="'+i+'" aria-pressed="'+(FLIGHTPICK===f)+'"><span class="t"><b>'+esc(flightTitle(f))+'</b>'+
+      '<i>'+esc(flightWhere(f))+(f.rel!=null&&!f.takeoff?' · from '+Math.round(f.rel)+' m up':'')+'</i></span></button>';
+  });
+  return h;
+}
+function placeFlight(x,y){
+  var f=FLIGHTPICK;if(!f||!canEdit())return;
+  var z=groundAt(x,y);
+  var o={uid:uid(),own:true,type:"building",kind:"object",model:f.model,name:(f.kind==="plane"?"Plane":"Helicopter")+" flight",
+    x:+x.toFixed(2),y:+y.toFixed(2),z:z!=null?z:0,gamma:+(((f.rot||[0,0,0])[2])||0).toFixed(5),
+    flight:{level:f.level,id:f.id,start:"now"},flatten:false};
+  placements.push(o);
+  FLIGHTPICK=null;sel=o;multi=[];
+  touch();renderSide();renderCutscenes();renderList();draw();
+}
+function flightSection(o){
+  var f=o.flight,ro=!canEditQuiet(),info=(FLIGHTS||[]).filter(function(x){return x.level===f.level&&x.id===f.id})[0];
+  var h='<div class="drv"><div class="lbl" style="margin:12px 0 5px">Flies</div>'+
+    '<p class="hint" style="margin:0 0 6px">'+(info?esc(flightTitle(info))+', from '+esc(flightWhere(info))+'. ':'Level '+f.level+'\'s flight '+f.id+'. ')+
+    'It flies the way it did there, from here, turned as you turn it'+(info&&info.rel!=null?', starting '+(info.takeoff?'on the ground':Math.round(info.rel)+' m over it'):'')+'.</p>'+
+    '<div class="drv-f"><label>Starts <select id="f-start"'+(ro?' disabled':'')+'>'+
+      '<option value="now"'+(f.start==="now"||!f.start?' selected':'')+'>from the start</option>'+
+      '<option value="alarm"'+(f.start==="alarm"?' selected':'')+'>when the alarm goes off</option>'+
+      '<option value="event"'+(f.start==="event"?' selected':'')+'>when an event happens</option></select></label>';
+  if(f.start==="alarm")h+='<label>Alarm <select id="f-alarm"'+(ro?' disabled':'')+'><option value="">the nearest</option>'+alarmSystems().map(function(a){
+      return '<option value="'+esc(a.key)+'"'+(f.alarmId===a.key?' selected':'')+'>'+esc(a.name)+'</option>'}).join("")+'</select></label>';
+  if(f.start==="event")h+='<label>Event <select id="f-event"'+(ro?' disabled':'')+'><option value="">pick one</option>'+events.map(function(v,i){
+      return '<option value="'+esc(v.uid)+'"'+(f.event===v.uid?' selected':'')+'>'+(i+1)+'. '+esc(eventLabel(v))+'</option>'}).join("")+'</select></label>';
+  h+='</div>';
+  if(f.start&&f.start!=="now")h+='<p class="hint" style="margin:6px 0 0">'+(info&&!info.takeoff?'It appears when it starts.':'Until then it stands here.')+'</p>';
+  if(f.start==="event"&&!events.some(function(v){return v.uid===f.event}))h+='<div class="note bad" style="margin-top:8px">Pick the event it starts on.</div>';
+  return h+'</div>';
+}
+function bindFlightSection(o){
+  if(!$("f-start"))return;
+  function set(ch){if(!canEdit())return;setProp(o,{flight:Object.assign({},o.flight,ch)});renderSide();draw()}
+  $("f-start").addEventListener("change",function(){set({start:this.value})});
+  if($("f-alarm"))$("f-alarm").addEventListener("change",function(){set({alarmId:this.value||undefined})});
+  if($("f-event"))$("f-event").addEventListener("change",function(){set({event:this.value||undefined})});
+}
 function thingName(id){
   var vs=levelMotion().vehicles,v=vs.filter(function(q){return q.id===id})[0];
   if(v)return v.name||"the "+(KIND_NAME[v.kind]||"vehicle").toLowerCase();
@@ -6858,6 +7058,10 @@ function bindCutscenes(){
     if(a==="play"&&c){e.stopPropagation();playCutscene(c,0);return}
     if((a==="keep"||a==="leave")&&c){setLevelScene(c,a==="keep");return}
     if(a==="vout"||a==="vin"){var vv=M.vehicles[+b.getAttribute("data-v")];if(vv)setLevelVehicle(vv,a==="vin");return}
+    if(a==="fly"){var f=(FLIGHTS||[])[+b.getAttribute("data-f")];if(!f||!canEdit())return;
+      FLIGHTPICK=FLIGHTPICK===f?null:f;if(FLIGHTPICK){if(tool)selectTool(null,null);VROUTE=null;toast("Click the map where it starts. Esc to stop")}
+      renderCutscenes();draw();return}
+    if(a==="flights"){FLIGHTS_OPEN=!FLIGHTS_OPEN;renderCutscenes();return}
     if(a==="shot"&&c){playCutscene(c,+b.getAttribute("data-t"));return}
     if(a==="veh"){
       var v=M.vehicles[+b.getAttribute("data-v")];if(!v)return;
@@ -6874,6 +7078,7 @@ function bindCutscenes(){
 // panel is open; a selected vehicle's way, always
 function drawMotion(){
   if(!LEVEL||MAPCOMP)return;
+  drawOwnRoutes();
   var M=levelMotion();if(!M.vehicles.length&&!M.cutscenes.length)return;
   var all=PANEL==="cut",one=sel&&sel.type==="vehicle"?motionOf(sel):null;
   if(!all&&!one)return;
@@ -7544,6 +7749,7 @@ function groupCentre(list){
 // move / turn every member; shipped objects become edits like any other move
 function placeMember(o,x,y,gamma){
   if(o.type==="navnode"){o.x=x;o.y=y;settleZ(o);rehome(o);return}
+  if(drives(o)&&gamma==null){var mdx=x-o.x,mdy=y-o.y;o.drive.stops=(o.drive.stops||[]).map(function(s){return [+(s[0]+mdx).toFixed(2),+(s[1]+mdy).toFixed(2)]})}
   var f={x:+x.toFixed(3),y:+y.toFixed(3),z:o.z};
   if(gamma!=null&&o.type!=="navnode")f.gamma=+((gamma%(Math.PI*2)+Math.PI*2)%(Math.PI*2)).toFixed(5);
   if(o.own){
@@ -7570,6 +7776,8 @@ function rotateGroup(deg){
   var c=groupCentre(list),a=deg*Math.PI/180,cs=Math.cos(a),sn=Math.sin(a);
   list.forEach(function(o){
     var dx=o.x-c.x,dy=o.y-c.y;
+    if(drives(o))o.drive.stops=(o.drive.stops||[]).map(function(s){var ex=s[0]-c.x,ey=s[1]-c.y;
+      return [+(c.x+ex*cs-ey*sn).toFixed(2),+(c.y+ex*sn+ey*cs).toFixed(2)]});
     placeMember(o,c.x+dx*cs-dy*sn,c.y+dx*sn+dy*cs,o.type==="navnode"?null:(o.gamma||0)+a);
   });
   touch();settleGroup(list);renderSide();renderNavSection();draw();
@@ -7688,6 +7896,8 @@ function groupData(list){
     else return;
     p.own=true;p.dx=o.x-c.x;p.dy=o.y-c.y;p.z=o.z;p.gamma=o.gamma||0;
     delete p.x;delete p.y;
+    if(p.drive&&p.drive.stops){p.drive=JSON.parse(JSON.stringify(p.drive));
+      p.drive.stops=p.drive.stops.map(function(s){return [+(s[0]-c.x).toFixed(3),+(s[1]-c.y).toFixed(3)]});p.drive.rel=true}
     // what the kept doors name it by, and how high above the ground it stood
     if(!o.own&&o.id>=0&&kept[o.id])p.old="lv:"+o.id;
     var g0=groundAt(o.x,o.y);if(g0!=null)p.up=+(o.z-g0).toFixed(3);
@@ -8034,6 +8244,12 @@ function pasteData(d,x,y,gamma){
       if(o.door.switch&&map["t:"+o.door.switch])o.door.switch=map["t:"+o.door.switch].slice(2);
     }
     o.x=+(x+p.dx*cs-p.dy*sn).toFixed(3);o.y=+(y+p.dx*sn+p.dy*cs).toFixed(3);o.z=(p.z||0)+dz;
+    if(o.drive&&o.drive.rel){
+      o.drive.stops=(o.drive.stops||[]).map(function(s){return [+(x+s[0]*cs-s[1]*sn).toFixed(2),+(y+s[0]*sn+s[1]*cs).toFixed(2)]});
+      delete o.drive.rel;
+      if(o.drive.alarmId&&o.drive.alarmId.indexOf("own:")===0)o.drive.alarmId=map["t:"+o.drive.alarmId.slice(4)]?"own:"+map["t:"+o.drive.alarmId.slice(4)].slice(2):undefined;
+      if(o.drive.event&&!events.some(function(v){return v.uid===o.drive.event}))o.drive.event=undefined;
+    }
     // from a level with no ground: as high over the lowest floor as it stood, and kept there
     if(d.rigid&&p.rel!=null&&gz!=null&&!o.of){o.z=+(gz+p.rel).toFixed(3);o.exact=true;o._up=true}
     delete o.rel;
@@ -12058,7 +12274,9 @@ function planOf(){
         reinforce:p.reinforce||undefined,
         door:p.door||undefined,lift:p.lift||undefined,of:p.of||undefined,slot:p.slot||undefined,
         onLevel:p.onLevel||undefined,gate:p.type==="switch"&&p.gate?true:undefined,batch:p.batch||undefined,
-        stays:p.type==="switch"&&p.stays===false?false:undefined}}),
+        stays:p.type==="switch"&&p.stays===false?false:undefined,
+        drive:p.type==="building"&&p.drive&&DRIVABLE[p.model]?JSON.parse(JSON.stringify(p.drive)):undefined,
+        flight:p.type==="building"&&p.flight?JSON.parse(JSON.stringify(p.flight)):undefined}}),
     objectives:objectives.map(function(o){return JSON.parse(JSON.stringify(o))}),failOnAlarm:failOnAlarm,objBase:objBase,
     ccwLying:true,settings:settingsPlan(),events:events.map(function(v){return JSON.parse(JSON.stringify(v))}),
     ground:groundEdits.map(function(a){
@@ -12236,6 +12454,7 @@ function loadLevel(n,then){
         :fetch("data/doors.json?v="+DATAV).then(function(r){return r.json()}).catch(function(){return null})
   ]).then(function(res){
     LEVEL=res[0];GRAPHS=res[1];MODELS=res[2]||MODELS;CATALOG=res[3]||CATALOG;NAVT=res[4]||NAVT;DOORS=res[5]||DOORS;
+    addDrivable();
     // an empty map: the terrain and navmesh stay, of the level only its player -
     // none of its objectives, alarm systems or map computer markers
     if(MODE==="empty"){
@@ -13200,6 +13419,7 @@ function bind(){
     if(AIPICK){AIPICK.d={x0:mouse.wx,y0:mouse.wy,x1:mouse.wx,y1:mouse.wy,sx:mouse.x,sy:mouse.y};return}
     if(SKETCH){SKETCH.cur={c:SKETCH.color,pts:[[mouse.wx,mouse.wy]]};SKETCH.strokes.push(SKETCH.cur);present();return}
     if(measure.on)return;
+    if(VROUTE||FLIGHTPICK)return;     // a click adds a stop, or puts a flight down (on release); a drag pans
     if(groundTool()&&canEdit()){
       if(GMODE.mode==="paint"){
         if(!materials().length){toast("This level's ground materials are not loaded");return}
@@ -13301,7 +13521,9 @@ function bind(){
       var nd=pickNode(mouse.x,mouse.y);
       if(patrolMode&&sel&&sel.type==="soldier"&&nd){
         setPatrol(sel,(sel.patrol||[]).concat([nd.id]));renderSide();draw();
-      }else if(OBJPICK){objectivePick(mouse.x,mouse.y)}
+      }else if(VROUTE){routeStop(mouse.wx,mouse.wy)}
+      else if(FLIGHTPICK){placeFlight(mouse.wx,mouse.wy)}
+      else if(OBJPICK){objectivePick(mouse.x,mouse.y)}
       else if(EVPICK){eventPick(mouse.x,mouse.y)}
       else if(DOORPICK){doorPick(mouse.x,mouse.y)}
       else if(measure.on){measureClick(mouse.wx,mouse.wy)}
@@ -13931,6 +14153,9 @@ function onKey(e){
   if(ctrl&&(k==="s"||k==="S")){e.preventDefault();saveNow();return}
   if(/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName))return;
   if(!$("sheet").hidden&&k!=="Escape")return;
+  if(VROUTE&&(k==="Escape"||k==="Enter")){e.preventDefault();endRoute();return}
+  if(FLIGHTPICK&&k==="Escape"){e.preventDefault();FLIGHTPICK=null;renderCutscenes();draw();return}
+  if(VROUTE&&(k==="Backspace"||k==="Delete")){e.preventDefault();routeStop(null);return}
   if(ctrl&&!e.shiftKey&&(k==="z"||k==="Z")){e.preventDefault();undo();return}
   if(ctrl&&((k==="y"||k==="Y")||(e.shiftKey&&(k==="z"||k==="Z")))){e.preventDefault();redo();return}
   if(ctrl&&(k==="d"||k==="D")){e.preventDefault();if(!duplicateGroup())duplicateSel();return}
@@ -14455,6 +14680,12 @@ function localChecks(){
     bv.notes.forEach(function(t){add("info","Build",t,null,null,"a dry run of the build")});
   }
   if(MSET.timeLimit>0&&MSET.timeLimit<60)add("warn","Objectives","The time limit is under a minute ("+clock(MSET.timeLimit)+")");
+  // your vehicles that drive, and the flights: a route with no stops, a start with nothing to start it
+  placements.forEach(function(o){
+    if(drives(o)){var pr=routeProblem(o);if(pr)add("warn","Vehicles",displayName(o)+": "+pr,o,null,num(o.x)+", "+num(o.y))}
+    if(o.flight&&o.flight.start==="event"&&!events.some(function(v){return v.uid===o.flight.event}))
+      add("warn","Vehicles",displayName(o)+": pick the event it starts on, or it flies at once",o,null,num(o.x)+", "+num(o.y));
+  });
   // can the player get there? (an estimate: he can also climb and jump where the grid can't)
   try{
     (findRoutes()||[]).forEach(function(r){
