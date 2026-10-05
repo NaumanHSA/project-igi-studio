@@ -192,16 +192,14 @@ def grey_tile(b, off, w, h):
     return bytes(out)
 
 
-def build(lv, game):
-    meta_p = DATA / "terrain" / ("level%d.json" % lv)
+def paint(lv, game, x0, y0, cell, w, h):
+    """(material per point of a grid, the materials used, the modifiers, the
+    level script's text): what each point's ground is made of, the level's
+    TextureModifiers laid over it in order. Any grid: the play area's, or the
+    coarser one round the cutscenes (studio/extract/terrainfar.py)."""
     tdir = pathlib.Path(game) / "missions" / "location0" / ("level%d" % lv) / "terrain"
-    if not (meta_p.exists() and (tdir / "terrain.bit").exists() and (tdir / "terrain.tex").exists()):
-        return None
-    qsc = qvm_source.level_qsc(lv, game)
-    meta = json.load(meta_p.open())
-    w, h, cell, x0, y0 = meta["w"], meta["h"], meta["cell"], meta["x0"], meta["y0"]
     masks = read_masks(tdir / "terrain.bit")
-    qtext = qsc.read_text(encoding="latin1")
+    qtext = qvm_source.level_qsc(lv, game).read_text(encoding="latin1")
     mods = [tuple(float(v) for v in m.groups()[:3]) + tuple(int(v) for v in m.groups()[3:])
             for m in R_MOD.finditer(qtext)]
     grid = bytearray(w * h)
@@ -232,6 +230,17 @@ def build(lv, game):
                     continue
                 for j in range(j0, j1 + 1):
                     grid[j * w + i0:j * w + i1 + 1] = fill * (i1 - i0 + 1)
+    return grid, used, mods, qtext
+
+
+def build(lv, game):
+    meta_p = DATA / "terrain" / ("level%d.json" % lv)
+    tdir = pathlib.Path(game) / "missions" / "location0" / ("level%d" % lv) / "terrain"
+    if not (meta_p.exists() and (tdir / "terrain.bit").exists() and (tdir / "terrain.tex").exists()):
+        return None
+    meta = json.load(meta_p.open())
+    w, h, cell, x0, y0 = meta["w"], meta["h"], meta["cell"], meta["x0"], meta["y0"]
+    grid, used, mods, qtext = paint(lv, game, x0, y0, cell, w, h)
     b, n, tw, th, offs = read_textures(tdir / "terrain.tex")
     materials = max(n // 3, max(used) + 1)
     sets = material_sets(tdir, lv)

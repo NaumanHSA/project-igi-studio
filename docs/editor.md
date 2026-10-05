@@ -1051,7 +1051,9 @@ The models come from the game files: `meshes.bin` in the level data (built by
 weapons from the location's shared archive), and textured, on demand, from the
 studio server (`api/model3d`, `api/texture`, `studio/extract/model3d.py`, decoded
 textures cached in `cache/`). Without the server the close-up draws the
-models plain.
+models plain. A model's parts that turn - the helicopter's main and tail
+rotors (`711_01_1`, `712_01_1`, `SPIN` in `model3d.py`) - come as groups of
+their own with their pivot, axis and speed, and turn in a cutscene.
 
 ## Keyboard
 
@@ -1437,7 +1439,12 @@ While a cutscene plays there is no fog: the whole level is loaded, and the
 ground runs out to wherever the level's cutscenes go, read from the game's
 own terrain (`studio/extract/terrainfar.py`, `GET /api/terrainfar?level=N`,
 read once a level and kept as `terrain/levelN.far.json` in the level data;
-coarser than the editor's own ground, round it).
+coarser than the editor's own ground, round it). Out there it wears the
+level's own ground - the same materials and textures as close by, painted
+from the level's texture masks the same way (`ground.paint`) - not a plain
+colour. A helicopter's rotors turn while it is off the ground, its blades
+see-through as the game draws them (a texture see-through all over, like
+glass, is blended; one with holes, like a fence, is cut out).
 
 What the preview cannot show: people and vehicles stand where the cutscene
 starts them. A recorded drive is control inputs fed to the game's own
@@ -1462,32 +1469,52 @@ only looked at, and an empty map keeps none of them.
 
 ### Cutscenes of your own
 
-At the top of the Cutscenes tab (a mission of yours):
+At the top of the Cutscenes tab (a mission of yours): **Make an intro** makes
+one from the mission: a fly-over of the area (the mission's description as
+its subtitle), a push in, orbit or pan on each objective that has a place
+(its text as the subtitle), and a last shot over the player's shoulder before
+he takes over. **Make an outro**: an orbit of the last objective's place
+("Mission complete."), then the camera rising away from it. **New cutscene**
+starts an empty one, for an event. Each opens in the **cutscene editor**; a
+card in the tab gives its length, its shots (click one to edit from there),
+▶ to play it in the 3D view and **Open in the cutscene editor**.
 
-- **Make an intro** makes one from the mission: a fly-over of the area (the
-  mission's description as its subtitle), a push in, orbit or pan on each
-  objective that has a place (its text as the subtitle), and a last shot over
-  the player's shoulder before he takes over. **Make an outro**: an orbit of
-  the last objective's place ("Mission complete."), then the camera rising
-  away from it. **New cutscene** starts an empty one, for an event.
-- **A shot** is a kind, what it shows, how long, and a line of subtitle:
-  *Fly-over* (comes in high and settles towards it), *Orbit*, *Push in*, *Pan
-  across*, *Still*, *Crane up*, *Follow* (rides behind a vehicle - one of yours
-  that drives, or the level's) and *Over the shoulder* (from behind the
-  player's start, the way he looks). **Pick what it shows**, then click the
-  map: a thing (a building, a guard, a vehicle, the player's start) or a spot.
-  The studio places the camera: from the side the player comes from, clear of
-  the ground, with nothing solid between it and what it shows (it tries other
-  sides until one is clear). *from* sets the side yourself (compass degrees),
-  *dist* and *height* move it further or closer, higher or lower. ↑ ↓ reorder
-  the shots, ✕ removes one, ▶ plays from it.
-- **Plays** as the mission starts (the level's own intro is then left out; the
-  skip key skips it unless you say not), once the mission is won (the level's
-  outro is left out; the mission ends when yours does), or when an event
-  happens. **Letterbox** on or off.
-- **▶ plays it in the 3D view**, as the game will: the cameras the plan keeps
-  are the ones the preview plays. Unfolded, its cameras are on the map in blue,
-  numbered by shot.
+**The cutscene editor** takes the whole window, as a video editor does:
+
+- **Along the top**: **Map** (or Esc) goes back to the map; the cutscene's
+  name; **Plays** as the mission starts (the level's own intro is then left
+  out; the skip key skips it unless you say not), once the mission is won
+  (the level's outro is left out; the mission ends when yours does), or when
+  an event happens (pick it); **Letterbox**; its length and shots, and what
+  still needs doing (a shot with nothing to show, a missing event).
+- **The preview**, the largest part: the cutscene in 3D, as the game will
+  play it - the cameras the plan keeps are the ones it plays. Under it: to
+  the start (Home), the shot before (←), play and pause (Space, or a click on
+  the picture), the next shot (→), to the end, and the time. Every change
+  plays again from where you are. In the preview the mission is as it starts:
+  the guards walk their patrols, your vehicles that drive from the start drive
+  their routes (a *Follow* shot rides with its vehicle), and a helicopter's
+  rotors turn.
+- **The shot**, on the right: **what the camera does** - *Fly-over* (comes in
+  high and settles towards it), *Orbit*, *Push in*, *Pan across*, *Still*,
+  *Crane up*, *Follow* (rides behind a vehicle - one of yours that drives, or
+  the level's) and *Over the shoulder* (from behind the player's start, the
+  way he looks); **what it shows** - chosen from the list (the player's start,
+  the objectives, yours, the level's buildings and vehicles) or **Pick on the
+  map** (click a thing or a spot; Esc comes back without one); **seconds**
+  (− and + by half a second); **where the camera stands** - the dial turns the
+  side it looks from (15° at a time; **Auto** is the side the player comes
+  from, or the nearest clear one), **Distance** and **Height**; the
+  **subtitle**; **Earlier**, **Later**, **Duplicate** and **Delete**. The
+  studio keeps the camera clear of the ground with nothing solid between it
+  and what it shows, and says so when nothing it tries is clear.
+- **The timeline**, along the bottom: a clip a shot, as long as it lasts, its
+  subtitle under it. Click a clip to go to it, drag it to move it, drag its
+  right edge to make it longer or shorter, drag along the ruler to scrub;
+  **Add a shot** puts one after the selected one. Ctrl+Z undoes, as on the map.
+
+On the map, an unfolded cutscene's cameras are drawn in blue, numbered by
+shot.
 
 How the build does it (*cutscenes of yours*): one `ConditionalContainer` per
 cutscene holding a `CutScene` (its `EditCamera`s in order; a shot's last one

@@ -44,7 +44,7 @@ project-igi-studio/
 │   │   ├── levels.py       level scripts -> levelN.json in the level data
 │   │   ├── motion.py       what moves and the cutscenes, from a level script (levelN.json "motion")
 │   │   ├── flights.py      the levels' recorded helicopter and plane flights -> flights.json
-│   │   ├── terrainfar.py   the ground everywhere a level's cutscenes go, read when first played
+│   │   ├── terrainfar.py   the ground everywhere a level's cutscenes go, and what it is made of
 │   │   ├── graphs.py       graph*.dat -> node positions + routing facts
 │   │   ├── models.py       model footprints, map labels, per-level model availability
 │   │   ├── meshes.py       every structure's render mesh, for drawing it from above

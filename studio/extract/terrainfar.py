@@ -10,7 +10,8 @@
 # This is a coarser grid of the game's own terrain (studio/build/terrain.py,
 # about 15 000 points a second) over all of it: the play area, every camera,
 # vehicle and track of the level's cutscenes, and a margin, at most MAX_SPAN
-# across. Read once per level and kept in the level data (terrain/levelN.far.json).
+# across, with what the ground is made of at each point (ground.py's paint).
+# Read once per level and kept in the level data (terrain/levelN.far.json).
 import base64, json, math, struct
 
 from studio import paths
@@ -22,7 +23,7 @@ MAX_SPAN = 6000.0       # metres: no cutscene goes further
 MAX_POINTS = 180000     # the grid is coarser over a wider area
 STEP = 0.05             # metres a unit
 NODATA = 65535
-VERSION = 1
+VERSION = 2              # 2: what the ground is made of, a material per point
 
 
 def _extent(lv):
@@ -86,6 +87,14 @@ def grid(lv):
     g = {"version": VERSION, "level": lv, "x0": round(x0, 3), "y0": round(y0, 3), "cell": cell, "w": w, "h": h,
          "zmin": round(zmin, 3), "step": STEP, "nodata": NODATA,
          "z": base64.b64encode(struct.pack("<%dH" % len(vals), *vals)).decode("ascii")}
+    # what the ground is made of at each point, as the play area's ground has it
+    # (studio/extract/ground.py), so far out it wears the level's own colours
+    try:
+        from studio.extract import ground as GR
+        mat, _used, _mods, _q = GR.paint(lv, str(paths.pristine()), x0, y0, cell, w, h)
+        g["mat"] = base64.b64encode(bytes(mat)).decode("ascii")
+    except Exception as e:                              # noqa: BLE001 - plain ground then
+        g["matError"] = str(e)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(g), encoding="utf-8")
     return g

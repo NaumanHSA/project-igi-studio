@@ -219,8 +219,9 @@ class Library:
         return pos, uv, groups
 
     def _assemble(self, name, lv, depth=0, seen=()):
-        """[(positions, uvs, [(texture name, triangles)])] of a model and the parts
-        it is built from (ATTA), each part in the model's own space."""
+        """[(positions, uvs, [(texture name, triangles)], spin)] of a model and the
+        parts it is built from (ATTA), each part in the model's own space; spin is
+        None, or (pivot, axis, revolutions a second) for a part that turns (SPIN)."""
         mef = self.mef(name, lv)
         if mef is None or name in seen or depth > 4:
             return []
@@ -237,52 +238,73 @@ class Library:
         if mesh:
             texs = self.textures_of(name, lv)
             pos, uv, groups = mesh
-            out.append((pos, uv, [(texs[ti] if ti < len(texs) else None, tris) for ti, tris in groups]))
+            out.append((pos, uv, [(texs[ti] if ti < len(texs) else None, tris) for ti, tris in groups], None))
         for part, (tx, ty, tz), m in BM.attachments(mef):
             if BM.is_effect(part):
                 continue                # a muzzle flash, seen only while firing
-            for pos, uv, groups in self._assemble(part, lv, depth + 1, seen + (name,)):
-                pos = [(m[0] * x + m[3] * y + m[6] * z + tx, m[1] * x + m[4] * y + m[7] * z + ty,
-                        m[2] * x + m[5] * y + m[8] * z + tz) for x, y, z in pos]
-                out.append((pos, uv, groups))
+
+            def at(x, y, z, t=(tx, ty, tz)):
+                return (m[0] * x + m[3] * y + m[6] * z + t[0], m[1] * x + m[4] * y + m[7] * z + t[1],
+                        m[2] * x + m[5] * y + m[8] * z + t[2])
+            own = SPIN.get(part)
+            for pos, uv, groups, spin in self._assemble(part, lv, depth + 1, seen + (name,)):
+                pos = [at(x, y, z) for x, y, z in pos]
+                if spin:
+                    spin = (at(*spin[0]), at(*spin[1], t=(0, 0, 0)), spin[2])
+                elif own:
+                    spin = ((tx, ty, tz), at(*own[0], t=(0, 0, 0)), own[1])
+                out.append((pos, uv, groups, spin))
         return out
 
     def model(self, name, lv):
         """What the close-up draws: positions, uvs and indices (base64 little-endian
         float32 / float32 / uint32) and [first index, index count, texture] groups,
-        and the level it was read from ("home"), whose textures it wears."""
+        and the level it was read from ("home"), whose textures it wears. A group
+        of a part that turns has a fifth field, its place in "spins" ({pivot,
+        axis, rate}); the fourth is True for a texture with holes in it, "soft"
+        for one that is see-through all over."""
         lv = self.home_of(name, lv)
         parts = self._assemble(name, lv)
         if not parts:
             return None
         P, U, I, G = array.array("f"), array.array("f"), array.array("I"), []
-        by_tex = {}
+        by_tex, spins = {}, []
         base = 0
-        for pos, uv, groups in parts:
+        for pos, uv, groups, spin in parts:
             for x, y, z in pos:
                 P.extend((x, y, z))
             for u, v in uv:
                 U.extend((u, v))
+            si = -1
+            if spin:
+                # the hub and its blades are parts of their own: one spin for them all
+                sp = {"pivot": [round(c, 4) + 0.0 for c in spin[0]], "axis": [round(c, 5) + 0.0 for c in spin[1]],
+                      "rate": spin[2]}
+                si = spins.index(sp) if sp in spins else len(spins)
+                if si == len(spins):
+                    spins.append(sp)
             for tex, tris in groups:
-                by_tex.setdefault(tex, []).extend((base + a, base + b, base + c) for a, b, c in tris)
+                by_tex.setdefault((tex, si), []).extend((base + a, base + b, base + c) for a, b, c in tris)
             base += len(pos)
-        for tex, tris in by_tex.items():
+        for (tex, si), tris in by_tex.items():
             # whether its texture has see-through pixels (fences, foliage, grilles)
             t = self.texture(tex, lv) if tex else None
-            G.append([len(I), len(tris) * 3, tex if t else None, bool(t and t[1])])
+            G.append([len(I), len(tris) * 3, tex if t else None, (t[1] if t else False)] + ([si] if si >= 0 else []))
             for t in tris:
                 I.extend(t)
         if sys.byteorder != "little":
             for a in (P, U, I):
                 a.byteswap()
-        return {"name": name, "home": lv, "verts": base, "groups": G,
+        return {"name": name, "home": lv, "verts": base, "groups": G, "spins": spins,
                 "pos": base64.b64encode(P.tobytes()).decode(), "uv": base64.b64encode(U.tobytes()).decode(),
                 "idx": base64.b64encode(I.tobytes()).decode()}
 
     # ------------------------------------------------------------ textures
     def texture(self, name, lv, size=512):
-        """(PNG bytes, has transparent pixels) of a texture, at most size px on
-        its longer side, or None."""
+        """(PNG bytes, alpha) of a texture, at most size px on its longer side, or
+        None. alpha is False for an opaque one, True for one with holes in it (a
+        fence, leaves: drawn cut out), "soft" for one see-through all over (a
+        rotor blade: drawn blended)."""
         size = max(16, min(2048, int(size)))
         idx = self.index()["tex"]
         loc = self._pick(idx.get(name + ".tex"), lv)
@@ -300,7 +322,9 @@ class Library:
         key = "%s_%d_%s" % (name.replace("/", "_"), size, tag)
         f, meta = CACHE / (key + ".png"), CACHE / (key + ".json")
         if f.exists() and meta.exists():
-            return f.read_bytes(), json.loads(meta.read_text()).get("alpha", False)
+            mm = json.loads(meta.read_text())
+            if "soft" in mm:                  # older copies did not tell "soft" apart
+                return f.read_bytes(), "soft" if mm["soft"] else mm.get("alpha", False)
         b = self._read(loc)
         if len(b) < 32 or b[:4] != b"LOOP":
             return None
@@ -313,7 +337,7 @@ class Library:
             step *= 2
         W, H = max(1, w // step), max(1, h // step)
         out = bytearray(W * H * 4)
-        clear = solid = 0
+        clear = solid = part = 0
         if bpp == 2:
             px = array.array("H")
             px.frombytes(b[32:32 + w * h * 2])
@@ -346,13 +370,23 @@ class Library:
                     out[o], out[o + 1], out[o + 2], out[o + 3] = b[q + 2], b[q + 1], b[q], b[q + 3]
                     if b[q + 3] < 128:
                         clear += 1
+                    if 16 <= b[q + 3] < 240:
+                        part += 1
                     o += 4
         alpha = clear > 0
+        soft = part * 2 > W * H                 # most of it neither clear nor solid
         png = _png(W, H, out)
         f.write_bytes(png)
-        meta.write_text(json.dumps({"w": w, "h": h, "alpha": alpha}))
-        return png, alpha
+        meta.write_text(json.dumps({"w": w, "h": h, "alpha": alpha, "soft": soft}))
+        return png, "soft" if soft else alpha
 
+
+# The parts that turn: the helicopter's (709_01_1, the only aircraft with
+# rotors) main rotor, 711_01_1 - a hub and two blades 7 m long - and its tail
+# rotor, 712_01_1. Each turns about its own x axis (the hub's mast; across the
+# tail), at revolutions a second. The blades are flat and see-through (texture
+# 716_01_1, alpha about 0.3): turning, they make the disc the game shows.
+SPIN = {"711_01_1": ((1.0, 0.0, 0.0), 4.0), "712_01_1": ((1.0, 0.0, 0.0), 7.0)}
 
 _LIB = {}
 

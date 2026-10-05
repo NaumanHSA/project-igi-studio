@@ -960,6 +960,123 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .cut-keep button:first-child{border-radius:4px 0 0 4px}.cut-keep button:last-child{border-radius:0 4px 4px 0}
 .cut-keep button.on{background:var(--sunken);color:var(--ink);border-color:var(--accent)}
 .cut-vrow{display:flex;align-items:flex-start;gap:2px}
+/* form controls in the studio's green: the cutscene editor, Drives, Flies */
+.gx select,.gx input[type=text],.gx input[type=number],.gx textarea{background:var(--sunken);border:1px solid var(--line);color:var(--ink);
+  border-radius:4px;padding:5px 8px;font:inherit;font-size:13px;line-height:1.35;transition:border-color .12s,box-shadow .12s}
+.gx select{appearance:none;-webkit-appearance:none;padding-right:28px;cursor:pointer;background-repeat:no-repeat;background-position:right 9px center;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2384d98d' stroke-width='1.6'/%3E%3C/svg%3E")}
+.gx select:hover,.gx input[type=text]:hover,.gx input[type=number]:hover,.gx textarea:hover{border-color:var(--ok)}
+.gx select:focus,.gx input[type=text]:focus,.gx input[type=number]:focus,.gx textarea:focus{outline:none;border-color:var(--ok);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--ok) 28%,transparent)}
+.gx select:disabled,.gx input:disabled,.gx textarea:disabled{opacity:.55;cursor:default}
+.gx input[type=number]{font-family:"IBM Plex Mono",monospace;-moz-appearance:textfield}
+.gx input[type=number]::-webkit-inner-spin-button,.gx input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.gx textarea{resize:vertical;min-height:54px;width:100%}
+.gx ::placeholder{color:var(--faint)}
+.gx input[type=range]{-webkit-appearance:none;appearance:none;height:18px;background:transparent;cursor:pointer;margin:0}
+.gx input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--ok) var(--p,50%),var(--grid) var(--p,50%))}
+.gx input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;margin-top:-5.5px;background:var(--ink);
+  border:2px solid var(--ok);box-shadow:0 0 8px rgba(95,212,111,.55)}
+.gx input[type=range]:focus{outline:none}
+.gx input[type=range]:focus-visible::-webkit-slider-thumb{border-color:var(--accent)}
+.gx optgroup{color:var(--muted);background:var(--surface)}
+/* the cutscene editor: a page of its own */
+.cuted{position:fixed;inset:0;z-index:60;background:var(--ground);display:grid;grid-template-rows:auto minmax(0,1fr) auto;color:var(--ink)}
+.cuted[hidden]{display:none}
+.cuted .btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;flex:none}
+.ce-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.ce-back{display:inline-flex;align-items:center;gap:4px}
+.ce-name{min-width:200px;font-weight:600;font-size:14px!important}
+.ce-f,.ce-chk{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+.ce-sum{margin-left:auto;color:var(--muted);font-size:12px}
+.ce-prob{color:var(--danger);font-size:12px;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ce-main{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0}
+.ce-prev{display:flex;flex-direction:column;min-height:0;min-width:0;border-right:1px solid var(--line)}
+.ce-stage{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
+.ce-wait{position:absolute;inset:0;display:grid;place-items:center;margin:0;color:var(--muted);font-size:14px;padding:20px;text-align:center}
+.ce-wait[hidden]{display:none}
+.ce-stage .v3d-top,.ce-stage .v3d-help,.ce-stage .v3d-read,.ce-stage .v3d-hint,.ce-stage .v3d-cross{display:none!important}
+.ce-trans{display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface);border-top:1px solid var(--line)}
+.ce-tb{width:34px;height:30px;display:grid;place-items:center;border:1px solid var(--line);border-radius:4px;background:var(--sunken);color:var(--ink);cursor:pointer;padding:0}
+.ce-tb svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6}
+.ce-tb:hover{border-color:var(--ok)}
+.ce-tb.ce-big{width:44px;height:34px;background:var(--ok);color:#06210b;border-color:var(--ok)}
+.ce-time{margin-left:8px;font-size:13px}
+.ce-hint{margin-left:auto;font-size:11.5px;color:var(--faint)}
+.ce-insp{overflow:auto;padding:14px 16px 18px;background:var(--surface)}
+.ce-ih{display:flex;align-items:baseline;gap:6px;font-size:13px;color:var(--muted);margin-bottom:12px}
+.ce-ih b{color:var(--ink);font-size:16px}
+.ce-ih .mono{margin-left:auto;font-size:12px}
+.ce-sec{margin:0 0 16px}
+.ce-sec>.lbl{margin-bottom:7px;display:block}
+.ce-kinds{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ce-kind{display:grid;grid-template-columns:28px 1fr;grid-template-rows:auto auto;column-gap:8px;align-items:center;text-align:left;padding:6px 8px;
+  border:1px solid var(--line);border-radius:5px;background:var(--sunken);color:var(--ink);cursor:pointer;font:inherit}
+.ce-kind svg{grid-row:1/3;width:26px;height:26px;fill:none;stroke:var(--muted);stroke-width:1.5}
+.ce-kind b{font-size:12.5px;font-weight:600}
+.ce-kind i{font-style:normal;font-size:10.5px;color:var(--faint);line-height:1.25}
+.ce-kind:hover{border-color:var(--ok)}
+.ce-kind.on{border-color:var(--accent);background:var(--accent-soft)}
+.ce-kind.on svg{stroke:var(--accent)}
+.ce-subj{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.ce-subj-n{flex:1;font-weight:600;font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ce-subj-n.none{color:var(--warn)}
+.ce-subj .btn{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.ce-insp select,.ce-insp textarea{width:100%}
+.ce-row{display:flex;align-items:center;justify-content:space-between}
+.ce-step{display:flex;align-items:center;gap:4px}
+.ce-step input{width:72px;text-align:center}
+.ce-step .btn{width:30px;padding:4px 0}
+.ce-dialw{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+.ce-dial{width:120px;height:120px;flex:none;cursor:pointer;touch-action:none}
+.ce-dial circle:first-child{fill:var(--sunken);stroke:var(--line);stroke-width:1.5}
+.ce-dial line{stroke:var(--grid);stroke-width:1.5}
+.ce-dial text{fill:var(--faint);font:600 10px "IBM Plex Mono",monospace;text-anchor:middle}
+.ce-dial .subj{fill:var(--build);opacity:.85}
+.ce-dial .ray{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:3 3}
+.ce-dial .cam{fill:var(--accent);stroke:#1d1600;stroke-width:1.5}
+.ce-dial.auto .cam{fill:var(--muted)}
+.ce-dial.auto .ray{stroke:var(--muted)}
+.ce-dialt{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.ce-dialt b{font-size:17px;color:var(--ink)}
+.ce-dialt .btn{align-self:flex-start;margin-top:4px;padding:2px 12px}
+.ce-sl{display:grid;grid-template-columns:72px 1fr 44px;align-items:center;gap:10px;font-size:12.5px;color:var(--muted);margin:6px 0}
+.ce-sl b{text-align:right;color:var(--ink);font-weight:500;font-size:12px}
+.ce-acts{display:flex;gap:6px;flex-wrap:wrap}
+.ce-acts .btn{flex:1}
+.ce-empty{color:var(--muted)}
+.ce-tl{background:var(--surface);border-top:1px solid var(--line);padding:8px 16px 12px;user-select:none}
+.ce-tlh{display:flex;align-items:center;gap:12px;margin-bottom:7px}
+.ce-tlh .btn{display:inline-flex;align-items:center;gap:5px;padding:3px 10px}
+.ce-tlh .hint{font-size:11.5px;color:var(--faint);margin-left:auto}
+.ce-tlb{position:relative;height:120px;margin:0 -16px;background:var(--sunken);border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden}
+.ce-ruler{position:absolute;left:0;right:0;top:0;height:20px;border-bottom:1px solid var(--grid);cursor:ew-resize}
+.ce-ruler span{position:absolute;top:2px;font:10px "IBM Plex Mono",monospace;color:var(--faint);padding-left:3px;border-left:1px solid var(--gridmaj);height:17px}
+.ce-trk{position:absolute;left:0;right:0;top:25px;height:52px;cursor:ew-resize}
+.ce-subs{top:82px;height:32px}
+.ce-clip{position:absolute;top:0;height:52px;display:flex;align-items:center;gap:6px;padding:0 12px 0 6px;border:1px solid var(--line);border-radius:5px;
+  background:linear-gradient(#174a1f,#0f3315);cursor:grab;overflow:hidden;white-space:nowrap}
+.ce-clip:hover{border-color:var(--ok)}
+.ce-clip.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.ce-clip.now{background:linear-gradient(#22702e,#164a1d)}
+.ce-clip.bad{border-style:dashed;border-color:var(--warn)}
+.ce-clip.drag{opacity:.88;z-index:3;cursor:grabbing;box-shadow:var(--shadow)}
+.ce-ck{display:grid;place-items:center;flex:none}
+.ce-ck svg{width:22px;height:22px;fill:none;stroke:var(--muted);stroke-width:1.5}
+.ce-cn{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.ce-cn b{font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.ce-cn i{font-style:normal;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.ce-cd{margin-left:auto;font-size:11px;color:var(--faint);padding-left:4px}
+.ce-edge{position:absolute;right:0;top:0;bottom:0;width:9px;cursor:ew-resize;background:linear-gradient(90deg,transparent,rgba(141,255,154,.22))}
+.ce-edge:hover{background:rgba(255,210,74,.55)}
+.ce-subt{position:absolute;top:2px;height:26px;padding:4px 8px;border-radius:4px;background:#0a1a0c;border:1px solid var(--grid);font-size:11.5px;
+  color:var(--ink);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ce-ph{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--accent);pointer-events:none;z-index:4}
+.ce-ph span{position:absolute;top:0;left:-5px;width:12px;height:12px;background:var(--accent);clip-path:polygon(0 0,100% 0,50% 100%)}
+.own-open{margin:4px 10px 0}
+.own-open .btn{width:100%;display:flex;align-items:center;justify-content:center;gap:6px}
+.own-open svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8}
+.own-shots{margin:6px 6px 0}
 .cut-role.event{color:var(--electric,#9ad)}
 .own-f{display:flex;flex-direction:column;gap:6px;margin:6px 10px;font-size:12.5px}
 .own-f label{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -3091,7 +3208,7 @@ function buildTrack(o){
   var cmds=patrolCmdsOf(o),moves=cmds.filter(function(c){return c[0]===2||c[0]===3});
   if(!moves.length)return null;
   var G=walkGraph(gid);
-  function xy(k){var n=G.pos[k];return n?[n.x,n.y]:null}
+  function xy(k){var n=G.pos[k];return n?[n.x,n.y,n.z]:null}
   // enter the graph at the node nearest the spawn point
   var near=null,bd=1e18;
   Object.keys(G.pos).forEach(function(k){
@@ -3105,7 +3222,7 @@ function buildTrack(o){
       out.push({a:cursor.p,b:b,spd:spd,pause:0,bad:bad});cursor.p=b;
     }
   }
-  var intro=[],cycle=[],cur={p:[o.x,o.y]};
+  var intro=[],cycle=[],cur={p:[o.x,o.y,guardFootZ(o)]};
   var first=String(moves[0][1]);
   if(!xy(first))return null;
   if(near&&near!==first){var np=xy(near);intro.push({a:cur.p,b:np,spd:WALK,pause:0});cur.p=np;legsTo(near,first,WALK,intro,cur)}
@@ -3140,6 +3257,7 @@ function trackPos(tr,t){
     if(tt<=l.t0+l.dur||i===legs.length-1){
       var move=l.len/l.spd,u=move>0?Math.min(1,Math.max(0,(tt-l.t0)/move)):1;
       return {x:l.a[0]+(l.b[0]-l.a[0])*u,y:l.a[1]+(l.b[1]-l.a[1])*u,
+              z:l.a[2]!=null&&l.b[2]!=null?l.a[2]+(l.b[2]-l.a[2])*u:null,
               h:Math.atan2(l.b[1]-l.a[1],l.b[0]-l.a[0]),moving:l.len>0&&u<1};
     }
   }
@@ -6771,9 +6889,63 @@ function farGround(then){
       z[k]=v===g.nodata?NaN:g.zmin+v*g.step-0.35;          // a little under the detailed ground where they meet
       if(x>fx0&&x<fx1&&y>fy0&&y<fy1)hole[k]=1;
     }
-    FARG[lv]={x0:g.x0,y0:g.y0,cell:g.cell,w:g.w,h:g.h,z:z,hole:hole};
+    var F={x0:g.x0,y0:g.y0,cell:g.cell,w:g.w,h:g.h,z:z,hole:hole};
+    // what the ground is made of out there, in the level's own colours and
+    // textures, as the close-up's ground (terrain3d)
+    var G=TERR.ground;
+    if(g.mat&&G&&G.rgb){
+      var mr=atob(g.mat),mat=new Uint8Array(n),rgb=new Float32Array(n*3),shade=new Float32Array(n),count={};
+      for(var q=0;q<n;q++){
+        var mt=mr.charCodeAt(q),col=G.rgb[mt]||[0.5,0.5,0.5],mv=G.mean[mt];
+        mat[q]=mt;rgb[q*3]=col[0];rgb[q*3+1]=col[1];rgb[q*3+2]=col[2];
+        shade[q]=mv!=null?mv:0.5;if(!hole[q])count[mt]=(count[mt]||0)+1;
+      }
+      var top=null;for(var mk in count)if(top==null||count[mk]>count[top])top=mk;
+      F.rgb=rgb;F.shade=shade;
+      F.tile=top!=null&&G.tiles[top]?{px:G.tiles[top],size:G.tile,mean:G.mean[top]}:null;
+      if(G.ctiles){
+        var ks=Object.keys(count).map(Number).filter(function(k){return G.ctiles[k]}).sort(function(a,b){return count[b]-count[a]});
+        if(ks.length){F.mat=mat;F.tex={size:G.ctile,order:ks,px:ks.map(function(k){return G.ctiles[k]})}}
+      }
+    }
+    FARG[lv]=F;
     then(FARG[lv]);
   }).catch(function(){then(null)});
+}
+// What moves while a cutscene plays in 3D (View3D.film's movers): every
+// patrolling guard walking his patrol as the map walks him, and each vehicle of
+// yours that drives from the start along its stops, at its speed - the
+// mission's first seconds, as an intro shows them.
+function filmMovers(){
+  var list=[];
+  walkers().forEach(function(o){
+    var k=key3d(o),tr=k&&trackFor(o);if(!tr)return;
+    var off=o.own?0:((Math.abs(o.id)||0)%17)*1.7;          // as the map staggers them
+    list.push(function(t){var p=trackPos(tr,t+off);return p&&{key:k,x:p.x,y:p.y,z:p.z,h:p.h}});
+  });
+  placements.forEach(function(o){
+    var d=o.drive;
+    if(!drives(o)||!(d.stops||[]).length||(d.start&&d.start!=="now"))return;
+    var k=key3d(o),spd=Math.max(5,+d.speed||20)/3.6,h0=(o.gamma||0)+Math.PI/2;
+    var first=[[o.x,o.y]].concat(d.stops),cyc=d.loop!==false&&d.stops.length>=2?[d.stops[d.stops.length-1]].concat(d.stops):null;
+    function len(P){var s=0;for(var i=1;i<P.length;i++)s+=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]);return s}
+    function along(P,s){
+      var h=h0;
+      for(var i=1;i<P.length;i++){
+        var a=P[i-1],b=P[i],l=Math.hypot(b[0]-a[0],b[1]-a[1]);
+        if(l>0.01)h=Math.atan2(b[1]-a[1],b[0]-a[0]);
+        if(s<=l||i===P.length-1){var u=l>0?Math.max(0,Math.min(1,s/l)):1;return {x:a[0]+(b[0]-a[0])*u,y:a[1]+(b[1]-a[1])*u,h:h}}
+        s-=l;
+      }
+      return {x:P[0][0],y:P[0][1],h:h};
+    }
+    var L1=len(first),L2=cyc?len(cyc):0;
+    list.push(function(t){
+      var s=t*spd,p=s<=L1||!L2?along(first,Math.min(s,L1)):along(cyc,(s-L1)%L2);
+      return {key:k,x:p.x,y:p.y,z:null,h:p.h};
+    });
+  });
+  return list.length?function(t){return list.map(function(f){return f(t)}).filter(Boolean)}:null;
 }
 function playCutscene(c,start,pre){
   if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
@@ -6795,7 +6967,9 @@ function playCutscene(c,start,pre){
   if(!View3D.isOpen()){FILMING=FILMACTORS=false;return}
   View3D.film({shots:shots,start:start||0,letterbox:(c.scenes[0]&&c.scenes[0].letterbox)||0.7,far:FARG[LV]||null,
     subtitles:(c.subtitles||[]).map(function(x){return {at:x.at,dur:x.dur,text:x.text||x.key}}),
-    note:"People and vehicles stand where the cutscene starts them: this plays the cameras, not the drives",
+    movers:pre?filmMovers():null,
+    note:pre?"Guards walk their patrols and your vehicles drive their routes, as the mission starts":
+      "People and vehicles stand where the cutscene starts them: this plays the cameras, not the drives",
     onEnd:function(){FILMING=FILMACTORS=false;V3D.film=null}});
 }
 function fmtSecs(t){t=Math.max(0,t);var m=Math.floor(t/60),s=t-m*60;return m+":"+(s<10?"0":"")+s.toFixed(0)}
@@ -6924,7 +7098,7 @@ function drives(o){return !!(o&&o.own&&DRIVABLE[o.model]&&o.drive)}
 function driveSection(o){
   if(!DRIVABLE[o.model])return "";
   var d=o.drive,V=DRIVABLE[o.model],ro=!canEditQuiet();
-  var h='<div class="drv"><div class="lbl" style="margin:12px 0 5px">Drives</div>'+
+  var h='<div class="drv gx"><div class="lbl" style="margin:12px 0 5px">Drives</div>'+
     '<div class="cut-keep" role="group" aria-label="Drives">'+
     '<button type="button" id="v-stand" class="'+(d?'':'on')+'" aria-pressed="'+!d+'"'+(ro?' disabled':'')+'>Stands</button>'+
     '<button type="button" id="v-drive" class="'+(d?'on':'')+'" aria-pressed="'+!!d+'"'+(ro?' disabled':'')+'>Drives a route</button></div>';
@@ -7069,7 +7243,7 @@ function placeFlight(x,y){
 }
 function flightSection(o){
   var f=o.flight,ro=!canEditQuiet(),info=(FLIGHTS||[]).filter(function(x){return x.level===f.level&&x.id===f.id})[0];
-  var h='<div class="drv"><div class="lbl" style="margin:12px 0 5px">Flies</div>'+
+  var h='<div class="drv gx"><div class="lbl" style="margin:12px 0 5px">Flies</div>'+
     '<p class="hint" style="margin:0 0 6px">'+(info?esc(flightTitle(info))+', from '+esc(flightWhere(info))+'. ':'Level '+f.level+'\'s flight '+f.id+'. ')+
     'It flies the way it did there, from here, turned as you turn it'+(info&&info.rel!=null?', starting '+(info.takeoff?'on the ground':Math.round(info.rel)+' m over it'):'')+'.</p>'+
     '<div class="drv-f"><label>Starts <select id="f-start"'+(ro?' disabled':'')+'>'+
@@ -7254,8 +7428,10 @@ function ownAsScene(c){
   var shots=[],subs=[],t=0;
   (c.shots||[]).forEach(function(sh){
     var fr=shotCams(sh),S=subjectOf(sh.subject);
+    // a Follow shot rides with its vehicle, as it drives (filmMovers)
+    var ride=sh.kind==="follow"&&S&&S.o&&key3d(S.o)?{key:key3d(S.o),x:S.x,y:S.y,z:S.z,g:S.gamma||0}:null;
     fr.forEach(function(k,i){shots.push(Object.assign({},k,{name:shotKind(sh.kind)[1]+(S?" · "+S.name:""),
-      target:k.follow&&S?{x:S.x,y:S.y,z:S.z+Math.min(S.h*0.45,6)}:null,end:i===fr.length-1}))});
+      target:k.follow&&S?{x:S.x,y:S.y,z:S.z+Math.min(S.h*0.45,6)}:null,ride:k.follow?ride:null,end:i===fr.length-1}))});
     if((sh.text||"").trim())subs.push({at:t,dur:Math.min(Math.max(0.5,+sh.dur||4),9),text:sh.text.trim()});
     t+=Math.max(0.5,+sh.dur||4);
   });
@@ -7276,7 +7452,7 @@ function thingSubject(o){
   return {kind:"point",x:o.x,y:o.y,z:o.z};
 }
 // "Make an intro": the area, each objective that has a place, then the player's start
-function makeIntro(){
+function makeIntro(open){
   if(!canEdit())return;
   var places=objectives.map(function(ob){return {ob:ob,w:objWhere(ob),o:objTarget(ob)}}).filter(function(p){return p.w}).slice(0,4);
   var pl=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="player"})[0];
@@ -7293,21 +7469,21 @@ function makeIntro(){
     shots.push(newShot(k,o?thingSubject(o):{kind:"point",x:p.w.x,y:p.w.y,r:10,name:"the marked area"},4.5,((p.ob.text||"").trim()||objDefaultText(p.ob)).slice(0,160)));
   });
   if(pl)shots.push(newShot("over",{kind:"player"},4,""));
-  addCutscene({name:"Intro",where:"intro",skippable:true,shots:shots});
+  addCutscene({name:"Intro",where:"intro",skippable:true,shots:shots},open);
 }
 // "Make an outro": the last objective done, then away from it into the sky
-function makeOutro(){
+function makeOutro(open){
   if(!canEdit())return;
   var last=objectives.slice().reverse().map(function(ob){return {ob:ob,w:objWhere(ob),o:objTarget(ob)}}).filter(function(p){return p.w})[0];
   var pl=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="player"})[0];
   var sub=last?(last.o?thingSubject(last.o):{kind:"point",x:last.w.x,y:last.w.y,r:10,name:"the last objective"}):pl?{kind:"player"}:null;
   if(!sub){toast("Give the mission an objective first");return}
   var shots=[newShot("orbit",sub,5,"Mission complete."),newShot("rise",sub,7,"")];
-  addCutscene({name:"Outro",where:"outro",shots:shots});
+  addCutscene({name:"Outro",where:"outro",shots:shots},open);
   // and it ends on the mission the game goes on to, once it knows
   withLibrary(function(){
     var nx=nextMissionName();
-    if(nx&&!shots[1].text){shots[1].text=("Next: "+nx+".").slice(0,160);touch();renderCutscenes()}
+    if(nx&&!shots[1].text){shots[1].text=("Next: "+nx+".").slice(0,160);touch();renderCutscenes();if(CUTED)renderCutEditor()}
   });
 }
 function withLibrary(then){
@@ -7325,13 +7501,14 @@ function nextMissionName(){
   var b=(LIB.builtins||[]).filter(function(x){return x.level===me.next})[0];
   return b?b.name:null;
 }
-function addCutscene(c){
+function addCutscene(c,open){
   if(!canEdit())return;
   c.uid=uid();c.shots=c.shots||[];
   // one intro and one outro: a new one takes the place of the old
   if(c.where==="intro"||c.where==="outro")cutscenes=cutscenes.filter(function(x){return x.where!==c.where});
   cutscenes.push(c);OWNOPEN[c.uid]=true;
   touch();renderCutscenes();renderList();draw();
+  if(open)openCutEditor(c);
 }
 function cutProblem(c){
   if(!(c.shots||[]).length)return "No shots yet.";
@@ -7354,42 +7531,26 @@ function ownCutsHtml(){
   cutscenes.forEach(function(c,ci){
     var open=!!OWNOPEN[c.uid],pr=cutProblem(c);
     h+='<div class="ob cut own'+(open?' open':'')+(pr?' bad':'')+'" data-o="'+ci+'">'+
-      '<div class="ob-h" data-a="otoggle"><span class="cut-role '+esc(c.where||"intro")+'">'+esc(c.where==="event"?"event":c.where||"intro")+'</span>'+
+      '<div class="ob-h" data-a="otoggle" title="Show its cameras on the map"><span class="cut-role '+esc(c.where||"intro")+'">'+esc(c.where==="event"?"event":c.where||"intro")+'</span>'+
       '<span class="ob-k">'+esc(c.name||"Cutscene")+'</span><span class="ob-acts">'+
       '<button class="iconbtn" data-a="oplay" title="Play it in the 3D view" aria-label="Play">'+CUT_IC.play+'</button>'+
       '<button class="iconbtn danger" data-a="odel" title="Remove this cutscene" aria-label="Remove">'+OB_IC.del+'</button>'+
       '<span class="ev-chev" aria-hidden="true">'+EV_IC.open+'</span></span></div>'+
       '<p class="ob-txt'+(pr?' ev-bad':'')+'">'+fmtSecs(cutLength(c))+' · '+(c.shots||[]).length+' shot'+((c.shots||[]).length===1?'':'s')+'. '+
       esc(pr||(c.where==="outro"?"Plays once the mission is won; the mission ends when it does.":c.where==="event"?"Plays when its event happens; the player keeps his place.":
-        "Plays as the mission starts"+(c.skippable!==false?"; the skip key skips it":"")+"."))+'</p>';
+        "Plays as the mission starts"+(c.skippable!==false?"; the skip key skips it":"")+"."))+'</p>'+
+      '<div class="own-open"><button type="button" class="btn act" data-a="oedit">'+CE_IC.edit+'Open in the cutscene editor</button></div>';
     if(open){
-      h+='<div class="own-f"><input type="text" data-a="oname" maxlength="40" value="'+esc(c.name||"")+'" placeholder="Name">'+
-        '<label>Plays <select data-a="owhere"><option value="intro"'+(c.where==="intro"?' selected':'')+'>as the mission starts</option>'+
-        '<option value="outro"'+(c.where==="outro"?' selected':'')+'>once the mission is won</option>'+
-        '<option value="event"'+(c.where==="event"?' selected':'')+'>when an event happens</option></select></label>'+
-        (c.where==="event"?'<label>Event <select data-a="oevent"><option value="">pick one</option>'+events.map(function(v,i){
-          return '<option value="'+esc(v.uid)+'"'+(c.event===v.uid?' selected':'')+'>'+(i+1)+'. '+esc(eventLabel(v))+'</option>'}).join("")+'</select></label>':'')+
-        '<label><input type="checkbox" data-a="obox"'+(c.letterbox!==false?' checked':'')+'> Letterbox</label>'+
-        (c.where==="intro"?'<label><input type="checkbox" data-a="oskip"'+(c.skippable!==false?' checked':'')+'> The skip key skips it</label>':'')+'</div>';
       var t=0;
+      h+='<div class="own-shots">';
       (c.shots||[]).forEach(function(sh,si){
-        var S=subjectOf(sh.subject),picking=CUTPICK&&CUTPICK.shot===sh;
-        h+='<div class="shot" data-s="'+si+'"><div class="shot-h"><span class="n">'+fmtSecs(t)+'</span>'+
-          '<select data-a="skind">'+SHOT_KINDS.map(function(k){return '<option value="'+k[0]+'"'+(sh.kind===k[0]?' selected':'')+'>'+k[1]+'</option>'}).join("")+'</select>'+
-          '<input type="number" data-a="sdur" min="0.5" max="60" step="0.5" value="'+(+sh.dur||4)+'" title="Seconds">s'+
-          '<span class="shot-acts"><button class="iconbtn" data-a="splay" title="Play from this shot">'+CUT_IC.play+'</button>'+
-          '<button class="iconbtn" data-a="sup" title="Earlier"'+(si?'':' disabled')+'>↑</button>'+
-          '<button class="iconbtn" data-a="sdown" title="Later"'+(si<c.shots.length-1?'':' disabled')+'>↓</button>'+
-          '<button class="iconbtn danger" data-a="sdel" title="Remove this shot">'+OB_IC.del+'</button></span></div>'+
-          '<div class="shot-b"><button type="button" class="btn act'+(picking?' on':'')+'" data-a="spick" title="Click the map: a thing, or a spot">'+
-          (picking?'Click the map…':(S?esc(S.name):'Pick what it shows'))+'</button>'+
-          (sh.kind!=="over"&&sh.kind!=="follow"?'<label title="Where the camera stands, seen from what it shows (compass degrees; empty: from the player\'s side)">from <input type="number" data-a="sfrom" min="0" max="359" step="15" value="'+(sh.from!=null?sh.from:"")+'" placeholder="auto">°</label>':'')+
-          '<label title="Further away or closer">dist <input type="range" data-a="sfar" min="0.5" max="2" step="0.1" value="'+(sh.dist||1)+'"></label>'+
-          '<label title="Higher or lower">height <input type="range" data-a="sup2" min="0.3" max="2.5" step="0.1" value="'+(sh.up||1)+'"></label></div>'+
-          '<input type="text" class="shot-t" data-a="stext" maxlength="160" value="'+esc(sh.text||"")+'" placeholder="Subtitle (optional)"></div>';
+        var S=subjectOf(sh.subject);
+        h+='<button type="button" class="cut-shot" data-a="oshot" data-s="'+si+'" title="Open it in the editor"><span class="n">'+fmtSecs(t)+'</span>'+
+          '<span class="t"><b>'+esc(shotKind(sh.kind)[1])+'</b><i>'+esc(S?S.name:"nothing picked yet")+' · '+(+sh.dur||4)+' s'+
+          (sh.text?' · “'+esc(sh.text.slice(0,40))+'”':'')+'</i></span></button>';
         t+=Math.max(0.5,+sh.dur||4);
       });
-      h+='<div class="sec-tools" style="margin-top:6px"><button type="button" class="sec-tool" data-a="sadd"><span class="t"><b>Add a shot</b><i>then pick what it shows</i></span></button></div>';
+      h+='</div>';
     }
     h+='</div>';
   });
@@ -7399,49 +7560,19 @@ function bindOwnCuts(host){
   host.addEventListener("click",function(e){
     var b=e.target.closest("[data-a]");if(!b||!host.contains(b))return;
     var a=b.getAttribute("data-a"),card=b.closest(".own"),c=card?cutscenes[+card.getAttribute("data-o")]:null;
-    var row=b.closest(".shot"),sh=row&&c?c.shots[+row.getAttribute("data-s")]:null;
-    if(a==="mkintro"){makeIntro();return}
-    if(a==="mkoutro"){makeOutro();return}
-    if(a==="mknew"){addCutscene({name:"Cutscene",where:"event",shots:[]});return}
+    if(a==="mkintro"){makeIntro(true);return}
+    if(a==="mkoutro"){makeOutro(true);return}
+    if(a==="mknew"){addCutscene({name:"Cutscene",where:"event",shots:[]},true);return}
     if(!c)return;
     if(a==="otoggle"){OWNOPEN[c.uid]=!OWNOPEN[c.uid];renderCutscenes();draw();return}
     if(a==="oplay"){e.stopPropagation();playOwn(c,0);return}
+    if(a==="oedit"){openCutEditor(c);return}
+    if(a==="oshot"){openCutEditor(c,c.shots[+b.getAttribute("data-s")]);return}
     if(a==="odel"){e.stopPropagation();if(!canEdit())return;cutscenes=cutscenes.filter(function(x){return x!==c});if(CUTPICK&&CUTPICK.cut===c)CUTPICK=null;touch();renderCutscenes();renderList();draw();return}
-    if(a==="sadd"){if(!canEdit())return;var nsh=newShot("dolly",null,4,"");c.shots.push(nsh);CUTPICK={cut:c,shot:nsh};touch();renderCutscenes();toast("Click the map: a thing, or a spot");return}
-    if(!sh)return;
-    if(a==="splay"){var st=0;for(var i=0;i<c.shots.indexOf(sh);i++)st+=Math.max(0.5,+c.shots[i].dur||4);playOwn(c,st);return}
-    if(a==="spick"){CUTPICK=CUTPICK&&CUTPICK.shot===sh?null:{cut:c,shot:sh};if(CUTPICK){if(tool)selectTool(null,null);toast("Click the map: a thing, or a spot")}renderCutscenes();draw();return}
-    if(!canEdit())return;
-    var k=c.shots.indexOf(sh);
-    if(a==="sup"&&k>0){c.shots.splice(k,1);c.shots.splice(k-1,0,sh)}
-    else if(a==="sdown"&&k<c.shots.length-1){c.shots.splice(k,1);c.shots.splice(k+1,0,sh)}
-    else if(a==="sdel"){c.shots.splice(k,1);if(CUTPICK&&CUTPICK.shot===sh)CUTPICK=null}
-    else return;
-    touch();renderCutscenes();renderList();draw();
-  });
-  host.addEventListener("change",function(e){
-    var b=e.target.closest("[data-a]");if(!b||!host.contains(b)||!canEdit())return;
-    var a=b.getAttribute("data-a"),card=b.closest(".own"),c=card?cutscenes[+card.getAttribute("data-o")]:null;if(!c)return;
-    var row=b.closest(".shot"),sh=row?c.shots[+row.getAttribute("data-s")]:null,v=b.type==="checkbox"?b.checked:b.value;
-    if(a==="oname")c.name=String(v).slice(0,40);
-    else if(a==="owhere"){
-      if((v==="intro"||v==="outro")&&cutscenes.some(function(x){return x!==c&&x.where===v})){toast("There is already an "+v+": change that one, or remove it");renderCutscenes();return}
-      c.where=v;
-    }
-    else if(a==="oevent")c.event=v||undefined;
-    else if(a==="obox")c.letterbox=!!v;
-    else if(a==="oskip")c.skippable=!!v;
-    else if(sh&&a==="skind")sh.kind=v;
-    else if(sh&&a==="sdur")sh.dur=Math.max(0.5,Math.min(60,+v||4));
-    else if(sh&&a==="sfrom")sh.from=v===""?undefined:((+v%360)+360)%360;
-    else if(sh&&a==="sfar")sh.dist=+v;
-    else if(sh&&a==="sup2")sh.up=+v;
-    else if(sh&&a==="stext")sh.text=String(v).slice(0,160);
-    else return;
-    touch();renderCutscenes();renderList();draw();
   });
 }
-// a map click while picking: the thing under it, else the spot
+// a map click while picking: the thing under it, else the spot; from the
+// editor, back to it
 function cutPick(sx,sy,wx,wy){
   var P=CUTPICK;if(!P)return;
   var o=pick(sx,sy),sub=null;
@@ -7451,7 +7582,387 @@ function cutPick(sx,sy,wx,wy){
   if(sub.kind==="player"&&P.shot.kind!=="over"&&P.shot.kind==="dolly")P.shot.kind="over";
   if(o&&(o.type==="vehicle"||(o.own&&DRIVABLE[o.model]&&o.drive))&&P.shot.kind==="dolly")P.shot.kind="follow";
   P.shot.subject=sub;CUTPICK=null;
-  touch();renderCutscenes();renderList();draw();
+  touch();renderList();draw();
+  if(P.back){openCutEditor(P.cut,P.shot,P.t);return}
+  renderCutscenes();
+}
+
+/* ---------------- the cutscene editor ---------------- */
+// A page of its own for a cutscene of yours, laid out as a video editor is:
+// the preview - the 3D view, hosted in the page, playing the cameras the plan
+// keeps - and the selected shot's settings side by side, the timeline under
+// them. Opened from a cutscene's card (and as soon as one is made); Esc or
+// Map goes back. The form controls are the studio's green (.gx).
+var CUTED=null;         // {uid, sel: the selected shot's uid, raf, x0, k: px a second, drag}
+var CE_IC={
+  play:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor" stroke="none"/></svg>',
+  pause:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor" stroke="none"/></svg>',
+  start:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3v10M13 3.2v9.6L5.5 8z"/></svg>',
+  end:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12.5 3v10M3 3.2v9.6L10.5 8z"/></svg>',
+  prev:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3.5v9L7.5 8zM7.5 3.5v9L2 8z"/></svg>',
+  next:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5v9L8.5 8zM8.5 3.5v9L14 8z"/></svg>',
+  back:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>',
+  edit:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13h3l7-7-3-3-7 7zM9 4l3 3"/></svg>',
+  plus:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>',
+  pick:'<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/></svg>'
+};
+// what each kind of shot does, as a drawing
+var KIND_IC={
+  establish:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4c7 0 12 4 15 11"/><path d="m15 13 3 2.5 1-3.6"/><path d="M2 20h20"/><path d="M14 20l3-4 3 4"/></svg>',
+  orbit:'<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="13" rx="9" ry="5"/><path d="m17 7.6 3 1.2-1.7 2.6"/><rect x="10" y="9" width="4" height="6"/></svg>',
+  dolly:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="9" width="7" height="6" rx="1"/><path d="M11 12h7m-3-3 3 3-3 3"/><rect x="19" y="8" width="3" height="8"/></svg>',
+  pan:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="15" width="6" height="5" rx="1"/><path d="M12 15V9M4 6h16M7 3 4 6l3 3M17 3l3 3-3 3"/></svg>',
+  hold:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="10" rx="1.5"/><path d="m16 10 5-3v10l-5-3"/></svg>',
+  rise:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V5m-4 4 4-4 4 4"/><path d="M4 21h16"/><rect x="9" y="1.5" width="6" height="3" rx=".5"/></svg>',
+  follow:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="10" y="9" width="11" height="6" rx="1"/><circle cx="13" cy="16.5" r="1.5"/><circle cx="19" cy="16.5" r="1.5"/><path d="M2 12h5m-2-2 2 2-2 2"/></svg>',
+  over:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2 21c0-4.5 3-7 7-7s7 2.5 7 7"/><path d="M16 10h6m-2-2 2 2-2 2"/></svg>'
+};
+function cutEdCut(){return CUTED?cutscenes.filter(function(c){return c.uid===CUTED.uid})[0]||null:null}
+function cutEdShot(c){
+  c=c||cutEdCut();if(!c||!c.shots.length)return null;
+  return c.shots.filter(function(s){return s.uid===CUTED.sel})[0]||c.shots[0];
+}
+function shotStartOf(c,sh){var t=0;for(var i=0;i<c.shots.length&&c.shots[i]!==sh;i++)t+=Math.max(0.5,+c.shots[i].dur||4);return t}
+function fmtT(t){t=Math.max(0,t||0);var m=Math.floor(t/60),s=t-m*60;return m+":"+(s<10?"0":"")+s.toFixed(1)}
+function openCutEditor(c,shot,t){
+  if(!c)return;
+  var el=$("cuted");
+  if(!el){
+    el=document.createElement("div");el.id="cuted";el.className="cuted gx";el.hidden=true;
+    el.setAttribute("role","dialog");el.setAttribute("aria-label","Cutscene editor");
+    el.innerHTML='<header class="ce-top" id="ce-top"></header>'+
+      '<div class="ce-main"><section class="ce-prev"><div class="ce-stage" id="ce-stage"><p class="ce-wait" id="ce-wait"></p></div>'+
+      '<div class="ce-trans" id="ce-trans"></div></section><aside class="ce-insp" id="ce-insp"></aside></div>'+
+      '<section class="ce-tl" id="ce-tl"></section>';
+    document.body.appendChild(el);
+    bindCutEditor(el);
+  }
+  if(CUTED)stopCutEdLoop();
+  CUTED={uid:c.uid,sel:(shot||c.shots[0]||{}).uid||null,raf:0};
+  el.hidden=false;document.body.classList.add("cuted-on");
+  renderCutEditor();
+  cutEdPreview(t!=null?t:shot?shotStartOf(c,shot)+0.001:0,true);
+  CUTED.raf=requestAnimationFrame(cutEdLoop);
+}
+function closeCutEditor(){
+  if(!CUTED)return;
+  stopCutEdLoop();CUTED=null;
+  if(window.View3D&&View3D.isOpen())View3D.close();
+  var el=$("cuted");if(el)el.hidden=true;
+  document.body.classList.remove("cuted-on");
+  renderCutscenes();renderList();draw();
+}
+function stopCutEdLoop(){if(CUTED&&CUTED.raf){cancelAnimationFrame(CUTED.raf);CUTED.raf=0}}
+// the preview: the 3D view in the page, playing the cameras the plan keeps; an
+// edit plays them again from where it was, paused or playing as it was
+function cutEdPreview(t,paused){
+  var c=cutEdCut();if(!c||!window.View3D)return;
+  var sc=ownAsScene(c),host=$("ce-stage"),wait=$("ce-wait");
+  var st=View3D.isOpen()?View3D.filmState():null;
+  if(!sc.shots.length){
+    if(View3D.isOpen())View3D.close();
+    wait.textContent=c.shots.length?"Pick what its shots show, and the preview plays them here.":"Add a shot below, and the preview plays it here.";
+    wait.hidden=false;return;
+  }
+  if(t==null)t=st?st.t:0;
+  if(paused==null)paused=st?!st.playing:true;
+  var lb=c.letterbox===false?1:0.7;
+  var F={shots:sc.shots.map(function(s){return Object.assign({},s,{lb:lb})}),start:Math.max(0,Math.min(t,sc.seconds)),paused:!!paused,
+    bare:true,keepOnEsc:true,letterbox:lb,subtitles:sc.subtitles,movers:filmMovers(),onEnd:function(){FILMING=FILMACTORS=false;V3D.film=null}};
+  if(st){F.far=FARG[LV]||null;View3D.film(F);return}
+  if(FARG[LV]===undefined&&SRV&&LV<=14){wait.textContent="Reading the ground…";wait.hidden=false;
+    farGround(function(){if(CUTED)cutEdPreview(t,paused)});return}
+  var spot=null;
+  for(var j=0;j<F.shots.length&&!spot;j++)if(terrainZ(F.shots[j].x,F.shots[j].y)!=null)spot=F.shots[j];
+  if(!spot){wait.textContent="Its cameras are off the level's ground.";wait.hidden=false;return}
+  wait.hidden=true;
+  FILMING=true;FILMACTORS=false;V3D.film=null;
+  open3dAt(spot.x,spot.y,40,false,host);
+  if(!View3D.isOpen()){FILMING=false;return}
+  F.far=FARG[LV]||null;
+  View3D.film(F);
+}
+function cutEdLoop(){
+  if(!CUTED)return;
+  var st=window.View3D&&View3D.isOpen()?View3D.filmState():null,c=cutEdCut();
+  if(st&&c){
+    var ph=document.querySelector("#ce-tl .ce-ph");
+    if(ph&&!(CUTED.drag&&CUTED.drag.kind==="scrub"))ph.style.left=(CUTED.x0+st.t*CUTED.k)+"px";
+    var tt=$("ce-time");if(tt)tt.textContent=fmtT(st.t)+" / "+fmtT(st.total);
+    var pb=$("ce-play"),want=st.playing?"pause":"play";
+    if(pb&&pb.dataset.s!==want){pb.dataset.s=want;pb.innerHTML=CE_IC[want];pb.title=st.playing?"Pause (Space)":"Play (Space)"}
+    // the shot under the playhead
+    var at=0,now=-1;
+    for(var i=0;i<c.shots.length;i++){var d=Math.max(0.5,+c.shots[i].dur||4);if(st.t>=at&&st.t<at+d){now=i;break}at+=d}
+    if(now!==CUTED.now){CUTED.now=now;document.querySelectorAll("#ce-tl .ce-clip").forEach(function(e,k){e.classList.toggle("now",k===now)})}
+  }
+  CUTED.raf=requestAnimationFrame(cutEdLoop);
+}
+function cutEdSeek(t){if(window.View3D&&View3D.isOpen()){View3D.filmPlay(false);View3D.filmSeek(t)}}
+// one change: kept, undoable, shown, and the preview plays it again
+function cutEdEdit(fn,keepPreview){
+  var c=cutEdCut();if(!c||!canEdit())return;
+  fn(c);
+  touch();renderList();renderCutEditor();
+  if(!keepPreview)cutEdPreview();
+}
+function renderCutEditor(){
+  var c=cutEdCut();if(!c){closeCutEditor();return}
+  renderCutEdTop(c);renderCutEdInsp(c);renderCutEdTimeline(c);renderCutEdTrans(c);
+}
+function renderCutEdTop(c){
+  var pr=cutProblem(c),n=(c.shots||[]).length;
+  $("ce-top").innerHTML='<button type="button" class="btn ghost ce-back" data-a="back" title="Back to the map (Esc)">'+CE_IC.back+'Map</button>'+
+    '<span class="cut-role '+esc(c.where||"intro")+'">'+esc(c.where==="event"?"event":c.where||"intro")+'</span>'+
+    '<input type="text" class="ce-name" data-a="name" maxlength="40" value="'+esc(c.name||"")+'" placeholder="Name" aria-label="Name">'+
+    '<label class="ce-f">Plays <select data-a="where"><option value="intro"'+(c.where==="intro"?' selected':'')+'>as the mission starts</option>'+
+      '<option value="outro"'+(c.where==="outro"?' selected':'')+'>once the mission is won</option>'+
+      '<option value="event"'+(c.where==="event"?' selected':'')+'>when an event happens</option></select></label>'+
+    (c.where==="event"?'<label class="ce-f">Event <select data-a="event"><option value="">pick one</option>'+events.map(function(v,i){
+      return '<option value="'+esc(v.uid)+'"'+(c.event===v.uid?' selected':'')+'>'+(i+1)+'. '+esc(eventLabel(v))+'</option>'}).join("")+'</select></label>':'')+
+    '<label class="ce-chk"><input type="checkbox" data-a="box"'+(c.letterbox!==false?' checked':'')+'> Letterbox</label>'+
+    (c.where==="intro"?'<label class="ce-chk"><input type="checkbox" data-a="skip"'+(c.skippable!==false?' checked':'')+'> The skip key skips it</label>':'')+
+    '<span class="ce-sum mono">'+fmtSecs(cutLength(c))+' · '+n+' shot'+(n===1?'':'s')+'</span>'+
+    (pr?'<span class="ce-prob" title="'+esc(pr)+'">'+esc(pr)+'</span>':'');
+}
+function renderCutEdTrans(c){
+  $("ce-trans").innerHTML='<button type="button" class="ce-tb" data-a="t0" title="To the start (Home)">'+CE_IC.start+'</button>'+
+    '<button type="button" class="ce-tb" data-a="tprev" title="The shot before (Left arrow)">'+CE_IC.prev+'</button>'+
+    '<button type="button" class="ce-tb ce-big" id="ce-play" data-a="tplay" data-s="play" title="Play (Space)">'+CE_IC.play+'</button>'+
+    '<button type="button" class="ce-tb" data-a="tnext" title="The next shot (Right arrow)">'+CE_IC.next+'</button>'+
+    '<button type="button" class="ce-tb" data-a="tend" title="To the end">'+CE_IC.end+'</button>'+
+    '<span class="ce-time mono" id="ce-time">0:00.0 / '+fmtT(cutLength(c))+'</span>'+
+    '<span class="ce-hint">Space plays and pauses · a click on the picture too</span>';
+}
+// what a shot can show: the player's start, the objectives' places, yours,
+// the level's buildings and vehicles by name
+function subjectChoices(){
+  var out=[],seen={};
+  function add(group,label,sub){var k=group+"|"+label;if(seen[k]||!sub)return;seen[k]=1;out.push({group:group,label:label,sub:sub})}
+  if(((LEVEL&&LEVEL.objects)||[]).some(function(q){return q.type==="player"}))add("The player","The player's start",{kind:"player"});
+  objectives.forEach(function(ob,i){
+    var o=objTarget(ob),w=objWhere(ob),txt=((ob.text||"").trim()||objDefaultText(ob)).slice(0,50);
+    if(o)add("Objectives",(i+1)+". "+txt,thingSubject(o));
+    else if(w)add("Objectives",(i+1)+". "+txt,{kind:"point",x:w.x,y:w.y,r:10,name:"objective "+(i+1)});
+  });
+  placements.forEach(function(p){if(p.x!=null&&p.type!=="navnode"&&p.type!=="alarmctl")add("Yours",displayName(p),thingSubject(p))});
+  ((LEVEL&&LEVEL.objects)||[]).forEach(function(o){
+    if(o.x==null||o.cutscene||isRemoved(o))return;
+    if(o.type==="building"&&(o.name||o.modelName))add("The level's buildings",displayName(o),thingSubject(o));
+    else if(o.type==="vehicle")add("The level's vehicles",displayName(o),thingSubject(o));
+  });
+  return out.slice(0,400);
+}
+function sameSubject(a,b){return !!a&&!!b&&a.kind===b.kind&&(a.kind==="player"||(a.uid&&a.uid===b.uid)||(a.ref&&a.ref===b.ref)||
+  (a.kind==="point"&&Math.abs(a.x-b.x)<0.01&&Math.abs(a.y-b.y)<0.01))}
+function renderCutEdInsp(c){
+  var host=$("ce-insp"),sh=cutEdShot(c);
+  if(!sh){host.innerHTML='<p class="ce-empty">No shots yet. <b>Add a shot</b> on the timeline, then pick what it shows.</p>';return}
+  CUTED.sel=sh.uid;
+  var i=c.shots.indexOf(sh),t0=shotStartOf(c,sh),d=Math.max(0.5,+sh.dur||4),S=subjectOf(sh.subject);
+  var h='<div class="ce-ih"><b>Shot '+(i+1)+'</b> of '+c.shots.length+'<span class="mono">'+fmtT(t0)+' – '+fmtT(t0+d)+'</span></div>';
+  h+='<div class="ce-sec"><div class="lbl">What the camera does</div><div class="ce-kinds">'+SHOT_KINDS.map(function(k){
+    return '<button type="button" class="ce-kind'+(sh.kind===k[0]?' on':'')+'" data-a="kind" data-k="'+k[0]+'" aria-pressed="'+(sh.kind===k[0])+'" title="'+esc(k[2])+'">'+
+      (KIND_IC[k[0]]||"")+'<b>'+esc(k[1])+'</b><i>'+esc(k[2])+'</i></button>'}).join("")+'</div></div>';
+  var ch=subjectChoices(),cur=-1;ch.forEach(function(x,k){if(cur<0&&sameSubject(x.sub,sh.subject))cur=k});
+  var groups={};ch.forEach(function(x,k){(groups[x.group]=groups[x.group]||[]).push('<option value="'+k+'"'+(k===cur?' selected':'')+'>'+esc(x.label)+'</option>')});
+  h+='<div class="ce-sec"><div class="lbl">What it shows</div><div class="ce-subj"><span class="ce-subj-n'+(S?'':' none')+'">'+esc(S?S.name:"Nothing yet")+'</span>'+
+    '<button type="button" class="btn" data-a="pick" title="Go to the map and click a thing or a spot">'+CE_IC.pick+'Pick on the map</button></div>'+
+    '<select data-a="subj" aria-label="Choose what it shows"><option value="">'+(cur<0?(S?"A spot on the map":"Choose…"):"Choose…")+'</option>'+
+    Object.keys(groups).map(function(g){return '<optgroup label="'+esc(g)+'">'+groups[g].join("")+'</optgroup>'}).join("")+'</select></div>';
+  h+='<div class="ce-sec ce-row"><span class="lbl">Seconds</span><div class="ce-step"><button type="button" class="btn" data-a="dur-" aria-label="Shorter">−</button>'+
+    '<input type="number" data-a="dur" min="0.5" max="60" step="0.5" value="'+d+'" aria-label="Seconds"><button type="button" class="btn" data-a="dur+" aria-label="Longer">+</button></div></div>';
+  var placed=sh.kind!=="over"&&sh.kind!=="follow";
+  h+='<div class="ce-sec"><div class="lbl">Where the camera stands</div><div class="ce-where">';
+  if(placed){
+    var auto=sh.from==null,deg=auto?(S?((90-playerSide(S)*180/Math.PI)%360+360)%360:180):sh.from;
+    h+='<div class="ce-dialw"><svg class="ce-dial'+(auto?' auto':'')+'" data-a="dial" viewBox="0 0 120 120" aria-label="The side it looks from">'+
+      '<circle cx="60" cy="60" r="46"/>'+[0,45,90,135,180,225,270,315].map(function(a){var r=a*Math.PI/180;
+        return '<line x1="'+(60+Math.sin(r)*40)+'" y1="'+(60-Math.cos(r)*40)+'" x2="'+(60+Math.sin(r)*46)+'" y2="'+(60-Math.cos(r)*46)+'"/>'}).join("")+
+      '<text x="60" y="9">N</text><text x="114" y="64">E</text><text x="60" y="118">S</text><text x="6" y="64">W</text>'+
+      '<rect x="54" y="54" width="12" height="12" class="subj"/>'+
+      (function(){var r=deg*Math.PI/180,x=60+Math.sin(r)*46,y=60-Math.cos(r)*46;
+        return '<line class="ray" x1="'+x+'" y1="'+y+'" x2="60" y2="60"/><circle class="cam" cx="'+x+'" cy="'+y+'" r="7"/>'})()+
+      '</svg><div class="ce-dialt"><b class="mono">'+(auto?"auto":Math.round(deg)+"°")+'</b><span>'+(auto?"from the player's side":"seen from the "+compassWord(deg))+'</span>'+
+      (auto?'':'<button type="button" class="btn" data-a="auto">Auto</button>')+'</div></div>';
+  }else h+='<p class="hint" style="margin:0 0 6px">'+(sh.kind==="over"?"Behind the player's start, the way he faces.":"Behind the vehicle, riding with it.")+'</p>';
+  function slider(a,lab,v,lo,hi){var p=Math.round((v-lo)/(hi-lo)*100);
+    return '<label class="ce-sl"><span>'+lab+'</span><input type="range" data-a="'+a+'" min="'+lo+'" max="'+hi+'" step="0.1" value="'+v+'" style="--p:'+p+'%"><b class="mono">×'+(+v).toFixed(1)+'</b></label>'}
+  h+=slider("dist","Distance",sh.dist||1,0.5,2)+slider("up","Height",sh.up||1,0.3,2.5)+'</div></div>';
+  h+='<div class="ce-sec"><div class="lbl">Subtitle</div><textarea data-a="text" maxlength="160" rows="2" placeholder="A line shown under the picture while this shot plays (optional)">'+esc(sh.text||"")+'</textarea></div>';
+  h+='<div class="ce-acts"><button type="button" class="btn" data-a="sleft"'+(i?'':' disabled')+'>Earlier</button>'+
+    '<button type="button" class="btn" data-a="sright"'+(i<c.shots.length-1?'':' disabled')+'>Later</button>'+
+    '<button type="button" class="btn" data-a="sdup">Duplicate</button>'+
+    '<button type="button" class="btn danger" data-a="sdel">Delete</button></div>';
+  if(S){
+    var cams=shotCams(sh),T=[S.x,S.y,S.z+Math.min(S.h*0.45,6)],bl=shotBlockers(S);
+    var clear=placed?cams.every(function(k,j){return camClear(k,T,bl)&&(!k.smooth||!cams[j+1]||pathClear(k,cams[j+1],bl))}):true;
+    if(!clear)h+='<p class="note bad" style="margin-top:10px">Something stands in the way from every side tried. Turn the dial, change the distance or height, or show something else.</p>';
+  }
+  host.innerHTML=h;
+}
+function compassWord(d){return ["north","north-east","east","south-east","south","south-west","west","north-west"][Math.round(((d%360)+360)%360/45)%8]}
+function renderCutEdTimeline(c){
+  var host=$("ce-tl"),total=cutLength(c);
+  var W=Math.max(300,host.clientWidth-32),x0=16,k=(W-8)/Math.max(total,8);
+  CUTED.x0=x0;CUTED.k=k;
+  var h='<div class="ce-tlh"><span class="lbl">Timeline</span><button type="button" class="btn" data-a="add">'+CE_IC.plus+'Add a shot</button>'+
+    '<span class="hint">Click a shot to go to it · drag it to move it · drag its right edge to lengthen it · drag the ruler to scrub</span></div>'+
+    '<div class="ce-tlb" id="ce-tlb"><div class="ce-ruler" data-a="scrub">';
+  var step=total>60?10:total>25?5:total>10?2:1;
+  for(var s=0;s<=Math.max(total,8)+0.001;s+=step)h+='<span style="left:'+(x0+s*k)+'px">'+fmtSecs(s)+'</span>';
+  h+='</div><div class="ce-trk" data-a="scrub">';
+  var t=0;
+  c.shots.forEach(function(sh,i){
+    var d=Math.max(0.5,+sh.dur||4),S=subjectOf(sh.subject),kd=shotKind(sh.kind);
+    h+='<div class="ce-clip'+(sh.uid===CUTED.sel?' on':'')+(S?'':' bad')+'" data-i="'+i+'" style="left:'+(x0+t*k)+'px;width:'+Math.max(18,d*k-3)+'px" title="'+esc(kd[1]+" · "+(S?S.name:"nothing picked")+" · "+d+" s")+'">'+
+      '<span class="ce-ck">'+(KIND_IC[sh.kind]||"")+'</span><span class="ce-cn"><b>'+esc(kd[1])+'</b><i>'+esc(S?S.name:"pick what it shows")+'</i></span>'+
+      '<span class="ce-cd mono">'+d+'s</span><span class="ce-edge" data-edge="'+i+'" title="Drag to lengthen or shorten"></span></div>';
+    t+=d;
+  });
+  h+='</div><div class="ce-trk ce-subs" data-a="scrub">';
+  t=0;
+  c.shots.forEach(function(sh){
+    var d=Math.max(0.5,+sh.dur||4);
+    if((sh.text||"").trim())h+='<div class="ce-subt" style="left:'+(x0+t*k)+'px;width:'+Math.max(18,Math.min(d,9)*k-3)+'px" title="'+esc(sh.text)+'">'+esc(sh.text)+'</div>';
+    t+=d;
+  });
+  h+='</div><div class="ce-ph"><span></span></div></div>';
+  host.innerHTML=h;
+  CUTED.now=-2;
+}
+function bindCutEditor(el){
+  el.addEventListener("click",function(e){
+    var b=e.target.closest("[data-a]");if(!b||!el.contains(b)||!CUTED)return;
+    var a=b.getAttribute("data-a"),c=cutEdCut();if(!c)return;
+    var sh=cutEdShot(c),st=window.View3D&&View3D.isOpen()?View3D.filmState():null;
+    function starts(){var out=[],t=0;c.shots.forEach(function(s){out.push(t);t+=Math.max(0.5,+s.dur||4)});return out}
+    if(a==="back"){closeCutEditor();return}
+    if(a==="tplay"){if(st)View3D.filmPlay(!st.playing);else cutEdPreview(0,false);return}
+    if(a==="t0"){cutEdSeek(0);return}
+    if(a==="tend"){cutEdSeek(cutLength(c));return}
+    if(a==="tprev"||a==="tnext"){
+      var ss=starts(),cur=st?st.t:0,to=0;
+      if(a==="tprev"){for(var i=ss.length-1;i>=0;i--)if(ss[i]<cur-0.3){to=ss[i];break}}
+      else{to=cutLength(c);for(var j=0;j<ss.length;j++)if(ss[j]>cur+0.01){to=ss[j];break}}
+      cutEdSeek(to+0.001);return;
+    }
+    if(a==="add"){
+      cutEdEdit(function(c){var n=newShot("dolly",null,4,"");var k=c.shots.indexOf(sh);c.shots.splice(k<0?c.shots.length:k+1,0,n);CUTED.sel=n.uid});
+      return;
+    }
+    if(!sh)return;
+    if(a==="kind"){var kk=b.getAttribute("data-k");cutEdEdit(function(){sh.kind=kk});return}
+    if(a==="pick"){cutEdPickOnMap(c,sh);return}
+    if(a==="dur-"||a==="dur+"){cutEdEdit(function(){sh.dur=Math.max(0.5,Math.min(60,(+sh.dur||4)+(a==="dur+"?0.5:-0.5)))});return}
+    if(a==="auto"){cutEdEdit(function(){delete sh.from});return}
+    if(a==="sleft"||a==="sright"){cutEdEdit(function(c){var k=c.shots.indexOf(sh),to=k+(a==="sright"?1:-1);if(to<0||to>=c.shots.length)return;c.shots.splice(k,1);c.shots.splice(to,0,sh)});return}
+    if(a==="sdup"){cutEdEdit(function(c){var n=JSON.parse(JSON.stringify(sh));n.uid=uid();c.shots.splice(c.shots.indexOf(sh)+1,0,n);CUTED.sel=n.uid});return}
+    if(a==="sdel"){cutEdEdit(function(c){var k=c.shots.indexOf(sh);c.shots.splice(k,1);var nx=c.shots[Math.min(k,c.shots.length-1)];CUTED.sel=nx?nx.uid:null});return}
+  });
+  el.addEventListener("change",function(e){
+    var b=e.target.closest("[data-a]");if(!b||!CUTED)return;
+    var a=b.getAttribute("data-a"),c=cutEdCut();if(!c)return;
+    var sh=cutEdShot(c),v=b.type==="checkbox"?b.checked:b.value;
+    if(a==="name"){cutEdEdit(function(c){c.name=String(v).slice(0,40)},true);return}
+    if(a==="where"){
+      if((v==="intro"||v==="outro")&&cutscenes.some(function(x){return x!==c&&x.where===v})){toast("There is already an "+v+": change that one, or remove it");renderCutEdTop(c);return}
+      cutEdEdit(function(c){c.where=v},true);return;
+    }
+    if(a==="event"){cutEdEdit(function(c){c.event=v||undefined},true);return}
+    if(a==="box"){cutEdEdit(function(c){c.letterbox=!!v});return}
+    if(a==="skip"){cutEdEdit(function(c){c.skippable=!!v},true);return}
+    if(!sh)return;
+    if(a==="subj"){if(v==="")return;var ch=subjectChoices()[+v];if(ch)cutEdEdit(function(){sh.subject=JSON.parse(JSON.stringify(ch.sub))});return}
+    if(a==="dur"){cutEdEdit(function(){sh.dur=Math.max(0.5,Math.min(60,+v||4))});return}
+    if(a==="dist"){cutEdEdit(function(){sh.dist=+v});return}
+    if(a==="up"){cutEdEdit(function(){sh.up=+v});return}
+    if(a==="text"){cutEdEdit(function(){sh.text=String(v).slice(0,160)});return}
+  });
+  el.addEventListener("input",function(e){
+    var b=e.target;if(b.type!=="range")return;
+    var lo=+b.min,hi=+b.max;b.style.setProperty("--p",Math.round((+b.value-lo)/(hi-lo)*100)+"%");
+    var lab=b.parentNode.querySelector("b");if(lab)lab.textContent="×"+(+b.value).toFixed(1);
+  });
+  // the timeline and the dial: drags
+  el.addEventListener("pointerdown",function(e){
+    if(!CUTED||e.button!==0)return;
+    var c=cutEdCut();if(!c)return;
+    var dial=e.target.closest("[data-a=dial]");
+    if(dial){e.preventDefault();CUTED.drag={kind:"dial",el:dial};dialAt(e);return}
+    var body=e.target.closest("#ce-tlb");if(!body)return;
+    var r=body.getBoundingClientRect(),edge=e.target.closest("[data-edge]"),clip=e.target.closest(".ce-clip");
+    if(edge){e.preventDefault();var i=+edge.getAttribute("data-edge");
+      CUTED.drag={kind:"edge",i:i,x:e.clientX,d0:Math.max(0.5,+c.shots[i].dur||4)};return}
+    if(clip){e.preventDefault();CUTED.drag={kind:"clip",i:+clip.getAttribute("data-i"),x:e.clientX,moved:false,el:clip,r:r};return}
+    e.preventDefault();
+    CUTED.drag={kind:"scrub",r:r};scrubTo(e);
+  });
+  function scrubTo(e){
+    var r=CUTED.drag.r,t=Math.max(0,Math.min(cutLength(cutEdCut()),(e.clientX-r.left-CUTED.x0)/CUTED.k));
+    var ph=document.querySelector("#ce-tl .ce-ph");if(ph)ph.style.left=(CUTED.x0+t*CUTED.k)+"px";
+    cutEdSeek(t);
+  }
+  function dialAt(e){
+    var r=CUTED.drag.el.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);
+    var deg=(Math.round(Math.atan2(dx,-dy)*180/Math.PI/15)*15+360)%360;
+    var sh=cutEdShot();if(!sh||sh.from===deg)return;
+    sh.from=deg;CUTED.drag.changed=true;
+    renderCutEdInsp(cutEdCut());CUTED.drag.el=document.querySelector("#ce-insp [data-a=dial]");
+  }
+  window.addEventListener("pointermove",function(e){
+    var D=CUTED&&CUTED.drag;if(!D)return;
+    var c=cutEdCut();if(!c)return;
+    if(D.kind==="scrub")scrubTo(e);
+    else if(D.kind==="dial")dialAt(e);
+    else if(D.kind==="edge"){
+      var d=Math.max(0.5,Math.min(60,Math.round((D.d0+(e.clientX-D.x)/CUTED.k)*4)/4));
+      if(d!==c.shots[D.i].dur){c.shots[D.i].dur=d;D.changed=true;
+        var clip=document.querySelector('#ce-tl .ce-clip[data-i="'+D.i+'"]');
+        if(clip){clip.style.width=Math.max(18,d*CUTED.k-3)+"px";clip.querySelector(".ce-cd").textContent=d+"s"}}
+    }else if(D.kind==="clip"){
+      var dx=e.clientX-D.x;
+      if(!D.moved&&Math.abs(dx)>5){D.moved=true;D.el.classList.add("drag")}
+      if(D.moved)D.el.style.transform="translateX("+dx+"px)";
+    }
+  });
+  window.addEventListener("pointerup",function(e){
+    var D=CUTED&&CUTED.drag;if(!D)return;
+    CUTED.drag=null;
+    var c=cutEdCut();if(!c)return;
+    if(D.kind==="dial"&&D.changed){touch();renderList();cutEdPreview();return}
+    if(D.kind==="edge"&&D.changed){touch();renderList();renderCutEditor();cutEdPreview();return}
+    if(D.kind==="clip"){
+      var sh=c.shots[D.i];
+      if(!D.moved){CUTED.sel=sh.uid;renderCutEdInsp(c);renderCutEdTimeline(c);cutEdSeek(shotStartOf(c,sh)+0.001);return}
+      // where it was let go: before the first clip whose middle is to the right
+      var x=(e.clientX-D.r.left-CUTED.x0)/CUTED.k,t=0,to=c.shots.length;
+      for(var i=0;i<c.shots.length;i++){var d=Math.max(0.5,+c.shots[i].dur||4);if(i!==D.i&&x<t+d/2){to=i;break}t+=d}
+      cutEdEdit(function(c){var from=c.shots.indexOf(sh);c.shots.splice(from,1);if(to>from)to--;c.shots.splice(Math.max(0,Math.min(c.shots.length,to)),0,sh);CUTED.sel=sh.uid});
+    }
+  });
+  document.addEventListener("keydown",function(e){
+    if(!CUTED||$("cuted").hidden)return;
+    var typing=/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)&&e.target.type!=="range"&&e.target.type!=="checkbox";
+    if(e.key==="Escape"){
+      e.preventDefault();e.stopPropagation();
+      if(typing)e.target.blur();else closeCutEditor();
+    }
+  },true);
+  window.addEventListener("resize",function(){if(CUTED){var c=cutEdCut();if(c)renderCutEdTimeline(c)}});
+}
+// what a shot shows, picked on the map: the editor steps aside, a click there
+// sets it (cutPick) and brings the editor back where it was
+function cutEdPickOnMap(c,sh){
+  var st=window.View3D&&View3D.isOpen()?View3D.filmState():null;
+  CUTPICK={cut:c,shot:sh,back:true,t:st?st.t:0};
+  stopCutEdLoop();CUTED=null;
+  if(window.View3D&&View3D.isOpen())View3D.close();
+  $("cuted").hidden=true;document.body.classList.remove("cuted-on");
+  if(tool)selectTool(null,null);
+  var S=subjectOf(sh.subject);if(S)jumpTo(S.x,S.y);
+  toast("Click what this shot shows: a thing, or a spot. Esc goes back to the editor");
+  draw();
 }
 // the cameras of an open cutscene of yours, on the map
 function drawOwnCuts(){
@@ -10424,7 +10935,8 @@ function spec3d(o){
     lift:o.type==="player"?-PLAYER_LIFT:0,
     kind:!canMove(o)||!canEditQuiet()?"fixed":WALL_ITEMS[o.type]?"wall":"floor",
     editable:!!k&&canMove(o)&&canEditQuiet(),own:fresh(o),solid:!!st&&st.pal==="solid",
-    cam:o.type==="camera"?Object.assign({model:CAM_MODELS.camera},camOf(o)):null,on:o.mount||"",gun:gn.gun||null,grip:gn.grip||null};
+    cam:o.type==="camera"?Object.assign({model:CAM_MODELS.camera},camOf(o)):null,on:o.mount||"",gun:gn.gun||null,grip:gn.grip||null,
+    flies:!!o.flight};
 }
 // everything whose footprint comes within the radius: the level's (not what the
 // mission removes) and the mission's own
@@ -10718,14 +11230,14 @@ function keep3dSpot(){
   if(!at||!window.View3D||!View3D.isOpen()){if(window.View3D&&View3D.isOpen())View3D.close();return}
   open3dAt(at.x,at.y,V3D.radius,true);
 }
-function open3dAt(x,y,R,keep){
+function open3dAt(x,y,R,keep,host){
   if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
   if(!window.MeshSprites||!MeshSprites.ready()){toast("The models are still loading. Try again in a moment");return}
   var z=terrainZ(x,y);if(z==null)return;
   if(R)V3D.radius=R;
   var spot={type:"spot",x:x,y:y,z:z};
   V3D.key=null;V3D.spot=spot;V3D.at=null;V3D.ver=planVer;
-  View3D.open({host:document.querySelector(".stage"),
+  View3D.open({host:host||document.querySelector(".stage"),
     target:{key:"spot",name:"Shaped ground",sub:"the ground as the game will get it",type:"spot",model:null,x:x,y:y,z:z,
       rot:[0,0,0],head:2,headOff:0,lift:0,kind:"fixed",editable:false,own:false,cam:null,on:""},
     objects:sceneAround(spot,reach3d(V3D.radius),true),terrain:terrain3d(spot,V3D.radius),splines:splines3d(spot,reach3d(V3D.radius)),
@@ -14622,7 +15134,7 @@ function onKey(e){
   if(!$("sheet").hidden&&k!=="Escape")return;
   if(VROUTE&&(k==="Escape"||k==="Enter")){e.preventDefault();endRoute();return}
   if(FLIGHTPICK&&k==="Escape"){e.preventDefault();FLIGHTPICK=null;renderCutscenes();draw();return}
-  if(CUTPICK&&k==="Escape"){e.preventDefault();CUTPICK=null;renderCutscenes();draw();return}
+  if(CUTPICK&&k==="Escape"){e.preventDefault();var cp=CUTPICK;CUTPICK=null;if(cp.back){openCutEditor(cp.cut,cp.shot,cp.t);return}renderCutscenes();draw();return}
   if(VROUTE&&(k==="Backspace"||k==="Delete")){e.preventDefault();routeStop(null);return}
   if(ctrl&&!e.shiftKey&&(k==="z"||k==="Z")){e.preventDefault();undo();return}
   if(ctrl&&((k==="y"||k==="Y")||(e.shiftKey&&(k==="z"||k==="Z")))){e.preventDefault();redo();return}
@@ -14730,6 +15242,7 @@ function restoreState(json){
     groundEdits=d.ground||[];groundBrush=d.brush||{};GBRUSH_CV=null;groundPaint=d.paint||{};GPAINT_CV=null;applyGround();renderGround();buildGroundBar();
     objectives=d.objectives||[];failOnAlarm=!!d.failOnAlarm;objBase=!!d.objBase;MSET=d.settings||{};events=d.events||[];EVPICK=null;renderObjectives();renderEvents();
     levelScenes=d.levelScenes||{};levelVehicles=d.levelVehicles||{};cutscenes=d.cutscenes||[];CUTPICK=null;renderCutscenes();
+    if(CUTED){renderCutEditor();if(CUTED)cutEdPreview()}
     applyEditsToLevel();
     nodeVer++;planVer++;sel=null;multi=[];patrolMode=false;
     save();renderSide();renderNavSection();draw();

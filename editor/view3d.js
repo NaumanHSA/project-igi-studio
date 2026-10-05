@@ -143,7 +143,8 @@ function css() {
 .v3d-film .ui .ft{min-width:96px;text-align:right}
 .v3d-film .ui .fs{max-width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
 .v3d-film .note{position:absolute;left:10px;top:46px;font-size:11px;color:#c8d2c8;text-shadow:0 1px 2px #000;pointer-events:none}
-.v3d.filming .v3d-help,.v3d.filming .v3d-read,.v3d.filming .v3d-hint,.v3d.filming .v3d-cross{display:none!important}`;
+.v3d.filming .v3d-help,.v3d.filming .v3d-read,.v3d.filming .v3d-hint,.v3d.filming .v3d-cross{display:none!important}
+.v3d-film.bare .ui,.v3d-film.bare .note{display:none}`;
   document.head.appendChild(st);
 }
 
@@ -345,12 +346,24 @@ function texturedModel(model, level) {
       g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(b64(m.pos)), 3));
       g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(b64(m.uv)), 2));
       g.setIndex(new THREE.BufferAttribute(new Uint32Array(b64(m.idx)), 1));
-      m.groups.forEach((gr, i) => g.addGroup(gr[0], gr[1], i));
+      m.groups.forEach((gr, i) => { if (!(gr[4] >= 0)) g.addGroup(gr[0], gr[1], i); });
       g.computeBoundingBox();
       g.computeBoundingSphere();
       g.userData.keep = true;
+      // a part that turns (a helicopter's rotors): the same points, its own
+      // triangles, turned about its pivot while a cutscene plays
+      const spins = (m.spins || []).map((sp, k) => {
+        const sg = new THREE.BufferGeometry();
+        sg.setAttribute("position", g.getAttribute("position"));
+        sg.setAttribute("uv", g.getAttribute("uv"));
+        sg.setIndex(g.getIndex());
+        m.groups.forEach((gr, i) => { if (gr[4] === k) sg.addGroup(gr[0], gr[1], i); });
+        sg.boundingSphere = g.boundingSphere;
+        sg.userData.keep = true;
+        return { geo: sg, pivot: sp.pivot, axis: sp.axis, rate: sp.rate };
+      });
       // the level it was read from: an imported model wears that level's pictures
-      return { geo: g, groups: m.groups, home: m.home != null ? m.home : lv };
+      return { geo: g, groups: m.groups, spins, home: m.home != null ? m.home : lv };
     }).catch(() => null));
   TMODEL.set(key, p);
   return p;
@@ -400,6 +413,14 @@ async function prepare(level, models, onProgress) {
   say("ready", list.length + pics.length, list.length + pics.length);
 }
 
+// one of a model's surfaces: its texture cut out where it has holes (a fence,
+// leaves), blended where it is see-through all over (glass, a rotor's blades)
+function surface(gr, home, tint) {
+  const soft = gr[3] === "soft";
+  return new THREE.MeshLambertMaterial({ color: tint, side: THREE.DoubleSide, flatShading: true,
+    map: gr[2] ? textureOf(gr[2], home) : null, alphaTest: soft ? 0.01 : gr[3] ? 0.5 : 0,
+    transparent: soft, depthWrite: !soft });
+}
 // the model's own look, once it has come: its textures, tinted for what it is
 function dress(mesh, it, isTarget) {
   if (!S.textured || !it.model || !O.level) return;
@@ -408,8 +429,7 @@ function dress(mesh, it, isTarget) {
     if (!t || wanted !== S.fillId || !mesh.parent) return;
     const tint = isTarget ? 0xffe9a0 : it.own ? 0xfff2c8 : 0xffffff;
     const mats = t.groups.map(gr => {
-      const m = new THREE.MeshLambertMaterial({ color: tint, side: THREE.DoubleSide, flatShading: true,
-        map: gr[2] ? textureOf(gr[2], t.home) : null, alphaTest: gr[3] ? 0.5 : 0 });
+      const m = surface(gr, t.home, tint);
       if (isTarget) m.emissive = new THREE.Color(0x2a1c00);
       else m.clippingPlanes = cutFor(it);
       return m;
@@ -418,6 +438,18 @@ function dress(mesh, it, isTarget) {
     mesh.geometry = t.geo;
     mesh.material = mats;
     (Array.isArray(old) ? old : [old]).forEach(m => m.dispose());
+    for (const c of mesh.children.filter(c => c.userData.spin)) mesh.remove(c);
+    for (const sp of t.spins || []) {
+      // hung at its pivot, its points drawn back from there, turned about its axis
+      const pv = new THREE.Group(), sm = new THREE.Mesh(sp.geo, mats);
+      pv.position.set(sp.pivot[0], sp.pivot[1], sp.pivot[2]);
+      sm.position.set(-sp.pivot[0], -sp.pivot[1], -sp.pivot[2]);
+      sm.userData.item = it;
+      pv.add(sm);
+      pv.userData.spin = { axis: new THREE.Vector3(sp.axis[0], sp.axis[1], sp.axis[2]).normalize(), rate: sp.rate, item: it };
+      mesh.add(pv);
+      (S.spinning || (S.spinning = [])).push(pv);
+    }
     if (S.el.querySelector(".v3d-xray").checked && it.type === "building" && !isTarget) setXray(true);
   });
 }
@@ -649,8 +681,7 @@ function splineMeshes(list) {
     if (!s.model || !s.ctrl || !S.textured || !O.level) continue;
     texturedModel(s.model).then(t => {
       if (!t || fillId !== S.fillId || !group.parent) return;
-      const ms = t.groups.map(gr => new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide,
-        flatShading: true, map: gr[2] ? textureOf(gr[2], t.home) : null, alphaTest: gr[3] ? 0.5 : 0 }));
+      const ms = t.groups.map(gr => surface(gr, t.home, 0xffffff));
       group.add(new THREE.Mesh(bentAlong(t.geo, s), ms));
       for (const m of strip) m.visible = false;
     });
@@ -809,6 +840,7 @@ function fill() {
   S.fillId = (S.fillId || 0) + 1;         // textures on their way to an older scene are dropped
   drop(root);
   root.clear();
+  S.spinning = [];
   S.items = [];
   S.byKey = new Map();
   if (O.terrain) root.add(terrainMesh(O.terrain));
@@ -1555,7 +1587,7 @@ function onKey(e) {
     else if (k === "ArrowLeft") filmStep(-1);
     else if (k === "ArrowRight") filmStep(1);
     else if (k === "Home") filmSeek(0);
-    else if (k === "Escape") filmStop();
+    else if (k === "Escape" && !S.film.keepOnEsc) filmStop();
     else used = false;
     if (used) { e.preventDefault(); e.stopPropagation(); }
     return;
@@ -1728,6 +1760,9 @@ function tip(it, e) {
 //                the camera looking up (+z) with its top to the south at zero - so
 //                alpha -pi/2 looks level along gamma's heading, -pi straight down.
 //                target {x, y, z}: the camera keeps turning to look at it.
+//                ride {key, x, y, z, g}: the camera rides with that mover (as the
+//                game's camera linked to a vehicle), set up with it standing at
+//                x, y, z turned g; camera and target go where it goes.
 //                lb: its scene's letterbox; end: the last of its scene (no move on).
 //   F.subtitles  [{at, dur, text}], seconds from the start
 //   F.letterbox  the game's viewport height factor (0.7: a bar above and below)
@@ -1735,6 +1770,10 @@ function tip(it, e) {
 //   F.start      where to begin, seconds
 //   F.far        the ground beyond the close-up's ({x0, y0, cell, w, h, z, hole}),
 //                drawn round it while the cutscene plays
+//   F.movers(t)  what moves at t seconds: [{key, x, y, z, h}] - a patrolling
+//                guard, a vehicle driving its route; h the heading from +x, z
+//                null for on the ground. Each goes back where it stands after.
+// A helicopter's rotors turn while it plays, if it is off the ground.
 //   F.onEnd()    stopped (Esc, Stop, or the view closed)
 // While it plays there is no fog and the camera sees as far as the level goes:
 // the host gives the whole level at once (explore).
@@ -1748,12 +1787,13 @@ function film(F) {
   held.clear();
   const shots = (F.shots || []).filter(x => isFinite(x.x) && isFinite(x.y) && isFinite(x.z));
   if (!shots.length) return false;
+  if (S.film) filmUnmove(S.film);           // played again (the editor's changes): from where they stand
   const at = [];
   let t = 0;
   shots.forEach(x => { at.push(t); t += Math.max(0, +x.dur || 0); });
   S.film = { shots, at, total: t, t: Math.max(0, Math.min(t, +F.start || 0)), playing: F.paused ? false : true, last: 0,
     subs: (F.subtitles || []).slice().sort((p, q) => p.at - q.at), lb: Math.max(0.2, Math.min(1, F.letterbox || 1)),
-    onEnd: F.onEnd || null };
+    onEnd: F.onEnd || null, movers: typeof F.movers === "function" ? F.movers : null, moved: new Set(), pose: {} };
   // everything visible: no fog, the camera's far plane past the level's edge
   S.scene.fog = null;
   S.camera.far = 40000;
@@ -1763,6 +1803,9 @@ function film(F) {
   el.hidden = false;
   el.style.top = S.canvas.offsetTop + "px";
   el.querySelector(".note").textContent = F.note || "";
+  // a host with its own controls (the cutscene editor) hides the film's
+  el.classList.toggle("bare", !!F.bare);
+  S.film.keepOnEsc = !!F.keepOnEsc;
   S.el.classList.add("filming");
   if (!el.dataset.wired) {
     el.dataset.wired = "1";
@@ -1801,6 +1844,7 @@ function turnOf(a, b, g) {
   return { fwd: new THREE.Vector3(0, 0, 1).applyQuaternion(_q), up: new THREE.Vector3(0, -1, 0).applyQuaternion(_q) };
 }
 function filmApply() {
+  filmMove();
   const F = S.film, o = O.origin, i = filmIndex(F.t), s = F.shots[i];
   // the last camera of a scene ends it: the next scene cuts to its own first
   const n = s.smooth && s.dur > 0 && !s.end ? F.shots[i + 1] : null;
@@ -1810,7 +1854,15 @@ function filmApply() {
   const A = (p, q) => p + ((((q - p + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI) * u;
   const pos = new THREE.Vector3(n ? L(s.x, n.x) : s.x, n ? L(s.y, n.y) : s.y, n ? L(s.z, n.z) : s.z).sub(new THREE.Vector3(o[0], o[1], o[2]));
   let fwd, up;
-  const tg = s.target || null;
+  let tg = s.target || null;
+  const rd = s.ride && F.pose[s.ride.key];
+  if (rd) {
+    // where the vehicle is now, turned as it is turned now
+    const r = s.ride, d = (rd.h - Math.PI / 2) - r.g, c = Math.cos(d), sn = Math.sin(d);
+    const ox = pos.x + o[0] - r.x, oy = pos.y + o[1] - r.y;
+    pos.set(rd.x + ox * c - oy * sn - o[0], rd.y + ox * sn + oy * c - o[1], pos.z + rd.z - r.z);
+    if (tg) tg = { x: tg.x + rd.x - r.x, y: tg.y + rd.y - r.y, z: tg.z + rd.z - r.z };
+  }
   if (tg) {
     fwd = new THREE.Vector3(tg.x - o[0], tg.y - o[1], tg.z - o[2]).sub(pos);
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 1, 0);
@@ -1841,6 +1893,43 @@ function filmApply() {
   const fx = "fx " + (s.filter || "");
   if (F.fx !== fx) { F.fx = fx; el.querySelector(".fx").className = fx; }
   F.shot = i;
+}
+// where everything that moves is at the film's time: the guards on their
+// patrols, the vehicles on their routes, the rotors of a helicopter in the air
+function filmMove() {
+  const F = S.film, o = O.origin;
+  if (F.movers) {
+    let list = [];
+    try { list = F.movers(F.t) || []; } catch (e) { list = []; }
+    for (const m of list) {
+      const g = S.byKey.get(m.key), it = g && g.userData.item;
+      if (!it || !isFinite(m.x) || !isFinite(m.y)) continue;
+      const x = m.x - o[0], y = m.y - o[1], gz = m.z == null ? groundAt(x, y) : null;
+      g.position.set(x, y, m.z != null ? m.z - o[2] : gz != null ? gz : it.z - o[2]);
+      const rot = (it.rot || [0, 0, it.gamma || 0]).slice();
+      // the game's heading is from +y (the map's arrow up), the mover's from +x
+      rot[hi(it)] = (it.headOff || 0) + sgn(it) * ((m.h || 0) - Math.PI / 2);
+      orient(g, rot);
+      g.userData.box = null;
+      F.moved.add(m.key);
+      F.pose[m.key] = { x: m.x, y: m.y, z: g.position.z + o[2], h: m.h || 0 };
+    }
+  }
+  if (!S.spinning || !S.spinning.length) return;
+  S.spinning = S.spinning.filter(p => { let q = p; while (q && q !== S.root) q = q.parent; return !!q; });
+  for (const p of S.spinning) {
+    const sp = p.userData.spin, g = S.byKey.get(sp.item.key);
+    if (!g) continue;
+    const gz = groundAt(g.position.x, g.position.y);
+    const up = sp.item.flies || gz == null || g.position.z - gz > 1.5;
+    p.quaternion.setFromAxisAngle(sp.axis, up ? (F.t * sp.rate % 1) * Math.PI * 2 : 0);
+  }
+}
+// everything the film moved back where it stands, its rotors still
+function filmUnmove(F) {
+  for (const k of F.moved) { const g = S.byKey.get(k); if (g) place(g, g.userData.item); }
+  F.moved.clear();
+  for (const p of S.spinning || []) p.quaternion.identity();
 }
 function filmUi() {
   const F = S.film, el = S.el.querySelector(".v3d-film");
@@ -1897,6 +1986,7 @@ function filmStep(d) {
 function filmStop() {
   if (!S || !S.film) return;
   const cb = S.film.onEnd;
+  filmUnmove(S.film);
   S.film = null;
   S.el.querySelector(".v3d-film").hidden = true;
   S.el.classList.remove("filming");

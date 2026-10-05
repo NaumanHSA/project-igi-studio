@@ -36,6 +36,17 @@ section is also that release's notes on GitHub.
   play it all in 3D. An intro plays as the mission starts (skippable), an
   outro once it is won - the mission ends when it does - and any cutscene can
   play on an event.
+- **A cutscene editor that takes the whole window.** The preview beside the
+  shot you are working on and a timeline along the bottom, as in a video
+  editor: pick a shot's kind from cards, what it shows from a list or the map,
+  its side on a compass dial, its distance and height on sliders; drag clips
+  on the timeline to reorder them, drag an edge to lengthen one, drag the
+  ruler to scrub. Every change plays again where you are.
+- **A livelier preview.** In a cutscene of yours the mission is as it starts:
+  guards walk their patrols, your vehicles drive their routes (a Follow shot
+  rides along), and a helicopter's rotors turn. The ground beyond the play
+  area wears the level's own dirt, grass and rock instead of plain green, and
+  there is no fog.
 - **The AI designer makes cutscenes and drives vehicles** too: "make an intro
   and an outro", "add a shot of the radar tower", "an APC that comes out on
   the alarm and circles the yard". A level's vehicle that drives, kept in
@@ -53,6 +64,9 @@ section is also that release's notes on GitHub.
 
 - Vehicles stood facing north on the map and in 3D: their heading was read
   from their speed.
+- The helicopter had no rotor blades in 3D, and glass (its windscreen, the
+  windows of buildings) was missing: see-through textures were cut away
+  instead of drawn see-through.
 
 The level data is read again once when this version first starts (version 9).
 
