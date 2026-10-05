@@ -52,6 +52,8 @@ def summary(m):
             "base": m["base"], "slot": m.get("slot"), "created": m.get("created"), "updated": m.get("updated"),
             "changes": sum((1 if p.get(k) else 0) if k in LAYERS else len(p.get(k) or []) for k in PLAN_KEYS),
             "guards": sum(1 for x in p.get("placements") or [] if x.get("type") == "soldier"),
+            # its own cutscenes: where each plays (intro, outro, event)
+            "scenes": sorted({c.get("where") or "intro" for c in p.get("cutscenes") or [] if isinstance(c, dict)}),
             "cover": (_dir(m["id"]) / "cover.png").exists(),
             # a picture of the mission's own: the library's card and the game's list
             "picture": (_dir(m["id"]) / PICTURE).exists(),

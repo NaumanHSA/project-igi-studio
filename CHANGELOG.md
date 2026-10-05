@@ -36,6 +36,11 @@ section is also that release's notes on GitHub.
   play it all in 3D. An intro plays as the mission starts (skippable), an
   outro once it is won - the mission ends when it does - and any cutscene can
   play on an event.
+- **One mission into the next.** An intro made for you opens on the
+  mission's number and name, an outro ends on the mission the game goes on
+  to, and the library shows which of your missions have an intro and an
+  outro. Won, a mission plays its outro, and the game goes on to the next one
+  in the order the library lists them, which plays its intro.
 - **The levels' flights in your missions.** Any of the game's recorded
   flights - a helicopter landing, a plane taking off, an attack helicopter's
   round - placed where you click, turned as you like, starting when you say.

@@ -7234,8 +7234,10 @@ function makeIntro(){
   if(!pts.length){toast("Place the player's start or an objective first");return}
   var cx=pts.reduce(function(a,p){return a+p.x},0)/pts.length,cy=pts.reduce(function(a,p){return a+p.y},0)/pts.length;
   var spread=pts.reduce(function(a,p){return Math.max(a,Math.hypot(p.x-cx,p.y-cy))},0);
+  // it opens on the mission's name, as a chapter does: "Mission 16: Break The Cage. ..."
+  var title=(M&&M.slot?"Mission "+M.slot+": ":"")+(MISSION||"").trim(),first=(M&&M.description||"").split(/(?<=[.!?])\s/)[0];
   var shots=[newShot("establish",{kind:"point",x:+cx.toFixed(2),y:+cy.toFixed(2),r:Math.max(30,Math.min(150,spread)),name:"the area"},7,
-    (M&&M.description||"").split(/(?<=[.!?])\s/)[0].slice(0,160))];
+    ((title?title.replace(/[.!?]?$/,". "):"")+(first||"")).trim().slice(0,160))];
   places.forEach(function(p){
     var o=p.o,k=!o||p.ob.kind==="reach"?"pan":o.type==="soldier"?"orbit":o.type==="building"||o.type==="vehicle"||o.type==="terminal"?"dolly":"dolly";
     shots.push(newShot(k,o?thingSubject(o):{kind:"point",x:p.w.x,y:p.w.y,r:10,name:"the marked area"},4.5,((p.ob.text||"").trim()||objDefaultText(p.ob)).slice(0,160)));
@@ -7250,7 +7252,28 @@ function makeOutro(){
   var pl=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="player"})[0];
   var sub=last?(last.o?thingSubject(last.o):{kind:"point",x:last.w.x,y:last.w.y,r:10,name:"the last objective"}):pl?{kind:"player"}:null;
   if(!sub){toast("Give the mission an objective first");return}
-  addCutscene({name:"Outro",where:"outro",shots:[newShot("orbit",sub,5,"Mission complete."),newShot("rise",sub,7,"")]});
+  var shots=[newShot("orbit",sub,5,"Mission complete."),newShot("rise",sub,7,"")];
+  // and it ends on the mission the game goes on to, once it knows
+  withLibrary(function(){
+    var nx=nextMissionName();
+    if(nx)shots[1].text=("Next: "+nx+".").slice(0,160);
+    addCutscene({name:"Outro",where:"outro",shots:shots});
+  });
+}
+function withLibrary(then){
+  if(LIB||!Store||Store.local||!Store.library){then();return}
+  Store.library().then(function(l){LIB=l;then()}).catch(function(){then()});
+}
+// the mission the game goes on to once this one is won: its own "next"
+// (studio/build/slots.py keeps the chain), named as the game lists it
+function nextMissionName(){
+  if(!LIB||!M||!M.slot)return null;
+  var sl=LIB.slots||[],me=sl.filter(function(s){return s.level===M.slot})[0];
+  if(!me||!me.next)return null;
+  var nx=sl.filter(function(s){return s.level===me.next})[0];
+  if(nx)return nx.name||"mission "+nx.level;
+  var b=(LIB.builtins||[]).filter(function(x){return x.level===me.next})[0];
+  return b?b.name:null;
 }
 function addCutscene(c){
   if(!canEdit())return;
@@ -12901,6 +12924,11 @@ function showLibrary(){
 // The game's own list past its fourteen: what it holds, in the order it plays
 // them, whoever made them. The studio's own can be moved; one this studio does
 // not hold can be added (when the game carries the whole mission) or taken out.
+// "· intro, outro": the cutscenes of its own a mission opens and closes on
+function scenesText(m){
+  var w=(m.scenes||[]).filter(function(x){return x==="intro"||x==="outro"});
+  return w.length?' · '+w.join(", "):'';
+}
 function gameShelf(lib){
   var sl=lib.slots||[],g=lib.game||{},h="";
   var ours=sl.filter(function(s){return s.studio}),byId={};
@@ -12917,7 +12945,7 @@ function gameShelf(lib){
     var m=s.managed?byId[s.missionId]:null,i=ours.indexOf(s),b=builtin(s.base);
     var on=b?b.name:"level "+s.base,meta,acts="";
     if(m){
-      meta=esc(baseLabel(m.base))+' · <span class="'+(m.installed&&m.upToDate?'ok':'')+'">'+
+      meta=esc(baseLabel(m.base))+scenesText(m)+' · <span class="'+(m.installed&&m.upToDate?'ok':'')+'">'+
         (m.installed&&m.installed.test?"a test build":m.installed&&m.upToDate?"up to date":"changes to apply")+'</span>';
       acts='<button class="btn" data-open="'+esc(m.id)+'">Open</button>';
     }else if(s.recoverable){
@@ -12995,7 +13023,7 @@ function renderLibrary(){
         (m.slot?'<span class="mc-slot">mission '+m.slot+'</span>':'')+'</span>'+
         '<span class="mc-txt"><b>'+esc(m.name)+(cur?' <em>· open</em>':'')+'</b>'+
         '<span>'+esc(baseLabel(m.base))+'</span>'+
-        '<span class="mc-meta">'+m.guards+' guard'+(m.guards===1?'':'s')+' · '+m.changes+' change'+(m.changes===1?'':'s')+' · '+esc(ago(m.updated))+'</span>'+
+        '<span class="mc-meta">'+m.guards+' guard'+(m.guards===1?'':'s')+' · '+m.changes+' change'+(m.changes===1?'':'s')+scenesText(m)+' · '+esc(ago(m.updated))+'</span>'+
         (st?'<span class="mc-st'+(m.installed&&m.upToDate?' ok':'')+'">'+esc(st)+'</span>':'')+
         '</span></button>'+
         '<button class="btn ghost mc-more" data-more="'+esc(m.id)+'" aria-label="More actions for '+esc(m.name)+'">⋯</button></div>';

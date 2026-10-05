@@ -1499,6 +1499,26 @@ which the levels never use - **to be confirmed in the game**). A *Follow*
 camera's link and target are the vehicle's task id. The plan keeps each
 shot's cameras as the editor worked them out (`cams`).
 
+### From one mission to the next
+
+The game itself goes on from a won mission to the one its definition names
+as next (`DefineMission`'s fifth argument; the main menu starts one with
+`Game_SetMission(id), MenuManager_LeaveMenus(-1, MENUMANAGER_STARTGAME)`).
+The studio keeps that chain for its missions (`studio/build/slots.py`,
+*relink*): the campaign's last leads to the first of yours, each of yours to
+the next, in the order the library's **In the game** list shows them, which
+↑ ↓ change. So a mission with an outro plays it once won, ends when it does,
+and the game moves on to the next one, whose intro plays as it starts. No
+level script starts another mission itself - IGI.exe gives a level no such
+function, only the menu's - so what the game shows in between is its own.
+
+To tie them together, **Make an intro** opens on the mission's place in the
+game and its name ("Mission 16: Break The Cage.") before its description, and
+**Make an outro** ends on the mission the game goes on to ("Next: ...", from
+the library's chain, once the mission is in the game). The library shows
+which missions have an intro and an outro of their own (`scenes` in each
+mission's summary).
+
 ### Vehicles of your own that drive
 
 The APC, the T80 tank, the two trucks and the limousine (Inventory, *Vehicles
