@@ -15,6 +15,12 @@ section is also that release's notes on GitHub.
   level - by the game's AI along a route, on rails, or on a recorded drive -
   and when they are there; their routes and the railway are drawn on the map,
   and a selected vehicle says how it moves.
+- **Keep or leave out the level's intro, outro and moving vehicles** in a copy
+  of a mission. A left-out intro is skipped at once; a kept outro now plays
+  once the mission is won, and the mission ends when it does (it used to be
+  cut short, or never to play, when the mission had objectives of its own).
+  A vehicle left out takes its recorded drive with it, and no cutscene camera
+  is left following something that is gone.
 
 ### Fixed
 

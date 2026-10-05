@@ -1439,7 +1439,37 @@ physics (throttle, steering, a helicopter's lift), so only the game knows the
 way it goes; a camera riding with one stays where the vehicle starts. The
 field of view is the game's factor times 60°.
 
-An empty map keeps none of them.
+**In a copy of a mission** you choose what stays:
+
+- **Plays / Left out** on the intro and the outro. Left out, the intro is
+  skipped at once and the mission starts straight away; left out, the outro
+  never plays and the mission ends on its *Mission complete* message. Kept,
+  the outro plays once the mission is won and the mission ends when it does.
+- **✕ on a vehicle** leaves it out (**↶** puts it back). Its recorded drive
+  goes with it, and a cutscene camera that rode with it or looked at it stays
+  where it is set instead. A vehicle on the map is taken out like anything
+  else of the level's (Delete works too); a train, which is not on the map, is
+  left out from here.
+
+Both show in the change log under *Removed*, with undo. A built-in mission is
+only looked at, and an empty map keeps none of them.
+
+How the build does it (`studio/build/plan.py`, *the level's own cutscenes*):
+
+- **An intro left out** is skipped the way the game skips it: the variable its
+  skip key raises starts at 1. Every level was checked: whatever waits for the
+  intro waits for that variable or for the intro to stop, so the mission goes
+  on exactly as when a player presses the key at once.
+- **The outro kept** waits for the mission's own *Mission complete* message
+  (`StatusMessage_N.nTicksSinceFinishedDisplay > 1 * GAME_FREQUENCY &&
+  !CutScene_<last>.isFinished`), and `LevelFlow`'s *Complete* becomes its last
+  scene finishing, as in the levels. A copy that keeps exactly the level's own
+  objectives keeps the level's own ending as it was. **Left out**, its
+  condition is `0`; if the mission ended on it, it ends on what started it.
+- **Anything taken out** (a vehicle, a guard): an `AnimTask` driving it goes
+  too, and an `EditCamera` riding with it or looking at it gets `-1` - the game
+  is not left a task id that names nothing. `plan.levelScenes` and
+  `plan.levelVehicles` hold the choices (`{"<id>": "off"}`).
 
 How it is read (`studio/extract/motion.py`, into each `levelN.json` as
 `motion`; level data version 9):

@@ -955,6 +955,13 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .cut-shot i,.cut-veh i{font-style:normal;color:var(--muted);font-size:11.5px}
 .cut-shot.sub i{color:var(--ink)}
 .cut-when code{font-size:11px;word-break:break-word}
+.cut-keep{display:flex;gap:2px;margin:2px 10px 0}
+.cut-keep button{flex:1;padding:3px 8px;border:1px solid var(--line);background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer}
+.cut-keep button:first-child{border-radius:4px 0 0 4px}.cut-keep button:last-child{border-radius:0 4px 4px 0}
+.cut-keep button.on{background:var(--sunken);color:var(--ink);border-color:var(--accent)}
+.cut-vrow{display:flex;align-items:flex-start;gap:2px}
+.cut-vrow .iconbtn{margin-top:3px;flex:none}
+.cut-vrow.gone .cut-veh b{color:var(--muted);text-decoration:line-through}
 .ob{border:1px solid var(--line);border-radius:6px;padding:0 0 7px;margin-bottom:7px;background:var(--sunken)}
 .ob.bad{border-color:color-mix(in srgb,var(--danger) 60%,var(--line))}
 .ob.picking{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
@@ -5808,12 +5815,14 @@ function appliedIndex(){
   (a.nodeEdits||[]).forEach(function(e){ix.nodeEdits[editKey(e.graph,e.id)]=JSON.stringify(e)});
   (a.objectives||[]).forEach(function(o){ix.objectives[o.uid]=JSON.stringify(o)});
   (a.ground||[]).forEach(function(g){ix.ground[g.uid]=JSON.stringify(g);ix.groundObj[g.uid]=g});
+  ix.levelScenes=a.levelScenes||{};ix.levelVehicles=a.levelVehicles||{};
   return APPLIED_IX=ix;
 }
 function appliedState(){
   var ix=appliedIndex();
   if(APPLIED_ST.ver===planVer&&APPLIED_ST.ix===ix)return APPLIED_ST;
-  var st={ver:planVer,ix:ix,placements:{},edits:{},removeRefs:{},nodes:{},nodeEdits:{},objectives:{},ground:{},brush:false,sculpt:false,paint:false,settings:false,events:{},n:0};
+  var st={ver:planVer,ix:ix,placements:{},edits:{},removeRefs:{},nodes:{},nodeEdits:{},objectives:{},ground:{},brush:false,sculpt:false,paint:false,settings:false,events:{},
+    levelScenes:{},levelVehicles:{},n:0};
   if(ix){
     var cur=planOf();
     function mark(list,key,into,idx){list.forEach(function(q){var k=key(q);if(k!=null&&idx[k]===JSON.stringify(q)){into[k]=1;st.n++}})}
@@ -5829,6 +5838,8 @@ function appliedState(){
     if(cur.paint.length&&JSON.stringify(cur.paint)===ix.paint){st.paint=true;st.n++}
     if(Object.keys(cur.settings).length&&JSON.stringify(cur.settings)===ix.settings){st.settings=true;st.n++}
     mark(cur.events,function(v){return v.uid},st.events,ix.events);
+    ["levelScenes","levelVehicles"].forEach(function(k){
+      Object.keys(cur[k]).forEach(function(id){if(ix[k][id]===cur[k][id]){st[k][id]=1;st.n++}})});
   }
   return APPLIED_ST=st;
 }
@@ -5924,6 +5935,22 @@ function renderList(){
       go:function(){GSEL=null;GMODE.mode="brush";openGround();jumpTo((bbx[0]+bbx[1])/2,(bbx[2]+bbx[3])/2)},
       undo:canEditQuiet()?clearBrush:null,undoTip:"Clear all brush strokes",undoIcon:IC.trash});
   }
+  Object.keys(levelScenes).forEach(function(id){
+    if(levelScenes[id]!=="off"||AS.levelScenes[id])return;
+    var c=cutOf(+id);if(!c)return;
+    rows.removed.push({thumb:function(){return iconSwatch("dot",css("--danger"),18)},
+      name:"The level's "+roleName(c),meta:"left out of this mission",
+      go:function(){showPanel("cut")},
+      undo:canEditQuiet()?function(){setLevelScene(c,true)}:null,undoTip:"Put it back"});
+  });
+  Object.keys(levelVehicles).forEach(function(id){
+    if(levelVehicles[id]!=="off"||AS.levelVehicles[id])return;
+    var v=levelMotion().vehicles.filter(function(q){return q.id===+id})[0];if(!v)return;
+    rows.removed.push({thumb:function(){return iconSwatch("dot",css("--danger"),18)},
+      name:v.name||KIND_NAME[v.kind]||"Vehicle",meta:"left out of this mission",
+      go:function(){showPanel("cut");var pts=vehiclePath(v);if(pts&&pts.length)jumpTo(pts[0][0],pts[0][1])},
+      undo:canEditQuiet()?function(){setLevelVehicle(v,true)}:null,undoTip:"Put it back"});
+  });
   objectives.forEach(function(ob,i){
     if(AS.objectives[ob.uid])return;
     var pr=objProblem(ob),k=objKind(ob.kind);
@@ -6607,6 +6634,10 @@ function describe(o){
 // drive (control inputs, so only the game knows the way it goes). An empty map
 // keeps none of them.
 var FILMING=false;          // a cutscene plays in the 3D view: its actors are shown there
+// what a copy of a mission keeps of the level's own: {"<container id>": "off"}
+// leaves a cutscene out, {"<task id>": "off"} a moving vehicle that is no object
+// on the map (a train; one that is, is taken out like anything else, removeRefs)
+var levelScenes={},levelVehicles={};
 var CUTOPEN={};             // the cutscenes whose shots are unfolded in the panel (and drawn on the map)
 var KIND_NAME={car:"Car",heli:"Helicopter",plane:"Plane",train:"Train"};
 function levelMotion(){
@@ -6729,7 +6760,12 @@ function renderCutscenes(){
       '<button class="iconbtn" data-a="play" title="Play it in the 3D view" aria-label="Play">'+CUT_IC.play+'</button>'+
       '<span class="ev-chev" aria-hidden="true">'+EV_IC.open+'</span></span></div>'+
       '<p class="ob-txt">'+fmtSecs(c.seconds)+' · '+c.scenes.length+' scene'+(c.scenes.length>1?'s':'')+' · '+shots+' shot'+(shots===1?'':'s')+
-      (c.subtitles&&c.subtitles.length?' · '+c.subtitles.length+' line'+(c.subtitles.length>1?'s':'')+' of subtitles':'')+'. '+when+'.</p>';
+      (c.subtitles&&c.subtitles.length?' · '+c.subtitles.length+' line'+(c.subtitles.length>1?'s':'')+' of subtitles':'')+'. '+
+      (sceneKept(c)?when:c.role==="intro"?"Left out: the mission starts at once, as when the intro is skipped":
+        c.role==="outro"?"Left out: the mission ends on its Mission complete message":"Left out")+'.</p>'+
+      (canKeepLevel()&&(c.role==="intro"||c.role==="outro")?'<div class="cut-keep" role="group" aria-label="In this mission">'+
+        '<button type="button" data-a="keep" class="'+(sceneKept(c)?'on':'')+'" aria-pressed="'+sceneKept(c)+'">Plays</button>'+
+        '<button type="button" data-a="leave" class="'+(sceneKept(c)?'':'on')+'" aria-pressed="'+!sceneKept(c)+'">Left out</button></div>':'');
     if(open){
       var shotList=cutShots(c),at=shotStarts(shotList),k=0;
       c.scenes.forEach(function(sc){
@@ -6762,13 +6798,45 @@ function renderCutscenes(){
   h+='<div class="lbl" style="margin:14px 0 6px">Vehicles that move ('+mv.length+')</div>';
   if(!mv.length)h+='<p class="hint">None in this level.</p>';
   mv.forEach(function(v){
-    var i=M.vehicles.indexOf(v);
-    h+='<button type="button" class="cut-veh" data-a="veh" data-v="'+i+'"><span class="t"><b>'+esc(v.name||KIND_NAME[v.kind]||"Vehicle")+'</b>'+
-      '<i>'+esc(vehicleMoves(v))+(v.parked?'':' · '+esc(thereWhen(v)))+'</i></span></button>';
+    var i=M.vehicles.indexOf(v),kept=vehicleKept(v);
+    h+='<div class="cut-vrow'+(kept?'':' gone')+'">'+(canKeepLevel()?'<button type="button" class="iconbtn" data-a="'+(kept?'vout':'vin')+'" data-v="'+i+'" title="'+
+      (kept?'Leave it out of this mission':'Put it back')+'" aria-label="'+(kept?'Leave out':'Put back')+'">'+(kept?OB_IC.del:IC.undo)+'</button>':'');
+    h+='<button type="button" class="cut-veh" data-a="veh" data-v="'+i+'"><span class="t"><b>'+esc(v.name||KIND_NAME[v.kind]||"Vehicle")+(kept?'':' · left out')+'</b>'+
+      '<i>'+esc(vehicleMoves(v))+(v.parked?'':' · '+esc(thereWhen(v)))+'</i></span></button></div>';
   });
   h+='<p class="hint" style="margin:12px 0 0">With this panel open, the map shows the AI vehicles\' routes (amber) and the trains\' tracks (blue), and the cameras of an unfolded cutscene.</p>';
   host.innerHTML=h;
   host.scrollTop=top;
+}
+// a copy of a mission decides what it keeps of the level's own; a built-in
+// mission is only looked at, an empty map has none of it
+function canKeepLevel(){return MODE!=="empty"&&canEditQuiet()}
+function sceneKept(c){return levelScenes[String(c.id)]!=="off"}
+function setLevelScene(c,keep){
+  if(!canEdit())return;
+  if(keep)delete levelScenes[String(c.id)];else levelScenes[String(c.id)]="off";
+  touch();renderCutscenes();renderList();draw();
+}
+function vehicleObject(v){
+  return ((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="vehicle"&&q.id===v.id&&q.ref&&
+    ({Car:"car",Heli:"heli",Plane:"plane"})[q.qtype]===v.kind})[0]||null;
+}
+function vehicleKept(v){
+  var o=vehicleObject(v);
+  return o?removeRefs.indexOf(o.ref)<0:levelVehicles[String(v.id)]!=="off";
+}
+// on the map, one is taken out like anything else of the level's; a train,
+// which is no object on the map, by its task id
+function setLevelVehicle(v,keep){
+  if(!canEdit())return;
+  var o=vehicleObject(v);
+  if(o){
+    if(keep)removeRefs=removeRefs.filter(function(r){return r!==o.ref});
+    else if(removeRefs.indexOf(o.ref)<0)removeRefs.push(o.ref);
+    if(!keep&&sel===o)sel=null;
+  }else if(keep)delete levelVehicles[String(v.id)];
+  else levelVehicles[String(v.id)]="off";
+  touch();renderSide();renderCutscenes();renderList();draw();
 }
 function thingName(id){
   var vs=levelMotion().vehicles,v=vs.filter(function(q){return q.id===id})[0];
@@ -6788,6 +6856,8 @@ function bindCutscenes(){
     var M=levelMotion(),card=b.closest(".cut"),c=card?M.cutscenes[+card.getAttribute("data-c")]:null,a=b.getAttribute("data-a");
     if(a==="toggle"&&c){var k=String(c.id);CUTOPEN[k]=!CUTOPEN[k];renderCutscenes();draw();return}
     if(a==="play"&&c){e.stopPropagation();playCutscene(c,0);return}
+    if((a==="keep"||a==="leave")&&c){setLevelScene(c,a==="keep");return}
+    if(a==="vout"||a==="vin"){var vv=M.vehicles[+b.getAttribute("data-v")];if(vv)setLevelVehicle(vv,a==="vin");return}
     if(a==="shot"&&c){playCutscene(c,+b.getAttribute("data-t"));return}
     if(a==="veh"){
       var v=M.vehicles[+b.getAttribute("data-v")];if(!v)return;
@@ -6809,7 +6879,7 @@ function drawMotion(){
   if(!all&&!one)return;
   ctx.save();ctx.lineJoin="round";ctx.lineCap="round";
   M.vehicles.forEach(function(v){
-    if(v!==one&&(!all||(v.cutscene!=null&&!layers.cutscene)))return;
+    if(v!==one&&(!all||(v.cutscene!=null&&!layers.cutscene)||!vehicleKept(v)))return;
     var pts=vehiclePath(v);if(!pts||pts.length<2)return;
     var P=pts.map(function(q){return w2s(q[0],q[1])});
     ctx.strokeStyle=v.rail?"rgba(120,200,255,.85)":"rgba(255,190,80,.9)";
@@ -12002,7 +12072,8 @@ function planOf(){
     nodes:navNodes.map(function(n){return {uid:n.uid,graph:n.graph,x:n.x,y:n.y,z:n.z}}),
     nodeEdits:Object.keys(nodeEdits).map(function(k){return nodeEdits[k]}),
     textures:MTEX.map(function(x){return {name:x.name,png:x.png.replace(/^data:[^,]*,/,""),format:x.format||undefined}}),
-    edits:Object.keys(edits).map(function(k){return edits[k]}),removeRefs:removeRefs.slice()};
+    edits:Object.keys(edits).map(function(k){return edits[k]}),removeRefs:removeRefs.slice(),
+    levelScenes:Object.assign({},levelScenes),levelVehicles:Object.assign({},levelVehicles)};
 }
 function payload(){
   return {format:"igi-mission-studio",version:2,name:MISSION,description:M?M.description||"":"",
@@ -12862,6 +12933,7 @@ function openMission(id){
       return {name:x.name,format:x.format||null,png:/^data:/.test(x.png)?x.png:"data:image/png;base64,"+x.png}});
     objectives=(p.objectives||[]).map(function(o){o=JSON.parse(JSON.stringify(o));if(!o.uid)o.uid=uid();return o});
     failOnAlarm=!!p.failOnAlarm;OBJPICK=null;objBase=!!p.objBase;MSET=JSON.parse(JSON.stringify(p.settings||{}));
+    levelScenes=Object.assign({},p.levelScenes||{});levelVehicles=Object.assign({},p.levelVehicles||{});
     events=(p.events||[]).map(function(v){v=JSON.parse(JSON.stringify(v));if(!v.uid)v.uid=uid();v.do=v.do||[];v.when=v.when||{kind:"area"};return v});EVPICK=null;EVOPEN=null;
     nodeVer++;planVer++;sel=null;tool=null;patrolMode=false;coverAt=0;
     rememberLast(id);
@@ -12904,7 +12976,7 @@ function viewBuiltin(level){
   var b=builtin(level);
   M=null;READONLY=true;MODE="copy";MISSION=b?b.name:"Level "+level;
   placements=[];removals=[];navNodes=[];nodeEdits={};edits={};removeRefs=[];nodeVer++;planVer++;
-  objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
+  objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];levelScenes={};levelVehicles={};groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
   sel=null;tool=null;patrolMode=false;
   rememberLast(null);
   $("start").hidden=true;
@@ -13939,6 +14011,7 @@ var undoStack=[],redoStack=[],lastState=null,lastChangeAt=0,restoring=false;
 function planState(){
   return JSON.stringify({placements:placements,navNodes:navNodes,nodeEdits:nodeEdits,textures:MTEX,
     edits:edits,removeRefs:removeRefs,removals:removals,objectives:objectives,failOnAlarm:failOnAlarm,settings:MSET,events:events,
+    levelScenes:levelScenes,levelVehicles:levelVehicles,
     ground:groundEdits.map(function(a){var c=Object.assign({},a);delete c._seed;return c}),brush:groundBrush,paint:groundPaint});
 }
 function resetHistory(){undoStack=[];redoStack=[];lastState=planState();lastChangeAt=0}
@@ -13963,6 +14036,7 @@ function restoreState(json){
     edits=d.edits||{};removeRefs=d.removeRefs||[];removals=d.removals||[];MTEX=d.textures||[];
     groundEdits=d.ground||[];groundBrush=d.brush||{};GBRUSH_CV=null;groundPaint=d.paint||{};GPAINT_CV=null;applyGround();renderGround();buildGroundBar();
     objectives=d.objectives||[];failOnAlarm=!!d.failOnAlarm;objBase=!!d.objBase;MSET=d.settings||{};events=d.events||[];EVPICK=null;renderObjectives();renderEvents();
+    levelScenes=d.levelScenes||{};levelVehicles=d.levelVehicles||{};renderCutscenes();
     applyEditsToLevel();
     nodeVer++;planVer++;sel=null;multi=[];patrolMode=false;
     save();renderSide();renderNavSection();draw();

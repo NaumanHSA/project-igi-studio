@@ -245,6 +245,11 @@ def save(mid, plan=None, name=None, description=None, cover_png=None, applied=No
         m["plan"]["ccwLying"] = bool(plan.get("ccwLying"))
         # a time limit, rain or snow, haze (apply_plan.py _settings), its music (music.py)
         m["plan"]["settings"] = plan.get("settings") if isinstance(plan.get("settings"), dict) else {}
+        # what a copy leaves out of the level's own: cutscenes by their container
+        # id, moving vehicles that are no object on the map (trains) by task id
+        for k in ("levelScenes", "levelVehicles"):
+            v = plan.get(k)
+            m["plan"][k] = {str(i): "off" for i, how in v.items() if how == "off"} if isinstance(v, dict) else {}
         _picture_print(m)
     # the editor took over heights the game already has (its height sync): the
     # record of what is in the game takes them too; when that is the whole plan,

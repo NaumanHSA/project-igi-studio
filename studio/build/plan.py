@@ -3526,6 +3526,25 @@ def patrol_commands(route, terminal):
 
 
 GONE_CAMS = []
+# the level's cutscenes and what moves in it (studio/extract/motion.py), read
+# from the stock level: ids are the same in this build. An empty map has none.
+from studio.extract import motion as MOTION_X
+MOTION = {"vehicles": [], "cutscenes": [], "complete": ""}
+if not EMPTY:
+    try:
+        MOTION = MOTION_X.read(src)
+    except Exception as e:                                  # noqa: BLE001
+        warnings.append("could not read the level's cutscenes (%s) - they stay as the level has them" % e)
+# a moving vehicle that is no object on the map (a train) is left out by id
+for _vid, _how in (plan.get("levelVehicles") or {}).items():
+    if str(_how).lower() != "off" or not str(_vid).lstrip("-").isdigit() or int(_vid) < 0:
+        continue
+    _mv = [v for v in MOTION["vehicles"] if v["id"] == int(_vid)]
+    out_src, _ok = strip_task(out_src, int(_vid))
+    if _ok:
+        GONE_CAMS.append(({"car": "Car", "heli": "Heli", "plane": "Plane", "train": "Train"}.get(_mv[0]["kind"], "Train")
+                          if _mv else "Train", int(_vid)))
+        report.append("the level's %s %d left out" % (_mv[0]["kind"] if _mv else "vehicle", int(_vid)))
 for r in plan.get("removeRefs", []) or []:
     m = find_ref(out_src, r)
     if not m:
@@ -3540,6 +3559,38 @@ for r in plan.get("removeRefs", []) or []:
 # literal \n, as in "||\nSCamera_1303". "FALSE" is not a word the engine knows.
 GONE_OFF = "isDetection|isPressed|isLastPressed|isHacked|isHackedThisTick|isAlarm|isTrigger|isOn|isRun|isOpen|isClosed|isPicked|nActive|nValue|nTick|isPickedUp|isSendt|isSearched|isSpawned|nSpawns"
 GONE_ON = "isDead|isExploded|isFinished"
+# A thing taken out may be what a recorded drive drives, or what a cutscene's
+# camera rides with or looks at - by task id, not by an expression. The drive
+# goes with it (an AnimTask driving nothing); the camera stays where it stands
+# and looks the way it was set (-1: none).
+_gone_ids = {tid for _qt, tid in GONE_CAMS if tid >= 0} | {int(t) for t in (plan.get("removals") or [])
+                                                          if str(t).lstrip("-").isdigit() and int(t) >= 0}
+for _v in MOTION["vehicles"]:
+    if _v["id"] in _gone_ids:
+        _gone_ids |= set(_v.get("carriageIds") or [])
+if _gone_ids:
+    _drives = 0
+    for _m in reversed(list(re.finditer(r'Task_New\((-?\d+), "AnimTask", ', out_src))):
+        _sp = TASKARGS._args(out_src, out_src.index("(", _m.start()))
+        if len(_sp) > 9 and out_src[_sp[9][0]:_sp[9][1]].strip().lstrip("-").isdigit() and \
+                int(out_src[_sp[9][0]:_sp[9][1]]) in _gone_ids:
+            if int(_m.group(1)) >= 0:
+                GONE_CAMS.append(("AnimTask", int(_m.group(1))))
+            out_src = cut_task(out_src, _m.start(), task_end(out_src, _m.start()))
+            _drives += 1
+    _cams = 0
+    for _m in reversed(list(re.finditer(r'Task_New\(-?\d+, "EditCamera", ', out_src))):
+        _sp = TASKARGS._args(out_src, out_src.index("(", _m.start()))
+        for _k in (11, 13):                 # Link task ID, Target task ID
+            if len(_sp) > _k:
+                _a, _b = _sp[_k]
+                _v = out_src[_a:_b].strip()
+                if _v.lstrip("-").isdigit() and int(_v) in _gone_ids:
+                    out_src = out_src[:_a] + "-1" + out_src[_b:]
+                    _cams += 1
+    if _drives or _cams:
+        report.append("what was taken out: %d recorded drive(s) went with it, %d cutscene camera(s) no longer follow it"
+                      % (_drives, _cams))
 for qt, tid in GONE_CAMS:
     out_src = re.sub(r"%s_%d\.(?:%s)\b" % (re.escape(qt), tid, GONE_OFF), "0", out_src)
     out_src = re.sub(r"%s_%d\.(?:%s)\b" % (re.escape(qt), tid, GONE_ON), "1", out_src)
@@ -3838,6 +3889,81 @@ if OBJ_TASK_IDS.get("done") or EVENT_FAILS:
                 report.append("mission complete when all %d objective(s) are done" % len([k for k in LANG["objectives.res"]]))
     else:
         warnings.append("this level has no LevelFlow task - objectives show and events fire, but they won't end the mission")
+
+# ---------------------------------------------------------------- the level's own cutscenes
+# plan["levelScenes"] {"<container id>": "off"} leaves one of the level's
+# cutscenes out of a copy; the rest stay, made to fit the mission:
+#   intro    left out, it is skipped at once: the variable its skip key raises
+#            starts at 1, so the level goes on exactly as when a player skips
+#            it (all fourteen levels checked: whatever waits for the intro
+#            waits for that variable or for the intro to stop). A level intro
+#            with no skip key would never run instead (its condition "0").
+#   outro    kept, it plays once the mission is won - the "Mission complete"
+#            message has shown - and the mission ends when it does: LevelFlow's
+#            Complete is its last scene finishing, as in the levels. Left out,
+#            it never runs, and the mission ends on the message.
+LEVEL_SCENES = plan.get("levelScenes") or {}
+
+
+def _task_by_id(text, tid, kind):
+    m = re.search(r'Task_New\(%d, "%s", ' % (tid, kind), text)
+    return (m.start(), task_end(text, m.start())) if m else None
+
+
+def _set_quoted(text, at, k, value):
+    """The k-th quoted string of the task at `at` (0 is its kind) set to value."""
+    sp = _quoted_spans(text, at[0], at[1])
+    if len(sp) <= k:
+        return text, False
+    return text[:sp[k][0]] + '"%s"' % value + text[sp[k][1]:], True
+
+
+def _complete_spans(text):
+    lf = re.search(r'Task_New\(-?\d+, "LevelFlow"', text)
+    if not lf:
+        return None
+    sp = _quoted_spans(text, lf.start(), task_end(text, lf.start()))
+    return sp if len(sp) >= 4 else None
+
+
+for _c in MOTION["cutscenes"]:
+    if _c["id"] is None or not _c["scenes"]:
+        continue
+    _off = str(LEVEL_SCENES.get(str(_c["id"]), "")).lower() == "off"
+    _box = _task_by_id(out_src, _c["id"], "ConditionalContainer")
+    if _box is None:
+        continue                                    # taken out with what held it
+    _last = _c["scenes"][-1]["id"]
+    if _c["role"] == "intro" and _off:
+        _ev = re.search(r'(Task_New\(%d, "EditVariable", "(?:[^"\\]|\\.)*", %s, %s, %s, )(%s)'
+                        % (_c["skip"], NUM, NUM, NUM, NUM), out_src) if _c["skip"] is not None else None
+        if _ev:
+            out_src = out_src[:_ev.start(2)] + "1" + out_src[_ev.end(2):]
+            report.append("the level's intro is left out: skipped at once, as its skip key does")
+        else:
+            out_src, _ok = _set_quoted(out_src, _box, 2, "0")
+            report.append("the level's intro is left out: it never runs")
+    elif _c["role"] == "outro":
+        _sp = _complete_spans(out_src)
+        _cur = out_src[_sp[2][0] + 1:_sp[2][1] - 1] if _sp else ""
+        _ends_here = any(re.search(r"CutScene_%d\.isFinished" % sc["id"], _cur) for sc in _c["scenes"])
+        if _off:
+            out_src, _ok = _set_quoted(out_src, _box, 2, "0")
+            if _ends_here and _sp:
+                # the mission ended on this outro and has no message of its own:
+                # it ends on what started the outro instead
+                _win = re.sub(r"&&\s*!\s*CutScene_\d+\.isFinished|!\s*CutScene_\d+\.isFinished\s*&&|\|\|\s*this\.isRun",
+                              "", _c["when"]).strip() or "0"
+                _sp = _complete_spans(out_src)
+                out_src = out_src[:_sp[2][0]] + '"%s"' % _win + out_src[_sp[2][1]:]
+            report.append("the level's outro is left out")
+        elif OBJ_TASK_IDS.get("done") and _sp:
+            _won = "StatusMessage_%d.nTicksSinceFinishedDisplay > 1 * GAME_FREQUENCY" % OBJ_TASK_IDS["done"]
+            out_src, _ok = _set_quoted(out_src, _box, 2, "%s && !CutScene_%d.isFinished" % (_won, _last))
+            _sp = _complete_spans(out_src)
+            out_src = out_src[:_sp[2][0]] + '"CutScene_%d.isFinished"' % _last + out_src[_sp[2][1]:]
+            report.append("the level's outro plays once the mission is won (%.0f s), and the mission ends when it does"
+                          % _c["seconds"])
 
 # ---------------------------------------------------------------- mission settings
 # plan["settings"]: a time limit, rain or snow, haze. Each rewrites a task every
