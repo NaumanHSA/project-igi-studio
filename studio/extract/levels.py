@@ -11,6 +11,7 @@
 import json, math, os, re, sys, pathlib, collections
 from studio import paths as studio_paths
 from studio.build import taskargs
+from studio.extract import motion
 from studio.qvm import source as qvm_source
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.extract.levels), do not import it. The guard below
@@ -78,6 +79,32 @@ def objective_texts():
             if OBJ_TEXTS:
                 break
     return OBJ_TEXTS
+
+
+MSG_TEXTS = None
+
+
+def message_texts():
+    """key -> text, from the game's messages.res: what the cutscenes' subtitles say."""
+    global MSG_TEXTS
+    if MSG_TEXTS is None:
+        MSG_TEXTS = {}
+        from studio.build import lang as lang_res
+        for base in (str(studio_paths.pristine()), str(studio_paths.game())):
+            d = pathlib.Path(base) / "language"
+            if not d.is_dir():
+                continue
+            for lang in sorted(d.iterdir(), key=lambda f: f.name.lower() != "english"):
+                f = lang / "messages.res"
+                if f.exists():
+                    try:
+                        for k, v in lang_res.strings(f).items():
+                            MSG_TEXTS.setdefault(k, v)
+                    except (OSError, ValueError):
+                        pass
+            if MSG_TEXTS:
+                break
+    return MSG_TEXTS
 
 
 def objectives_of(src):
@@ -263,7 +290,10 @@ STATIC = [("Building", "building"), ("EditRigidObj", "prop"), ("Door", "door"),
           ("Terminal", "terminal"), ("GunPickup", "pickup"), ("AmmoPickup", "pickup"),
           ("GenericPickup", "pickup"),
           ("SCamera", "camera"), ("ExplodeObject", "explodable"), ("Car", "vehicle"),
-          ("Switch", "switch"), ("Heli", "vehicle"), ("StationaryGun", "prop")]
+          ("Switch", "switch"), ("Heli", "vehicle"), ("Plane", "vehicle"), ("StationaryGun", "prop")]
+# A vehicle's orientation comes straight after its position, and then its
+# thrust and speed: its heading is the third number, not the last.
+VEHICLES = ("Car", "Heli", "Plane")
 
 
 
@@ -382,6 +412,8 @@ def extract(level, src_path=None, ai_dir=None):
         for mm in pat.finditer(src):
             tid, nm, x, y, z, nums, model = mm.groups()
             parts = [v.strip() for v in nums.split(",") if v.strip()]
+            if qtype in VEHICLES:
+                parts = parts[:3]
             try:
                 yaw = float(parts[-1]) if parts else 0.0
             except ValueError:
@@ -610,7 +642,20 @@ def extract(level, src_path=None, ai_dir=None):
         # written over by a mission's own objectives
         "hilights": {"total": len(re.findall(r'Task_New\(-?\d+, "ComputerHilight"', src)),
                      "numbered": len(re.findall(r'"COMPUTER:h_\d+\.spr"', src))},
+        # what moves and the cutscenes (studio/extract/motion.py)
+        "motion": motion_of(src),
     }
+
+
+def motion_of(src):
+    try:
+        m = motion.read(src, message_texts())
+    except Exception as e:                     # noqa: BLE001 - a level we cannot read still opens
+        print("  motion: %s" % e)
+        return {"vehicles": [], "cutscenes": [], "complete": ""}
+    for v in m["vehicles"]:
+        v["modelName"] = models.get(v.get("model"), v.get("model"))
+    return m
 
 
 # --src lets a custom slot be extracted from its own decompiled script, so a

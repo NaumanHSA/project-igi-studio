@@ -3,6 +3,26 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## Unreleased
+
+### New
+
+- **The level's cutscenes, played in the studio.** A Cutscenes tab lists each
+  level's intro and outro and plays them in the 3D view as the game does:
+  every camera, moving or holding, in the letterbox, with the subtitles.
+  Pause, scrub, go shot by shot, or play from any shot or line.
+- **Vehicles that move.** The same tab lists the vehicles that drive in a
+  level - by the game's AI along a route, on rails, or on a recorded drive -
+  and when they are there; their routes and the railway are drawn on the map,
+  and a selected vehicle says how it moves.
+
+### Fixed
+
+- Vehicles stood facing north on the map and in 3D: their heading was read
+  from their speed.
+
+The level data is read again once when this version first starts (version 9).
+
 ## 1.1.0
 
 Your items: keep a building, a guard or a whole area - from your missions or

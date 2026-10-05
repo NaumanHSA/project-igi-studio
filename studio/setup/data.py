@@ -45,10 +45,11 @@ REQUIRED = (["index.json", "models.json", "catalog.json", "meshes.bin", "meshes.
             + ["graphs%d.json" % n for n in range(1, 15)])
 
 STAMP = "data.json"
-VERSION = 8          # bump when an extractor's output changes, so data is rebuilt (2: the ground's colour tiles; 3: splines; 4: doors;
+VERSION = 9          # bump when an extractor's output changes, so data is rebuilt (2: the ground's colour tiles; 3: splines; 4: doors;
                      # 5: the ground the game takes away, and guards' patrols read from their AI scripts on a fresh build;
                      # 6: the machine guns on their stands, StationaryGun; 7: how each door and switch works, its wiring;
-                     # 8: how each model stands on the ground, its seat)
+                     # 8: how each model stands on the ground, its seat; 9: what moves and the cutscenes, motion, and
+                     # vehicles' true headings)
 
 
 def _run(module, args, log):

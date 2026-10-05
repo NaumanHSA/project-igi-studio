@@ -123,7 +123,27 @@ function css() {
   letter-spacing:.18em;color:#7fe08a;margin:0 0 4px 1px}
 .v3d-load em{font-style:normal;letter-spacing:.06em;color:var(--muted)}
 .v3d-load div{height:12px;border:1px solid #4fd062;background:rgba(3,18,6,.72);box-shadow:0 0 14px rgba(80,255,110,.22)}
-.v3d-load i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b8a31,#3ed85b);transition:width .25s ease}`;
+.v3d-load i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b8a31,#3ed85b);transition:width .25s ease}
+.v3d-film{position:absolute;left:0;right:0;bottom:0;pointer-events:none}
+.v3d-film[hidden]{display:none}
+.v3d-film .bar{position:absolute;left:0;right:0;background:#000}
+.v3d-film .bar.t{top:0}
+.v3d-film .bar.b{bottom:0}
+.v3d-film .fx{position:absolute;inset:0}
+.v3d-film .fx.line{background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px)}
+.v3d-film .fx.band,.v3d-film .fx.band_update{background:repeating-linear-gradient(0deg,rgba(0,0,0,.3) 0 1px,transparent 1px 3px),rgba(60,140,80,.18)}
+.v3d-film .fx.handicam{box-shadow:inset 0 0 120px rgba(0,0,0,.65)}
+.v3d-film .subt{position:absolute;left:8%;right:8%;bottom:4%;text-align:center;color:#f2f2e8;font-size:15px;line-height:1.4;
+  text-shadow:0 1px 2px #000,0 0 6px #000}
+.v3d-film .subt:empty{display:none}
+.v3d-film .ui{position:absolute;left:10px;right:10px;top:8px;display:flex;align-items:center;gap:8px;pointer-events:auto;
+  font:12px "IBM Plex Mono",monospace;color:#d8e8d8;padding:5px 8px;border-radius:5px;background:rgba(0,0,0,.55)}
+.v3d-film .ui .btn{padding:2px 9px;font-size:11.5px}
+.v3d-film .ui input[type=range]{flex:1;min-width:80px;accent-color:var(--accent)}
+.v3d-film .ui .ft{min-width:96px;text-align:right}
+.v3d-film .ui .fs{max-width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
+.v3d-film .note{position:absolute;left:10px;top:46px;font-size:11px;color:#c8d2c8;text-shadow:0 1px 2px #000;pointer-events:none}
+.v3d.filming .v3d-help,.v3d.filming .v3d-read,.v3d.filming .v3d-hint,.v3d.filming .v3d-cross{display:none!important}`;
   document.head.appendChild(st);
 }
 
@@ -161,7 +181,13 @@ function build(host) {
 <div class="v3d-help"><div class="v3d-help-head"><span class="v3d-help-title">Keys</span>
   <button class="v3d-help-fold" aria-expanded="true" title="Hide the keys">−</button></div><div class="v3d-help-rows"></div></div>
 <div class="v3d-tip" hidden></div>
-<div class="v3d-load" hidden aria-live="polite"><span><b>Loading</b><em></em></span><div><i></i></div></div>`;
+<div class="v3d-load" hidden aria-live="polite"><span><b>Loading</b><em></em></span><div><i></i></div></div>
+<div class="v3d-film" hidden><div class="fx"></div><div class="bar t"></div><div class="bar b"></div><div class="subt" aria-live="polite"></div>
+  <div class="ui"><button class="btn v3d-fplay" title="Play or pause (Space)">Pause</button>
+    <button class="btn v3d-fprev" title="The shot before (Left arrow)">&#9664;</button><button class="btn v3d-fnext" title="The next shot (Right arrow)">&#9654;</button>
+    <span class="fs"></span><input type="range" class="v3d-fseek" min="0" max="1000" value="0" aria-label="Time in the cutscene">
+    <span class="ft"></span><button class="btn primary v3d-fstop" title="Stop and look around from here (Esc)">Stop</button></div>
+  <div class="note"></div></div>`;
   host.appendChild(el);
   const canvas = el.querySelector("canvas");
   let renderer;
@@ -804,10 +830,22 @@ function fill() {
   sc.left = -R * 1.3; sc.right = R * 1.3; sc.top = R * 1.3; sc.bottom = -R * 1.3;
   sc.near = 0.5; sc.far = R * 8;
   sc.updateProjectionMatrix();
-  // the ground reaches further than the things on it; the fog ends where it does
-  const T = O.terrain, reach = T ? Math.min(T.w, T.h) * T.cell / 2 : R * 3;
-  S.scene.fog = new THREE.Fog(0x9fb2ba, Math.max(R, reach * 0.45), reach * 0.97);
+  S.scene.fog = new THREE.Fog(0x9fb2ba, 1, 2);
+  fogFor();
   S.scene.background = new THREE.Color(0x9fb2ba);
+}
+// the ground reaches further than the things on it; the fog ends where it
+// does - and a cutscene's camera high over it sees that much further down
+function fogFor() {
+  if (!S || !S.scene.fog) return;
+  const T = O.terrain, R = O.radius + 6, reach = T ? Math.min(T.w, T.h) * T.cell / 2 : R * 3;
+  let up = 0;
+  if (S.film) {
+    const p = S.camera.position, g = groundAt(p.x, p.y);
+    up = Math.max(0, p.z - (g == null ? p.z : g));
+  }
+  S.scene.fog.near = Math.max(R, reach * 0.45) + up * 0.8;
+  S.scene.fog.far = reach * 0.97 + up;
 }
 
 // the sun: from the north-west, high, its shadows over the close-up round a
@@ -831,9 +869,12 @@ function explore(now) {
   const o = O.origin, p = S.camera.position, wx = p.x + o[0], wy = p.y + o[1];
   const T = O.terrain, half = T ? Math.min(T.w, T.h) * T.cell / 2 : 0;
   const ground = !!T && Math.hypot(wx - (T.x0 + (T.w - 1) * T.cell / 2), wy - (T.y0 + (T.h - 1) * T.cell / 2)) > half * 0.35;
-  if (!ground && Math.hypot(wx - S.centre[0], wy - S.centre[1]) < Math.max(5, O.radius * 0.3)) return;
+  const wz = p.z + o[2];
+  if (!ground && Math.hypot(wx - S.centre[0], wy - S.centre[1]) < Math.max(5, O.radius * 0.3) &&
+      !(S.film && Math.abs(wz - (S.centreZ == null ? 1e9 : S.centreZ)) > 25)) return;
   S.exploredAt = now;
   S.centre = [wx, wy];
+  S.centreZ = wz;
   // a cut set for the room it opened in means nothing out here: off, once
   const cutEl = S.el.querySelector(".v3d-cut");
   if (!S.cutFreed && +cutEl.value < 100 && Math.hypot(p.x, p.y) > O.radius) {
@@ -842,7 +883,8 @@ function explore(now) {
     setCut(100);
   }
   let got = null;
-  try { got = O.explore(wx, wy, p.z + o[2], ground); }
+  // a cutscene asks every time: how far it sees depends on how high it is
+  try { got = O.explore(wx, wy, p.z + o[2], ground || !!S.film); }
   catch (e) { console.warn("the close-up could not gather round the camera:", e); }   // tried again as it moves
   if (!got) return;
   if (got.terrain) {
@@ -850,6 +892,7 @@ function explore(now) {
     const old = S.root.children.find(c => c.userData.item && c.userData.item.type === "terrain");
     if (old) { S.root.remove(old); drop(old); }
     S.root.add(terrainMesh(O.terrain));
+    fogFor();
   }
   update({ objects: got.objects, nav: got.nav });
   if (got.splines) {
@@ -1259,7 +1302,7 @@ function applyPose(p) {
 // lets it go, to edit; so does an item in hand or adding walkway points, which
 // need a pointer to aim with.
 const SENS = 0.0024;            // radians of turn per pixel of mouse
-function lockable() { return !!S && !S.dead && !S.placing && !S.addingNode; }
+function lockable() { return !!S && !S.dead && !S.placing && !S.addingNode && !S.film; }
 function lock() {
   if (!lockable() || S.el.hidden || document.pointerLockElement === S.canvas) return;
   try {
@@ -1318,6 +1361,8 @@ function centreTip() {
 }
 function onDown(e) {
   S.canvas.focus();
+  // a cutscene playing: a click pauses it, or plays it on, as a film's would
+  if (S.film) { e.preventDefault(); if (e.button === 0) filmPlay(!S.film.playing); return; }
   // looking: the mouse turns the view, and a click does nothing
   if (S.locked) { e.preventDefault(); return; }
   // not editing: a click takes the mouse back to looking
@@ -1504,6 +1549,17 @@ function onKey(e) {
   if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && e.target.type !== "range" && e.target.type !== "checkbox") return;
   const k = e.key, ctrl = e.ctrlKey || e.metaKey, st = e.shiftKey ? 0.5 : e.altKey ? 0.01 : 0.05;
   let used = true;
+  if (S.film) {
+    // a cutscene playing: its own keys, and nothing flies
+    if (k === " ") filmPlay(!S.film.playing);
+    else if (k === "ArrowLeft") filmStep(-1);
+    else if (k === "ArrowRight") filmStep(1);
+    else if (k === "Home") filmSeek(0);
+    else if (k === "Escape") filmStop();
+    else used = false;
+    if (used) { e.preventDefault(); e.stopPropagation(); }
+    return;
+  }
   fast = e.shiftKey;
   // Alt: the mouse is let go, to edit; letting go of Alt takes the view back
   if (k === "Alt") {
@@ -1661,6 +1717,189 @@ function tip(it, e) {
   t.hidden = false;
 }
 
+// ------------------------------------------------------------------ a cutscene, played
+// View3D.film(F) plays a cutscene's cameras in the close-up as the game plays
+// them (studio/extract/motion.py reads them from a level; a mission's own come
+// from the editor):
+//   F.shots      [{name, scene, x, y, z, a, b, g, fov, dur, smooth, target, filter, shake, lb, end}]
+//                in game metres. In order: one with smooth moves to the next one
+//                over its dur (seconds); one without holds for its dur, then cuts.
+//                Angles are the game's: alpha about x, beta about y, gamma about z,
+//                the camera looking up (+z) with its top to the south at zero - so
+//                alpha -pi/2 looks level along gamma's heading, -pi straight down.
+//                target {x, y, z}: the camera keeps turning to look at it.
+//                lb: its scene's letterbox; end: the last of its scene (no move on).
+//   F.subtitles  [{at, dur, text}], seconds from the start
+//   F.letterbox  the game's viewport height factor (0.7: a bar above and below)
+//   F.note       a line under the controls (what the preview cannot show)
+//   F.start      where to begin, seconds
+//   F.onEnd()    stopped (Esc, Stop, or the view closed)
+// The mouse is not taken while it plays; Space pauses, the arrows go a shot back
+// or on, Esc stops it and leaves the camera where it is.
+const FILM_FOV = 60;                // degrees, the view at the game's FOV factor 1
+function film(F) {
+  if (!S || S.dead || !isOpen()) return false;
+  unlock();
+  vel.set(0, 0, 0);
+  held.clear();
+  const shots = (F.shots || []).filter(x => isFinite(x.x) && isFinite(x.y) && isFinite(x.z));
+  if (!shots.length) return false;
+  const at = [];
+  let t = 0;
+  shots.forEach(x => { at.push(t); t += Math.max(0, +x.dur || 0); });
+  S.film = { shots, at, total: t, t: Math.max(0, Math.min(t, +F.start || 0)), playing: F.paused ? false : true, last: 0,
+    subs: (F.subtitles || []).slice().sort((p, q) => p.at - q.at), lb: Math.max(0.2, Math.min(1, F.letterbox || 1)),
+    onEnd: F.onEnd || null };
+  const el = S.el.querySelector(".v3d-film");
+  el.hidden = false;
+  el.style.top = S.canvas.offsetTop + "px";
+  el.querySelector(".note").textContent = F.note || "";
+  S.el.classList.add("filming");
+  if (!el.dataset.wired) {
+    el.dataset.wired = "1";
+    el.querySelector(".v3d-fplay").addEventListener("click", () => filmPlay(!(S.film && S.film.playing)));
+    el.querySelector(".v3d-fprev").addEventListener("click", () => filmStep(-1));
+    el.querySelector(".v3d-fnext").addEventListener("click", () => filmStep(1));
+    el.querySelector(".v3d-fstop").addEventListener("click", filmStop);
+    const seek = el.querySelector(".v3d-fseek");
+    seek.addEventListener("input", () => { if (S.film) { S.film.playing = false; filmSeek(+seek.value / 1000 * S.film.total); } });
+  }
+  S.exploredAt = -1e9;
+  filmLayout();
+  filmApply();
+  filmUi();
+  hint();
+  return true;
+}
+function filmLayout() {
+  const F = S.film, el = S.el.querySelector(".v3d-film");
+  const h = S.canvas.clientHeight, bar = Math.round(h * (1 - F.lb) / 2);
+  F.h = h;
+  el.style.top = S.canvas.offsetTop + "px";
+  el.querySelector(".bar.t").style.height = bar + "px";
+  el.querySelector(".bar.b").style.height = bar + "px";
+  el.querySelector(".subt").style.bottom = bar ? Math.max(4, Math.round(bar * 0.3)) + "px" : "6%";
+}
+function filmIndex(t) {
+  const F = S.film;
+  for (let k = 0; k < F.shots.length; k++) if (F.shots[k].dur > 0 && t < F.at[k] + F.shots[k].dur) return k;
+  for (let k = F.shots.length - 1; k >= 0; k--) if (F.shots[k].dur > 0) return k;
+  return F.shots.length - 1;
+}
+const _e = new THREE.Euler(), _q = new THREE.Quaternion();
+function turnOf(a, b, g) {
+  _q.setFromEuler(_e.set(a || 0, b || 0, g || 0, "ZYX"));
+  return { fwd: new THREE.Vector3(0, 0, 1).applyQuaternion(_q), up: new THREE.Vector3(0, -1, 0).applyQuaternion(_q) };
+}
+function filmApply() {
+  const F = S.film, o = O.origin, i = filmIndex(F.t), s = F.shots[i];
+  // the last camera of a scene ends it: the next scene cuts to its own first
+  const n = s.smooth && s.dur > 0 && !s.end ? F.shots[i + 1] : null;
+  if (s.lb && s.lb !== F.lb) { F.lb = s.lb; filmLayout(); }
+  const u = n ? Math.max(0, Math.min(1, (F.t - F.at[i]) / s.dur)) : 0;
+  const L = (p, q) => p + (q - p) * u;
+  const A = (p, q) => p + ((((q - p + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI) * u;
+  const pos = new THREE.Vector3(n ? L(s.x, n.x) : s.x, n ? L(s.y, n.y) : s.y, n ? L(s.z, n.z) : s.z).sub(new THREE.Vector3(o[0], o[1], o[2]));
+  let fwd, up;
+  const tg = s.target || null;
+  if (tg) {
+    fwd = new THREE.Vector3(tg.x - o[0], tg.y - o[1], tg.z - o[2]).sub(pos);
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 1, 0);
+    fwd.normalize();
+    up = new THREE.Vector3(0, 0, 1);
+  } else {
+    const r = turnOf(n ? A(s.a, n.a) : s.a, n ? A(s.b, n.b) : s.b, n ? A(s.g, n.g) : s.g);
+    fwd = r.fwd; up = r.up;
+  }
+  const shake = n ? L(s.shake || 0, n.shake || 0) : (s.shake || 0);
+  if (shake > 0) {
+    // a hand-held camera: a small wander, the same each time it is played
+    const w = F.t * 9;
+    fwd.add(new THREE.Vector3(Math.sin(w * 1.3), Math.sin(w * 1.7 + 1), Math.sin(w * 1.1 + 2)).multiplyScalar(shake * 1.5)).normalize();
+  }
+  S.camera.position.copy(pos);
+  S.camera.up.copy(up);
+  S.camera.lookAt(pos.clone().add(fwd));
+  S.camera.fov = Math.max(4, Math.min(120, FILM_FOV * (n ? L(s.fov || 1, n.fov || 1) : (s.fov || 1))));
+  S.camera.updateProjectionMatrix();
+  S.yaw = Math.atan2(-fwd.x, fwd.y);
+  S.pitch = Math.atan2(fwd.z, Math.hypot(fwd.x, fwd.y));
+  fogFor();
+  const el = S.el.querySelector(".v3d-film");
+  const sub = F.subs.find(x => F.t >= x.at && F.t < x.at + Math.max(0.5, x.dur || 0));
+  const st = el.querySelector(".subt"), txt = sub ? sub.text || "" : "";
+  if (st.textContent !== txt) st.textContent = txt;
+  const fx = "fx " + (s.filter || "");
+  if (F.fx !== fx) { F.fx = fx; el.querySelector(".fx").className = fx; }
+  F.shot = i;
+}
+function filmUi() {
+  const F = S.film, el = S.el.querySelector(".v3d-film");
+  if (!F) return;
+  const i = F.shot != null ? F.shot : filmIndex(F.t), s = F.shots[i];
+  el.querySelector(".v3d-fplay").textContent = F.playing ? "Pause" : F.t >= F.total ? "Again" : "Play";
+  el.querySelector(".ft").textContent = F.t.toFixed(1) + " / " + F.total.toFixed(1) + " s";
+  el.querySelector(".fs").textContent = (s.scene ? s.scene + " · " : "") + (s.name || "shot " + (i + 1));
+  el.querySelector(".v3d-fseek").value = F.total ? Math.round(F.t / F.total * 1000) : 0;
+}
+function filmTick(now) {
+  const F = S.film;
+  const dt = F.last ? Math.min(0.1, (now - F.last) / 1000) : 0;
+  F.last = now;
+  if (F.playing) {
+    F.t += dt;
+    if (F.t >= F.total) { F.t = F.total; F.playing = false; }
+  }
+  if (S.canvas.clientHeight !== F.h) filmLayout();
+  filmApply();
+  if (now - (F.uiAt || 0) > 100 || !F.playing) { F.uiAt = now; filmUi(); }
+}
+function filmPlay(on) {
+  const F = S && S.film;
+  if (!F) return;
+  if (on && F.t >= F.total) F.t = 0;
+  F.playing = !!on;
+  F.last = 0;
+  filmUi();
+}
+function filmSeek(t) {
+  const F = S && S.film;
+  if (!F) return;
+  F.t = Math.max(0, Math.min(F.total, t));
+  S.exploredAt = -1e9;
+  filmApply();
+  filmUi();
+}
+// a shot back or on: back to the start of this one (or the one before, at its
+// start already), or on to the next one that takes time
+function filmStep(d) {
+  const F = S && S.film;
+  if (!F) return;
+  const i = filmIndex(F.t);
+  let k = i;
+  if (d < 0 && F.t - F.at[i] > 0.6) k = i;
+  else {
+    k += d;
+    while (k > 0 && k < F.shots.length - 1 && !(F.shots[k].dur > 0)) k += d;
+  }
+  k = Math.max(0, Math.min(F.shots.length - 1, k));
+  filmSeek(F.at[k] + 0.001);
+}
+function filmStop() {
+  if (!S || !S.film) return;
+  const cb = S.film.onEnd;
+  S.film = null;
+  S.el.querySelector(".v3d-film").hidden = true;
+  S.el.classList.remove("filming");
+  S.camera.up.set(0, 0, 1);
+  S.camera.fov = 60;
+  S.camera.updateProjectionMatrix();
+  applyLook();
+  fogFor();
+  hint();
+  if (cb) cb();
+}
+
 // ------------------------------------------------------------------ the loop
 function resize() {
   const c = S.canvas, w = c.clientWidth, h = c.clientHeight;
@@ -1676,7 +1915,7 @@ function loop() {
   if (!S || S.el.hidden) { S && (S.raf = 0); return; }
   resize();
   const now = performance.now();
-  fly(now);
+  if (S.film) filmTick(now); else fly(now);
   explore(now);
   S.renderer.render(S.scene, S.camera);
   minimap(now);
@@ -1812,6 +2051,7 @@ function open(opts) {
 }
 function close() {
   if (!S) return;
+  if (S.film) filmStop();
   unlock();
   S.el.hidden = true;
   S.drag = null;
@@ -1872,6 +2112,11 @@ function screenOf(x, y, z) {
 }
 
 window.View3D = { open, close, isOpen, follow, update, screenOf, setPlacing, prepare, target: () => O && O.target,
+  film, filmStop, filmSeek, filmPlay,
+  // for the tests: where a cutscene is, and the camera
+  filmState: () => S && S.film ? { t: S.film.t, total: S.film.total, shot: S.film.shot, playing: S.film.playing,
+    subtitle: S.el.querySelector(".v3d-film .subt").textContent, fov: S.camera.fov,
+    cam: S.camera.position.toArray().map((v, i) => +(v + O.origin[i]).toFixed(2)), yaw: +S.yaw.toFixed(3), pitch: +S.pitch.toFixed(3) } : null,
   cam: () => S ? [S.camera.position.x, S.camera.position.y, S.camera.position.z] : null,
   walking: () => !!(S && S.walking), navCount: () => (S && S.nav ? S.nav.children.length : 0),
   // what a step forward meets - for the tests

@@ -503,9 +503,9 @@ not committed.
 
 ## Side panels
 
-Two tabs on the left edge switch the side panel: **Inventory** and
-**Navigation**. Clicking the open tab hides the panel and gives the map the
-room.
+The tabs on the left edge switch the side panel: **Inventory**,
+**Objectives**, **Events**, **Security**, **Navigation** and **Cutscenes**.
+Clicking the open tab hides the panel and gives the map the room.
 
 **Navigation** holds **Add node**, show/hide all nodes, the shipped patrol
 routes, and every graph with how full it is (click a graph to hide it, ⌖ to
@@ -1406,6 +1406,76 @@ later is not raised again; guards are a `GuardGenerator` on it; failing is a
 `StatusMessage` that `LevelFlow`'s *Failed* waits for. An area is an
 `AreaActivate`, time a `LevelTimer`. **To be confirmed in game:** each kind
 of trigger and of action.
+
+## Cutscenes and moving vehicles
+
+The **Cutscenes** tab on the left edge shows what the level has of its own:
+
+- **Its cutscenes.** The game's levels each have an intro, which plays as the
+  mission starts (the skip key skips it), and all but level 14 an outro,
+  which plays once the mission is won: the mission ends when the outro does.
+  Each card gives the length, the scenes, the shots and the lines of
+  subtitles.
+  - **▶ plays it in the 3D view** as the game plays it: the cameras one after
+    another, each moving or holding, in the letterbox, with the subtitles.
+    Space pauses, ← and → go a shot back or on, the slider scrubs, a click on
+    the picture pauses, and Esc (or Stop) stops it and leaves you looking from
+    where the camera was. The ground and buildings reach as far as a high
+    camera sees.
+  - **Unfold a card** for its scenes and shots, each with how long it lasts
+    and what it does (moves, holds, rides with a vehicle, looks at someone,
+    zoomed in), and its subtitles. Click a shot or a line to play from there.
+    The map marks where each camera stands and which way it looks.
+- **Vehicles that move**: driven by the game's AI along a route (level 6's
+  APC, out of its garage once the alarm goes off), on rails (the trains), on
+  a recorded drive (helicopters, planes, the trucks in cutscenes), or parked
+  stand-ins that wait for the one that drives. Click one to find it on the
+  map. A selected vehicle says how it moves and when it is there. While the
+  tab is open, the AI vehicles' routes are drawn amber and the tracks blue.
+
+What the preview cannot show: people and vehicles stand where the cutscene
+starts them. A recorded drive is control inputs fed to the game's own
+physics (throttle, steering, a helicopter's lift), so only the game knows the
+way it goes; a camera riding with one stays where the vehicle starts. The
+field of view is the game's factor times 60°.
+
+An empty map keeps none of them.
+
+How it is read (`studio/extract/motion.py`, into each `levelN.json` as
+`motion`; level data version 9):
+
+- **Cutscenes.** A `CutScene` plays its `EditCamera`s in order. A camera with
+  *Smooth to next* moves to the next one over its *Duration* (seconds); one
+  without holds for its duration, then cuts. A scene's cameras are grouped by
+  the `ConditionalContainer` that runs them: the intro's condition carries the
+  skip key (an `EditVariable` that `LevelFlow_GetBreakCutSceneKey()` raises),
+  the outro's start calls `Game_CutsceneDelete()`, and `LevelFlow`'s
+  *Complete* is the outro finishing. While either runs, the player is not
+  there: he lives in a container `!Intro.isRun && !Outro.isRun`, and the
+  Jones on screen is an actor with the player's model. *Viewport height
+  factor* 0.7 is the letterbox. Subtitles are `StatusMessage`s marked
+  *Cutscene message*, sent on a timer that runs with the cutscene; their text
+  is in `messages.res`.
+- **Camera angles.** Alpha about x, beta about y, gamma about z, in that
+  order, the camera looking up at zero: alpha -90° looks level along gamma's
+  heading (the heading of everything else), -180° straight down (level 13's
+  satellite view). Checked against the levels: over the 192 shots that
+  neither follow nor look at anything, this reading has the cameras framing
+  the level's objects far more often than any turned or mirrored one (555
+  objects in view, the next 366). FOV is a factor (1 normal, 0.1 to 0.35 a
+  long lens). A *link task* makes the camera ride with that thing, a *target
+  task* keeps it turned to it.
+- **Vehicles.** `Car`, `Heli`, `Plane` and `Train` tasks. A `CarAI` child
+  (*Car ID, Graph ID, Route ID*) has the game's AI drive the car along a
+  `PatrolPath` on an AI graph of its own (not the guards' walkways); the
+  container round the car says when it is there. A `Train` runs along a
+  `SplineObj` (its *RailroadQTaskID*), its carriages child `Train`s. An
+  `AnimTask` plays a recorded drive: *AnimData* is a count, then (channel,
+  value) pairs - channel 32 a wait in game ticks (`GAME_FREQUENCY` is 30,
+  registered by IGI.exe), 0 throttle, 1 steering, 2 and 3 a helicopter's climb
+  and lift, 5 to 9 a plane's gear, canopy and the like. Vehicles were read
+  facing north until version 9: their heading is the third number after the
+  position, not the last (that is their speed).
 
 ## Map computer preview
 

@@ -42,6 +42,7 @@ project-igi-studio/
 │   │   └── migrate.py      turn a slot built the old way into a custom mission
 │   ├── extract/            reading the game's own files into what the editor needs
 │   │   ├── levels.py       level scripts -> levelN.json in the level data
+│   │   ├── motion.py       what moves and the cutscenes, from a level script (levelN.json "motion")
 │   │   ├── graphs.py       graph*.dat -> node positions + routing facts
 │   │   ├── models.py       model footprints, map labels, per-level model availability
 │   │   ├── meshes.py       every structure's render mesh, for drawing it from above

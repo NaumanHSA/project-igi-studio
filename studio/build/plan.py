@@ -3568,6 +3568,11 @@ for e in EDITS:
             turn = float(e["gamma"]) - float((_by_ref.get(e["ref"]) or {}).get("gamma") or 0)
             vals[0] = repr(round((float(vals[0]) + (-turn if CCW_LYING else turn)) % (2 * math.pi), 6))
             nums = "".join(", " + v for v in vals)
+        elif e["ref"].split("@")[0] in ("Car", "Heli", "Plane") and len(vals) >= 3:
+            # a vehicle: its orientation, then thrust and speed - the heading is
+            # the third number, the last is its speed upwards
+            vals[2] = repr(round(float(e["gamma"]), 6))
+            nums = "".join(", " + v for v in vals)
         else:
             # yaw is the last number before the model - see extract_levels.py
             nums = re.sub(r"(%s)$" % NUM, repr(round(float(e["gamma"]), 6)), nums)

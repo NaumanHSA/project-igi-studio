@@ -942,6 +942,19 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .gd-note.warn{border-left-color:var(--warn);color:var(--ink)}
 
 /* ---- objectives ---- */
+.cut-role{font:600 9.5px "IBM Plex Mono",monospace;letter-spacing:.12em;text-transform:uppercase;padding:1px 6px;border-radius:3px;
+  border:1px solid var(--line);color:var(--accent);flex:none}
+.cut-role.outro{color:var(--ok)}
+.cut-sc{display:flex;justify-content:space-between;gap:8px;margin:9px 2px 3px;font-size:12px;color:var(--muted)}
+.cut-sc b{color:var(--ink);font-weight:600}
+.cut-shot,.cut-veh{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;padding:4px 6px;border:1px solid transparent;border-radius:4px;
+  background:transparent;color:var(--ink);font:inherit;font-size:12px;cursor:pointer}
+.cut-shot:hover,.cut-veh:hover,.cut-shot:focus-visible,.cut-veh:focus-visible{border-color:var(--line);background:var(--sunken);outline:none}
+.cut-shot .n{flex:none;min-width:34px;font:11px "IBM Plex Mono",monospace;color:var(--faint)}
+.cut-shot .t,.cut-veh .t{display:flex;flex-direction:column;min-width:0}
+.cut-shot i,.cut-veh i{font-style:normal;color:var(--muted);font-size:11.5px}
+.cut-shot.sub i{color:var(--ink)}
+.cut-when code{font-size:11px;word-break:break-word}
 .ob{border:1px solid var(--line);border-radius:6px;padding:0 0 7px;margin-bottom:7px;background:var(--sunken)}
 .ob.bad{border-color:color-mix(in srgb,var(--danger) 60%,var(--line))}
 .ob.picking{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
@@ -1341,6 +1354,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
       <button class="tab" role="tab" id="tab-ev" aria-controls="panel-ev" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.2 1.5 3.5 9h4l-1 5.5L12.5 7h-4z"/></svg>Events</button>
       <button class="tab" role="tab" id="tab-sec" aria-controls="panel-sec" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 13.5 4v4.3c0 3.3-2.3 5.4-5.5 6.2C4.8 13.7 2.5 11.6 2.5 8.3V4z"/><path d="M8 5.6v3.2M8 10.8v.2"/></svg>Security</button>
       <button class="tab" role="tab" id="tab-nav" aria-controls="panel-nav" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="4" cy="11.5" r="1.8"/><circle cx="12" cy="4.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="m5.4 10.3 5.2-4.6M5.8 11.7h4.4"/></svg>Navigation</button>
+      <button class="tab" role="tab" id="tab-cut" aria-controls="panel-cut" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4" width="9.5" height="8" rx="1"/><path d="m11 7 3.5-2v6L11 9"/></svg>Cutscenes</button>
     </nav>
     <aside class="panel" id="panel-inv" role="tabpanel" aria-labelledby="tab-inv">
       <div class="inv-search"><input id="invq" type="search" placeholder="Search characters, weapons, structures…" aria-label="Search inventory" autocomplete="off"></div>
@@ -1361,6 +1375,10 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
     <aside class="panel" id="panel-nav" role="tabpanel" aria-labelledby="tab-nav" hidden>
       <div class="panel-h"><span class="lbl">Navigation mesh</span></div>
       <div id="navbody" class="panel-b"></div>
+    </aside>
+    <aside class="panel" id="panel-cut" role="tabpanel" aria-labelledby="tab-cut" hidden>
+      <div class="panel-h"><span class="lbl">Cutscenes and moving vehicles</span></div>
+      <div id="cutbody" class="panel-b"></div>
     </aside>
 
     <div class="stage">
@@ -3721,6 +3739,7 @@ function present(){
   drawSightCone();
   drawWalkers();
   drawRoutes();
+  drawMotion();
   drawObjectives();            // over the walkers: a badge rides on the guard it marks
   drawEvents();drawDoorLocks();
   drawAlarmLinks();
@@ -5051,7 +5070,7 @@ function renderSide(){
   if(MAPCOMP)renderMapComputer();
   if(!$("panel-sec").hidden)renderSecurity();
   multi=multi.filter(function(o){return o.type==="navnode"?navNodes.indexOf(o)>=0:o.own?placements.indexOf(o)>=0:!isRemoved(o)});
-  renderObjectives();renderEvents();
+  renderObjectives();renderEvents();renderCutscenes();
   if(multi.length>1){groupInspector(el);renderList();return}
   if(!sel){
     el.innerHTML='<p class="empty">Click anything on the plan to inspect it. Drag your own placements to move them.</p>';
@@ -5504,6 +5523,9 @@ function objectInspector(el){
     '</dl>';
   if(isSoldier)h+=guardFields(o);
   if(isPickup)h+=pickupField(o);
+  var mv=motionOf(o);
+  if(mv&&moves(mv))h+='<div class="note" style="margin-top:9px">'+esc(vehicleMoves(mv))+(mv.parked?'':', '+esc(thereWhen(mv)))+'.'+
+    (vehiclePath(mv)?' Its way is drawn on the map.':'')+'</div>';
   if(move){
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px">'+
       fld("ix","X",num(o.x))+fld("iy","Y",num(o.y))+fld("iz","Z",num(o.z))+fld("ig","Facing (°)",(Math.round(((o.gamma||0)*180/Math.PI%360+360)%360*10)/10).toString())+'</div>'+
@@ -6556,7 +6578,12 @@ function describe(o){
     else if(o.type==="terminal"){tag="Terminal";desc="The player can hack it."}
     else if(o.type==="switch"){tag="Switch";desc="The player can use it."}
     else if(o.type==="explodable"){tag="Explosive";desc="Blows up when shot or set off."}
-    else if(o.type==="vehicle"){tag="Vehicle";desc="Solid: you can't go inside."}
+    else if(o.type==="vehicle"){
+      tag="Vehicle";var mv=motionOf(o);
+      desc=mv?vehicleMoves(mv)+".":"Solid: you can't go inside.";
+      if(mv&&(mv.ai||mv.drives||mv.parked))rows.push(["there",whenText(mv.when,mv)]);
+      if(mv&&mv.canFire&&mv.canFire!=="0")rows.push(["fires",mv.canFire==="1"?"at the player":whenText(mv.canFire)]);
+    }
     else{
       tag=o.own?"Yours":pi&&/^(tank|apc|truck|car|helicopter|jet|locomotive|wagon|forklift|cablecar|samLauncher)$/.test(pi)?"Vehicle":"Prop";
       desc=st.pal==="solid"?"Solid: you can't go inside.":pi==="tree"||pi==="bush"?"Vegetation.":"";
@@ -6570,6 +6597,250 @@ function describe(o){
   if(!o.own&&o.qtype)rows.push(["task",o.qtype+(o.id>=0?" #"+o.id:"")]);
   if(o._orig)rows.push(["status","edited in this mission"]);
   return {tag:tag,tagClass:tagClass,desc:desc,rows:rows};
+}
+
+/* ---------------- cutscenes and moving vehicles ---------------- */
+// The level's own, as studio/extract/motion.py reads them (LEVEL.motion): its
+// intro and outro - the game's levels have no other cutscenes - played in the
+// 3D view as the game plays them, and the vehicles that move: driven by the
+// game's AI along a route on a graph of their own, on rails, or by a recorded
+// drive (control inputs, so only the game knows the way it goes). An empty map
+// keeps none of them.
+var FILMING=false;          // a cutscene plays in the 3D view: its actors are shown there
+var CUTOPEN={};             // the cutscenes whose shots are unfolded in the panel (and drawn on the map)
+var KIND_NAME={car:"Car",heli:"Helicopter",plane:"Plane",train:"Train"};
+function levelMotion(){
+  var m=MODE!=="empty"&&LEVEL&&LEVEL.motion;
+  return m&&m.vehicles?m:{vehicles:[],cutscenes:[],complete:""};
+}
+function motionOf(o){
+  if(!o||o.own||o.type!=="vehicle"||o.id==null||o.id<0)return null;
+  var k={Car:"car",Heli:"heli",Plane:"plane"}[o.qtype];
+  return levelMotion().vehicles.filter(function(v){return v.id===o.id&&v.kind===k})[0]||null;
+}
+function cutOf(id){return levelMotion().cutscenes.filter(function(c){return c.id===id})[0]||null}
+function roleName(c){return c.role==="intro"?"intro":c.role==="outro"?"outro":"cutscene"}
+// when a thing is there, in words where the expression says it plainly; the
+// level's own expression where it does not
+function whenText(w,v){
+  w=(w||"").trim();
+  if(v&&v.cutscene!=null){var c=cutOf(v.cutscene);return "in the "+(c?roleName(c):"cutscene")}
+  if(!w||w==="1"||w==="TRUE")return "from the start";
+  if(/^\(?\s*!?\s*\w+_\d+\.isExploded\s*&&\s*/.test(w)&&/AlarmControl_\d+\.isAlarm/.test(w)||/^\(?\s*AlarmControl_\d+\.isAlarm\s*(\|\|\s*this\.isRun)?\s*\)?$/.test(w))
+    return "once the alarm goes off";
+  if(/AlarmControl_\d+\.isAlarm/.test(w))return "on the alarm, and more ("+w.slice(0,70)+")";
+  if(/^!ConditionalContainer_\d+\.isRun$/.test(w))return "until the moving one takes its place";
+  return "when "+w.slice(0,90)+(w.length>90?"…":"");
+}
+function thereWhen(v){var w=whenText(v.when,v);return w==="from the start"?"there from the start":w}
+function vehicleMoves(v){
+  var k=KIND_NAME[v.kind]||"Vehicle";
+  if(v.parked)return k+" parked here: it stands until the one that drives takes its place";
+  if(v.ai)return k+" driven by the game's AI along a route of "+v.ai.nodes.length+" stop"+(v.ai.nodes.length===1?"":"s");
+  if(v.rail)return k+" on rails"+(v.carriages&&v.carriages.length?", "+v.carriages.length+" carriage"+(v.carriages.length>1?"s":""):"");
+  if(v.drives&&v.drives.length){
+    var secs=v.drives.reduce(function(a,d){return a+d.seconds},0);
+    // the drive plays with a cutscene when its Run names one of that cutscene's scenes
+    var inCut=null;
+    v.drives.forEach(function(d){var m=/CutScene_(\d+)/.exec(d.run||"");if(m)levelMotion().cutscenes.forEach(function(c){
+      if(c.scenes.some(function(sc){return sc.id===+m[1]}))inCut=c})});
+    return k+" on a recorded drive of "+Math.round(secs)+" s"+(v.drives.length>1?" in "+v.drives.length+" parts":"")+
+      (inCut&&v.cutscene==null?", played in the "+roleName(inCut):"");
+  }
+  return k+" that stands";
+}
+function moves(v){return !!(v.ai||v.rail||v.parked||(v.drives&&v.drives.length))}
+// the way a vehicle goes where the data says it: an AI route through its
+// graph's nodes, a train's track; a recorded drive has none to show
+function vehiclePath(v){
+  if(v.rail)return v.rail;
+  if(!v.ai||!GRAPHS)return null;
+  var g=GRAPHS[String(v.ai.graph)];if(!g||!g.nodes)return null;
+  var by={};g.nodes.forEach(function(n){by[n.id]=n});
+  var pts=v.x!=null?[[v.x,v.y,v.z]]:[];
+  v.ai.nodes.forEach(function(id){var n=by[id];if(n)pts.push([n.x,n.y,n.z])});
+  return pts;
+}
+// where a camera looks: forward of the game's three angles (alpha about x,
+// beta about y, gamma about z; the camera looking up at zero) - view3d.js turnOf
+function camFwd(s){
+  var a=s.a||0,b=s.b||0,g=s.g||0,ca=Math.cos(a),sa=Math.sin(a),cb=Math.cos(b),sb=Math.sin(b),cg=Math.cos(g),sg=Math.sin(g);
+  return [ca*sb*cg+sa*sg,ca*sb*sg-sa*cg,ca*cb];
+}
+function thingAt(id){
+  var o=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.id===id&&q.x!=null})[0];
+  if(o)return {x:o.x,y:o.y,z:o.z+(o.type==="soldier"||o.type==="player"?1.4:1)};
+  var v=levelMotion().vehicles.filter(function(q){return q.id===id&&q.x!=null})[0];
+  return v?{x:v.x,y:v.y,z:v.z+1}:null;
+}
+// a cutscene's cameras in the order they play, for View3D.film: each scene's
+// last one ends it (the next scene cuts to its own first camera)
+function cutShots(c){
+  var out=[];
+  c.scenes.forEach(function(sc){
+    sc.shots.forEach(function(s,i){
+      out.push(Object.assign({},s,{scene:sc.name||"",lb:sc.letterbox,end:i===sc.shots.length-1,
+        target:s.target!=null?thingAt(s.target):null}));
+    });
+  });
+  return out;
+}
+function shotStarts(shots){var t=0;return shots.map(function(s){var a=t;t+=Math.max(0,s.dur||0);return a})}
+function playCutscene(c,start){
+  if(!window.View3D){toast("The 3D view is still loading. Try again in a moment");return}
+  var shots=cutShots(c);if(!shots.length){toast("This cutscene has no cameras");return}
+  var at=shotStarts(shots),i=0;
+  for(var k=0;k<shots.length;k++)if(shots[k].dur>0&&at[k]<=(start||0))i=k;
+  // open where the first camera of the moment stands; under it, the ground
+  // must be the level's (a camera off its edge opens at the next one that is not)
+  var spot=null;
+  for(var j=i;j<shots.length&&!spot;j++)if(terrainZ(shots[j].x,shots[j].y)!=null)spot=shots[j];
+  for(j=0;j<i&&!spot;j++)if(terrainZ(shots[j].x,shots[j].y)!=null)spot=shots[j];
+  if(!spot){toast("This cutscene's cameras are off the level's ground");return}
+  FILMING=true;V3D.film=null;
+  open3dAt(spot.x,spot.y,40);
+  if(!View3D.isOpen()){FILMING=false;return}
+  View3D.film({shots:shots,start:start||0,letterbox:(c.scenes[0]&&c.scenes[0].letterbox)||0.7,
+    subtitles:(c.subtitles||[]).map(function(x){return {at:x.at,dur:x.dur,text:x.text||x.key}}),
+    note:"People and vehicles stand where the cutscene starts them: this plays the cameras, not the drives",
+    onEnd:function(){FILMING=false;V3D.film=null}});
+}
+function fmtSecs(t){t=Math.max(0,t);var m=Math.floor(t/60),s=t-m*60;return m+":"+(s<10?"0":"")+s.toFixed(0)}
+function renderCutscenes(){
+  var host=$("cutbody");if(!host||$("panel-cut").hidden)return;
+  var M=levelMotion(),h="",top=host.scrollTop;
+  if(!LEVEL){host.innerHTML="";return}
+  if(MODE==="empty"){
+    host.innerHTML='<p class="hint" style="margin:0">An empty map keeps none of the level\'s cutscenes or moving vehicles: '+
+      'the mission starts with the player standing at the start, and ends when its objectives are done.</p>';
+    return;
+  }
+  h+='<p class="hint" style="margin:0 0 8px">The level\'s own cutscenes, played in the 3D view as the game plays them, and the vehicles that move in it.</p>';
+  h+='<div class="lbl" style="margin:4px 0 6px">The level\'s cutscenes ('+M.cutscenes.length+')</div>';
+  if(!M.cutscenes.length)h+='<p class="hint">This level has none.</p>';
+  M.cutscenes.forEach(function(c,ci){
+    var key=String(c.id),open=!!CUTOPEN[key],shots=c.scenes.reduce(function(a,sc){return a+sc.shots.filter(function(x){return x.dur>0}).length},0);
+    var when=c.role==="intro"?"Plays as the mission starts"+(c.skip!=null?"; the skip key skips it":"")
+      :c.role==="outro"?"Plays once the mission is won"+(c.ends?"; the mission ends when it does":"")
+      :"Plays during the mission";
+    h+='<div class="ob cut'+(open?' open':'')+'" data-c="'+ci+'">'+
+      '<div class="ob-h" data-a="toggle"><span class="cut-role '+esc(c.role)+'">'+esc(c.role)+'</span>'+
+      '<span class="ob-k">'+esc(c.name||"Cutscene")+'</span><span class="ob-acts">'+
+      '<button class="iconbtn" data-a="play" title="Play it in the 3D view" aria-label="Play">'+CUT_IC.play+'</button>'+
+      '<span class="ev-chev" aria-hidden="true">'+EV_IC.open+'</span></span></div>'+
+      '<p class="ob-txt">'+fmtSecs(c.seconds)+' · '+c.scenes.length+' scene'+(c.scenes.length>1?'s':'')+' · '+shots+' shot'+(shots===1?'':'s')+
+      (c.subtitles&&c.subtitles.length?' · '+c.subtitles.length+' line'+(c.subtitles.length>1?'s':'')+' of subtitles':'')+'. '+when+'.</p>';
+    if(open){
+      var shotList=cutShots(c),at=shotStarts(shotList),k=0;
+      c.scenes.forEach(function(sc){
+        h+='<div class="cut-sc"><b>'+esc(sc.name||"Scene")+'</b><span>'+fmtSecs(sc.start)+' · '+sc.seconds.toFixed(1)+' s</span></div>';
+        sc.shots.forEach(function(s,i){
+          var q=shotList[k],t=at[k];k++;
+          if(!(s.dur>0))return;
+          var nx=sc.shots[i+1],how=s.smooth&&nx?"moves":"holds";
+          var bits=[how];
+          if(s.link!=null)bits.push("rides with "+thingName(s.link));
+          if(s.target!=null)bits.push("looks at "+thingName(s.target));
+          if(s.fov&&Math.abs(s.fov-1)>0.05)bits.push(s.fov<1?"zoomed in":"wide");
+          if(s.filter)bits.push(s.filter.replace("_"," ")+" filter");
+          h+='<button type="button" class="cut-shot" data-a="shot" data-t="'+t.toFixed(3)+'" title="Play from this shot">'+
+            '<span class="n">'+fmtSecs(t)+'</span><span class="t"><b>'+esc(s.name||"Shot")+'</b><i>'+s.dur.toFixed(1)+' s · '+esc(bits.join(" · "))+'</i></span></button>';
+        });
+      });
+      if(c.subtitles&&c.subtitles.length){
+        h+='<div class="cut-sc"><b>Subtitles</b><span>'+c.subtitles.length+'</span></div>';
+        c.subtitles.forEach(function(x){
+          h+='<button type="button" class="cut-shot sub" data-a="shot" data-t="'+x.at.toFixed(3)+'" title="Play from this line">'+
+            '<span class="n">'+fmtSecs(x.at)+'</span><span class="t"><i>'+esc(x.text||x.key)+'</i></span></button>';
+        });
+      }
+      if(c.when)h+='<p class="hint cut-when" title="The level\'s own condition for it">Runs while: <code>'+esc(c.when)+'</code></p>';
+    }
+    h+='</div>';
+  });
+  var mv=M.vehicles.filter(moves);
+  h+='<div class="lbl" style="margin:14px 0 6px">Vehicles that move ('+mv.length+')</div>';
+  if(!mv.length)h+='<p class="hint">None in this level.</p>';
+  mv.forEach(function(v){
+    var i=M.vehicles.indexOf(v);
+    h+='<button type="button" class="cut-veh" data-a="veh" data-v="'+i+'"><span class="t"><b>'+esc(v.name||KIND_NAME[v.kind]||"Vehicle")+'</b>'+
+      '<i>'+esc(vehicleMoves(v))+(v.parked?'':' · '+esc(thereWhen(v)))+'</i></span></button>';
+  });
+  h+='<p class="hint" style="margin:12px 0 0">With this panel open, the map shows the AI vehicles\' routes (amber) and the trains\' tracks (blue), and the cameras of an unfolded cutscene.</p>';
+  host.innerHTML=h;
+  host.scrollTop=top;
+}
+function thingName(id){
+  var vs=levelMotion().vehicles,v=vs.filter(function(q){return q.id===id})[0];
+  if(v)return v.name||"the "+(KIND_NAME[v.kind]||"vehicle").toLowerCase();
+  v=vs.filter(function(q){return (q.carriageIds||[]).indexOf(id)>=0})[0];
+  if(v)return "a carriage of "+(v.name||"the train");
+  var o=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.id===id})[0];
+  if(o){var n=o.name||o.modelName||o.qtype||"";return n?n.charAt(0)+n.slice(1).toLowerCase():"#"+id}
+  return "#"+id;
+}
+var CUT_IC={play:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7.5-4.5z" fill="currentColor" stroke="none"/></svg>'};
+function bindCutscenes(){
+  var host=$("cutbody");if(!host||host.dataset.bound)return;
+  host.dataset.bound="1";
+  host.addEventListener("click",function(e){
+    var b=e.target.closest("[data-a]");if(!b||!host.contains(b))return;
+    var M=levelMotion(),card=b.closest(".cut"),c=card?M.cutscenes[+card.getAttribute("data-c")]:null,a=b.getAttribute("data-a");
+    if(a==="toggle"&&c){var k=String(c.id);CUTOPEN[k]=!CUTOPEN[k];renderCutscenes();draw();return}
+    if(a==="play"&&c){e.stopPropagation();playCutscene(c,0);return}
+    if(a==="shot"&&c){playCutscene(c,+b.getAttribute("data-t"));return}
+    if(a==="veh"){
+      var v=M.vehicles[+b.getAttribute("data-v")];if(!v)return;
+      var o=((LEVEL&&LEVEL.objects)||[]).filter(function(q){return q.type==="vehicle"&&q.id===v.id})[0];
+      if(o&&visible(o)){sel=o;multi=[];renderSide()}
+      var pts=vehiclePath(v),x=v.x,y=v.y;
+      if(x==null&&pts&&pts.length){x=pts[Math.floor(pts.length/2)][0];y=pts[Math.floor(pts.length/2)][1]}
+      if(x!=null)jumpTo(x,y);
+      draw();
+    }
+  });
+}
+// the moving vehicles' ways and an unfolded cutscene's cameras, while the
+// panel is open; a selected vehicle's way, always
+function drawMotion(){
+  if(!LEVEL||MAPCOMP)return;
+  var M=levelMotion();if(!M.vehicles.length&&!M.cutscenes.length)return;
+  var all=PANEL==="cut",one=sel&&sel.type==="vehicle"?motionOf(sel):null;
+  if(!all&&!one)return;
+  ctx.save();ctx.lineJoin="round";ctx.lineCap="round";
+  M.vehicles.forEach(function(v){
+    if(v!==one&&(!all||(v.cutscene!=null&&!layers.cutscene)))return;
+    var pts=vehiclePath(v);if(!pts||pts.length<2)return;
+    var P=pts.map(function(q){return w2s(q[0],q[1])});
+    ctx.strokeStyle=v.rail?"rgba(120,200,255,.85)":"rgba(255,190,80,.9)";
+    ctx.lineWidth=v===one?3:2;ctx.setLineDash(v.rail?[]:[7,4]);strokePts(P);ctx.setLineDash([]);
+    if(v.ai){
+      ctx.fillStyle="rgba(255,190,80,.95)";
+      P.slice(1).forEach(function(q){ctx.beginPath();ctx.arc(q[0],q[1],3,0,6.2832);ctx.fill()});
+    }
+    // which way: an arrowhead a little along
+    var a=P[0],b=P[1],d=Math.hypot(b[0]-a[0],b[1]-a[1]);
+    if(d>18){
+      var ux=(b[0]-a[0])/d,uy=(b[1]-a[1])/d,m=[a[0]+ux*Math.min(26,d/2),a[1]+uy*Math.min(26,d/2)];
+      ctx.beginPath();ctx.moveTo(m[0]+ux*6,m[1]+uy*6);ctx.lineTo(m[0]-ux*4-uy*5,m[1]-uy*4+ux*5);ctx.lineTo(m[0]-ux*4+uy*5,m[1]-uy*4-ux*5);ctx.closePath();
+      ctx.fillStyle=ctx.strokeStyle;ctx.fill();
+    }
+  });
+  if(all)M.cutscenes.forEach(function(c){
+    if(!CUTOPEN[String(c.id)])return;
+    var shots=cutShots(c),n=0;
+    ctx.font='600 10px "IBM Plex Mono",monospace';
+    shots.forEach(function(s){
+      if(!(s.dur>0))return;n++;
+      var p=w2s(s.x,s.y),f=s.target?[s.target.x-s.x,s.target.y-s.y,s.target.z-s.z]:camFwd(s),h=Math.hypot(f[0],f[1]);
+      ctx.strokeStyle="rgba(255,226,120,.95)";ctx.fillStyle="rgba(255,226,120,.95)";ctx.lineWidth=1.5;
+      if(h>0.15){var L=22;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+f[0]/h*L,p[1]-f[1]/h*L);ctx.stroke()}
+      ctx.beginPath();ctx.arc(p[0],p[1],h>0.15?3.5:5,0,6.2832);h>0.15?ctx.fill():ctx.stroke();
+      ctx.fillStyle="rgba(10,20,12,.85)";var lb=String(n),w=ctx.measureText(lb).width;
+      ctx.fillRect(p[0]+5,p[1]-15,w+6,12);ctx.fillStyle="rgba(255,226,120,.95)";ctx.fillText(lb,p[0]+8,p[1]-6);
+    });
+  });
+  ctx.restore();
 }
 
 /* ---------------- alarm systems ---------------- */
@@ -6859,7 +7130,7 @@ function showPanel(name){
   PANEL=name;
   try{localStorage.setItem("plotter:panel",name)}catch(e){}
   [["inv","panel-inv","tab-inv"],["nav","panel-nav","tab-nav"],["obj","panel-obj","tab-obj"],
-   ["sec","panel-sec","tab-sec"],["ev","panel-ev","tab-ev"]].forEach(function(p){
+   ["sec","panel-sec","tab-sec"],["ev","panel-ev","tab-ev"],["cut","panel-cut","tab-cut"]].forEach(function(p){
     $(p[1]).hidden=name!==p[0];
     $(p[2]).setAttribute("aria-selected",String(name===p[0]));
   });
@@ -6867,6 +7138,7 @@ function showPanel(name){
   if(name==="obj")renderObjectives();
   if(name==="sec")renderSecurity();
   if(name==="ev")renderEvents();
+  if(name==="cut")renderCutscenes();
   resize();
 }
 function renderNavSection(){var b=$("navbody");if(b){var st=b.scrollTop;b.innerHTML="";fillNav(b);b.scrollTop=st}}
@@ -9314,8 +9586,32 @@ function explore3d(x,y,z,ground){
   var at={type:"spot",x:x,y:y,z:z},q=V3D.key?byKey3d(V3D.key):null;
   V3D.at=at;
   var out={objects:scene3d(at,q),nav:nav3d(at,reach3d(V3D.radius),q),splines:splines3d(at,reach3d(V3D.radius))};
+  if(FILMING){
+    // a cutscene's camera high over the level sees far: the ground that far
+    // round it (coarser the further), and the buildings on it - asked each time
+    // the camera goes somewhere, given again only when it needs more or less
+    var g=terrainZ(x,y),E=filmReach(g==null?0:z-g),F=V3D.film;
+    out.objects=out.objects.concat(farBuildings(at,reach3d(V3D.radius),E,out.objects));
+    if(!F||Math.hypot(x-F.x,y-F.y)>F.E*0.35||E>F.E*1.2||E<F.E*0.6){
+      V3D.film={x:x,y:y,E:E};
+      out.terrain=terrain3d(at,V3D.radius,E);
+    }
+    return out;
+  }
   if(ground)out.terrain=terrain3d(at,V3D.radius);
   return out;
+}
+// how far round a cutscene's camera the ground must reach, by its height over it
+function filmReach(up){return Math.max(160,Math.min(900,up*1.4+120))}
+// the buildings beyond the close-up's reach out to E metres, for a camera that sees them
+function farBuildings(at,R,E,have){
+  if(E<=R+10)return [];
+  var got={};have.forEach(function(s){got[s.key]=1});
+  var gone={};removeRefs.forEach(function(r){gone[r]=1});
+  return (LEVEL?LEVEL.objects:[]).concat(placements).filter(function(q){
+    if(q.x==null||q.type!=="building"||gone[q.ref]||(!q.own&&q.id>=0&&removals.indexOf(q.id)>=0))return false;
+    var d=Math.hypot(q.x-at.x,q.y-at.y);return d>R&&d<=E;
+  }).map(spec3d).filter(function(s){return !got[s.key]});
 }
 var WALL_ITEMS={camera:1,switch:1,siren:1,alarmlight:1};
 function key3d(o){return o.own?"own:"+o.uid:o.ref?"ref:"+o.ref:null}
@@ -9395,7 +9691,7 @@ function sceneAround(o,R,noSelf){
   }
   var gone={};removeRefs.forEach(function(r){gone[r]=1});
   (LEVEL?LEVEL.objects:[]).concat(placements).forEach(function(q){
-    if(q===o||q.x==null||q.cutscene||gone[q.ref]||q.type==="navnode"||q.type==="alarmctl")return;
+    if(q===o||q.x==null||(q.cutscene&&!FILMING)||gone[q.ref]||q.type==="navnode"||q.type==="alarmctl")return;
     if(/^colbox/i.test(q.modelName||""))return;          // invisible in the game: a collision box
     if(!q.own&&removals.indexOf(q.id)>=0&&q.id>=0)return;
     if(Math.hypot(q.x-o.x,q.y-o.y)>R+reach(q))return;
@@ -9431,13 +9727,14 @@ function gunModelOf(q){return q&&q.qtype==="StationaryGun"&&q.weapon&&window.Mes
 // the ground round it, as the map has it (with the mission's own shaping), out
 // well past the things drawn on it - twice the radius, or 40 m more - so it runs
 // into the fog rather than ending in a cliff; every other cell when that is big
-function terrain3d(o,R){
+function terrain3d(o,R,far){
   if(!TERR)return null;
-  var m=TERR.meta,E=Math.min(160,Math.max(R*2.5,R+40)),c=cellsOf(o.x-E,o.x+E,o.y-E,o.y+E);
+  var m=TERR.meta,E=far||Math.min(160,Math.max(R*2.5,R+40)),c=cellsOf(o.x-E,o.x+E,o.y-E,o.y+E);
   // past the edge of the level's ground (level 9's track runs off it) there is
   // none to give: the close-up keeps what it has instead of failing to gather
   if(c[1]-c[0]<1||c[3]-c[2]<1)return null;
-  var st=(c[1]-c[0])*(c[3]-c[2])>90000?2:1;
+  // no more than about 90 000 points: every other one, or fewer, over a wide stretch
+  var st=Math.max(1,Math.ceil(Math.sqrt((c[1]-c[0])*(c[3]-c[2])/90000)));
   var w=Math.floor((c[1]-c[0])/st)+1,h=Math.floor((c[3]-c[2])/st)+1;
   var G=TERR.ground,z=new Float32Array(w*h),shade=G?new Float32Array(w*h):null;
   var rgb=G&&G.rgb?new Float32Array(w*h*3):null,count={};
@@ -12966,6 +13263,8 @@ function bind(){
   $("tab-sec").addEventListener("click",function(){showPanel(PANEL==="sec"?"":"sec")});
   $("tab-ev").addEventListener("click",function(){showPanel(PANEL==="ev"?"":"ev")});
   $("tab-obj").addEventListener("click",function(){showPanel(PANEL==="obj"?"":"obj")});
+  $("tab-cut").addEventListener("click",function(){showPanel(PANEL==="cut"?"":"cut")});
+  bindCutscenes();
   bindLegend();
   var searchT=null;
   $("invq").addEventListener("input",function(){
