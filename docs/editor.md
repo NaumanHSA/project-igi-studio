@@ -2516,6 +2516,65 @@ them hang 12 to 18 m up). That is how guards end up standing in the sky.
   at all is given the nearest one that has a point on his floor, rather than
   whichever graph the level lists first.
 
+The game walks him there **in a straight line**, through whatever stands in
+the way. A soldier put down off his walkways - Priboi outside the electric
+fence of level 6's depot, pasted onto level 4's empty map, 35 m from the
+nearest point - walked through the fence. So a soldier of yours (or one of the
+level's you moved) whose straight way to his walkways is not clear, or is
+longer than 30 m, gets **walkways of his own**: a point where he stands and a
+line of points round what is in the way to the nearest walkway point of his
+graph he can reach (up to 120 m off). The way is found on a 1 m grid round
+the walls - every solid's collision mesh cut at five heights from knee to head
+- and every link of it then passes the build's own wall test; a square the
+test refuses is shut and the way looked for again. The check list says what
+Apply lays ("stands 35 m off his walkways, behind Electric fence: Apply lays
+11 points from where he stands round it"), the map draws it dashed while he is
+selected, and **Lay the joining points** makes them points of yours. Where no
+way can be found (inside a closed yard, in a cable car) it says so.
+
+A building **you place** on the level's walkways no longer counts the level's
+points inside its footprint as its own rooms: their links are cut like any
+others, and a point left inside it is taken out (a fuel tank on level 4's
+walkways used to keep the links 13-43-44 through it, and guards walked
+through the tank). A building of the level's that you move keeps its own.
+
+## Orders: soldiers that move with the story
+
+A soldier of yours has **Orders** in his panel, under his patrol:
+
+- **From the start**: his patrol (or he stands), or **Follows you**.
+- **Steps**, each started by one of the mission's events (Events tab: an area
+  you reach, a guard killed, a switch, an objective done, a time...): he
+  **goes to** a walkway point (walking, or **Runs**) and waits there,
+  **patrols** a route round and round, **stands**, or **follows you**. **Pick
+  where he goes** / **Pick the stops**, then click walkway points on the map
+  (Esc or Done ends). He follows the latest step whose event has happened.
+  The map draws the selected soldier's steps along his walkways, a colour and
+  a number each.
+
+This is how the game itself moves Priboi in level 10 (his AI script,
+`ai/503`): when he is idle, his script looks at the level's variables and
+picks a patrol path - guards 404, 405, 407 alive: path 602; all dead and
+`EditVariable_171` at 3: path 604; ... The game asks only an idle soldier, so
+every step's path ends with "quit" and he is asked again: a "goes to" step
+asked again runs to where he already is and stays; a patrol takes the next
+step at the end of a round.
+
+How the build does it (`plan.py`, *orders*): each step a `PatrolPath` of his
+(walk or run to each point; quit), and his script's `AIEVENT_IDLE`:
+`if (EditVariable_<step n's event>.nValue == 1) Patrol(step n) else if (...)
+... else <from the start>`. The events' latches are what the steps test.
+
+**Follows you**: IGI.exe has no follow action (its AI actions are Patrol,
+WalkToNode, RunToNode, MoveToEvent, LookAtEvent, Idle, Combat...). So the
+build lays areas 20 m across over his walkways (`AreaActivate`,
+`CRITERIA_HUMAN0`: the player), up to 80 a graph, and his idle script runs
+him to the walkway point of the area the player is in. He keeps up part by
+part along his walkways, not at your heels; past the areas he waits. **To be
+confirmed in the game**: how closely he keeps up, doors, stairs.
+
+The AI designer gives orders with `set_orders`.
+
 ## Guards reacting to gunfire
 
 Cutting links isn't enough. A guard whose AI script hands every event to

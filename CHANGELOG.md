@@ -51,6 +51,13 @@ section is also that release's notes on GitHub.
   to, and the library shows which of your missions have an intro and an
   outro. Won, a mission plays its outro, and the game goes on to the next one
   in the order the library lists them, which plays its intro.
+- **Soldiers that move with the story.** A soldier of yours has Orders: from
+  the start his patrol, standing, or following you; then steps, each started
+  by an event - he goes to a point (walking or running) and waits there,
+  patrols a route, stands, or follows you. Priboi can stay put until you reach
+  the gate, then run to the truck. The game has no follow of its own: one who
+  follows you keeps up part by part along his walkways. The AI designer gives
+  orders too.
 - **The levels' flights in your missions.** Any of the game's recorded
   flights - a helicopter landing, a plane taking off, an attack helicopter's
   round - placed where you click, turned as you like, starting when you say.
@@ -59,6 +66,14 @@ section is also that release's notes on GitHub.
 
 - Vehicles stood facing north on the map and in 3D: their heading was read
   from their speed.
+- Soldiers walked through walls and fences to their walkways when the mission
+  started: the game walks a soldier to his walkways in a straight line, and one
+  put down away from them (Priboi outside an electric fence, 35 m off) went
+  straight through. Apply now lays walkways from where he stands round what is
+  in the way.
+- A building you placed on the level's walkways kept the links through it
+  when the level's points happened to lie in its footprint (a fuel tank on
+  level 4's walkways): guards walked through it. Those links are cut now.
 - The helicopter had no rotor blades in 3D, and glass (its windscreen, the
   windows of buildings) was missing: see-through textures were cut away
   instead of drawn see-through.
