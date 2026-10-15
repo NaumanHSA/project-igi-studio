@@ -44,3 +44,4 @@ app/build-server/
 
 # The community stand-in's database on this machine (cloud/dev/server.mjs)
 cloud/dev/.data/
+cloud/dev/*.log
