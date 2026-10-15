@@ -10,7 +10,7 @@
 #
 #   s = Surface(slot_dir, objects_qsc, level_objects)
 #   s.height(x, y, near_z)   -> the surface closest to near_z (game units)
-import math, pathlib, struct
+import collections, math, pathlib, struct
 
 from studio.build.terrain import Terrain
 from studio.build import models as MI
@@ -41,6 +41,10 @@ def _ilff(buf, start=20):
             return
         yield tag, buf[off + 16:off + 16 + ln]
         off += 16 + ((ln + al - 1) // al) * al
+
+
+CELL = 16.0        # metres: the squares objects are filed under (near)
+BIG = 2.0          # metres: a solid this long or wide is a wall to a link's centre line
 
 
 def collision_mesh(mef):
@@ -186,24 +190,61 @@ class Surface:
         if self._sizes.get(o.get("model")):
             self.objects.append((o, self.radius(o)))
 
-    def blocked(self, a, b, heights=(0.5, 1.3), ignore=(), width=0.6, only=None):
+    # Which objects are near a spot: a level has a thousand and more, and the
+    # walkway search asks for the ground under thousands of squares.
+    def _index(self):
+        if getattr(self, "_grid_n", None) == (len(self.objects), len(self.nodes)):
+            return
+        grid = collections.defaultdict(list)
+        for k, (o, r) in enumerate(self.objects):
+            for i in range(int(math.floor((o["x"] - r) / CELL)), int(math.floor((o["x"] + r) / CELL)) + 1):
+                for j in range(int(math.floor((o["y"] - r) / CELL)), int(math.floor((o["y"] + r) / CELL)) + 1):
+                    grid[(i, j)].append(k)
+        nodes = collections.defaultdict(list)
+        for n in self.nodes:
+            nodes[(int(math.floor(n[0] / CELL)), int(math.floor(n[1] / CELL)))].append(n)
+        self._grid, self._grid_n, self._node_grid = grid, (len(self.objects), len(self.nodes)), nodes
+
+    def near(self, x0, y0, x1, y1):
+        """[(object, radius)] whose circle may reach the box x0..x1, y0..y1."""
+        self._index()
+        ks = set()
+        for i in range(int(math.floor(x0 / CELL)), int(math.floor(x1 / CELL)) + 1):
+            for j in range(int(math.floor(y0 / CELL)), int(math.floor(y1 / CELL)) + 1):
+                ks.update(self._grid.get((i, j), ()))
+        return [self.objects[k] for k in sorted(ks)]
+
+    def big(self, o):
+        """A wall, a fence, a building, a tank - not a chair, a crate or a pole."""
+        s = self._sizes.get(o.get("model")) or {}
+        return max(s.get("w", 0), s.get("d", 0)) >= BIG
+
+    def blocked(self, a, b, heights=(0.5, 1.3), ignore=(), width=0.6, only=None, strict=False):
         """What solid thing a guard walking from a to b (world, feet) would pass through.
 
         Tested at knee and chest height, so kerbs and low sills do not count but
         walls and fences do. Doors are not in the object list - they open. The
         walk is blocked only if the centre line and the lines `width` to either
         side all hit: shipped links often shave a building's corner or pass a
-        pole, and guards slide round those in the game. `only` tests one object,
-        listed or not. Returns the blocking object, or None when the way is clear.
+        pole, and guards slide round those in the game. `strict`: the centre line
+        alone is enough for anything big (BIG) - a guard has no body the game
+        stops, he walks the link's line, and one that clips a fence or a wall
+        walks through it (level 6's electric fence on level 4's walkways: links
+        through its end, and through the Fuel Depot's corner). `only` tests one
+        object, listed or not. Returns the blocking object, or None when the
+        way is clear.
         """
         L = math.hypot(b[0] - a[0], b[1] - a[1])
         if L < 1e-6:
             return None
         px, py = -(b[1] - a[1]) / L * width, (b[0] - a[0]) / L * width
-        pool = [(only, self.radius(only))] if only is not None else             [(o, r) for o, r in self.objects if not any(o is x for x in ignore)]
+        pool = [(only, self.radius(only))] if only is not None else             [(o, r) for o, r in self.near(min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+             if not any(o is x for x in ignore)]
         for o, r in pool:
             if not self._hit(o, r, a, b, heights):
                 continue
+            if strict and self.big(o):
+                return o
             if all(self._hit(o, r, (a[0] + k * px, a[1] + k * py, a[2]),
                              (b[0] + k * px, b[1] + k * py, b[2]), heights) for k in (1, -1)):
                 return o
@@ -241,13 +282,17 @@ class Surface:
             t = self.terrain.z(x, y)
             if t is not None:
                 out.append(("terrain", t, None))
-        for o, r in self.objects:
+        for o, r in self.near(x, y, x, y):
             if skip is not None and o.get("ref") == skip:
                 continue
             out.extend(self.tops(o, x, y, r))
-        for nx, ny, nz in self.nodes:
-            if (nx - x) ** 2 + (ny - y) ** 2 <= NODE_REACH ** 2:
-                out.append(("node", nz, None))
+        self._index()
+        ci, cj = int(math.floor(x / CELL)), int(math.floor(y / CELL))
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                for nx, ny, nz in self._node_grid.get((ci + di, cj + dj), ()):
+                    if (nx - x) ** 2 + (ny - y) ** 2 <= NODE_REACH ** 2:
+                        out.append(("node", nz, None))
         return out
 
     def tops(self, o, x, y, r=None):

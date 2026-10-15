@@ -1270,7 +1270,7 @@ if _surface is not None and SOLIDS:
             for o, label in SOLIDS:
                 if a in mine[id(o)] and c in mine[id(o)]:
                     continue
-                if _surface.blocked(pos[a], pos[c], only=o):
+                if _surface.blocked(pos[a], pos[c], only=o, strict=True):
                     cut[_key(e)] = label
                     break
         # yard nodes a building with a known floor now covers, under that floor:
@@ -1335,7 +1335,8 @@ if _surface is not None and SOLIDS:
 # and its doorways link to them.
 
 def _link_ok(a, b):
-    return _surface is None or _surface.blocked(a, b) is None
+    """A new link: nothing big its line goes through (surface.blocked, strict)."""
+    return _surface is None or _surface.blocked(a, b, strict=True) is None
 
 
 for pn in plan_nodes:
@@ -1345,8 +1346,16 @@ for pn in plan_nodes:
     try:
         g = edited_graphs[gid]
         g.grow(1)
-        nid, linked = g.add_node((pn["x"], pn["y"], pn["z"]), origin_of(gid),
-                                 float(pn.get("link", 15.0)), link_ok=_link_ok)
+        here = (pn["x"], pn["y"], pn["z"])
+        if g.near_nodes(here, origin_of(gid), float(pn.get("link", 15.0))) and not any(
+                _link_ok(here, q) for _d, _i, q in g.near_nodes(here, origin_of(gid), float(pn.get("link", 15.0)))):
+            # points near, but a wall or a fence between: in unlinked - the
+            # joining below lays a way round it (or links it as best it can)
+            nid, linked = g.add_raw_node(here, origin_of(gid)), []
+            report.append("new node %s at %.1f, %.1f: nothing within %.0f m it can link to without a wall between "
+                          "- joined below" % (pn.get("uid"), here[0], here[1], float(pn.get("link", 15.0))))
+        else:
+            nid, linked = g.add_node(here, origin_of(gid), float(pn.get("link", 15.0)), link_ok=_link_ok)
         node_ids[pn.get("uid")] = nid
         pn["_id"], pn["_linked"] = nid, linked
     except GE.GraphError as e:
@@ -1584,6 +1593,225 @@ def _ground_at(x, y, near):
     return ground_z(x, y, near)
 
 
+# ---------------------------------------------------------------- soldiers off their walkways
+# When the mission starts the game walks every soldier to his walkways (his
+# graph's nearest point) in a straight line, and goes everywhere else from
+# there: one put down away from them walks off through whatever stands
+# between. Level 4's empty map with level 6's fenced depot on it: Priboi, 35 m
+# out, walked through the electric fence. So a soldier whose straight way to
+# his walkways is not clear, or is long, gets walkways of his own: a point
+# where he stands, and a line of points round what is in the way to the
+# nearest point of his graph he can reach - found on a 1 m grid round the
+# walls (each solid's collision mesh cut at knee and chest height), every
+# link then checked with the build's own test (_link_ok).
+GUARD_REACH = 30.0                  # metres he may walk to his walkways
+GUARD_STEP = 2.5                    # the height difference a floor allows (SAME_FLOOR)
+WAY_CELL = 1.0                  # metres a grid square
+WAY_CLEAR = 0.45                # metres kept from a wall (the exact test decides after)
+WAY_MARGIN = 40.0               # metres searched round him and his walkways
+WAY_FAR = 120.0                 # metres: the furthest walkway point he is led to
+WAY_ON = 2.0                    # metres: this close to a point he is on the walkways
+_wall_cache = {}
+
+
+def _walls_of(o):
+    """A solid's walls as 2D lines (world metres): its collision mesh cut at
+    knee and chest height over its base, the heights _surface.blocked tests."""
+    m = o.get("model")
+    if m not in _wall_cache:
+        segs = []
+        for tri in _surface._solid(m) if _surface is not None else []:
+            for h in (0.5, 0.9, 1.3, 1.7, 2.1):
+                pts = []
+                for i in range(3):
+                    p, q = tri[i], tri[(i + 1) % 3]
+                    if (p[2] - h) * (q[2] - h) < 0:
+                        f = (h - p[2]) / (q[2] - p[2])
+                        pts.append((p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f))
+                if len(pts) == 2:
+                    segs.append((pts[0], pts[1]))
+        _wall_cache[m] = segs
+    g = o.get("gamma") or 0.0
+    c, s, ox, oy = math.cos(g), math.sin(g), o["x"], o["y"]
+    return [((ox + a[0] * c - a[1] * s, oy + a[0] * s + a[1] * c),
+             (ox + b[0] * c - b[1] * s, oy + b[0] * s + b[1] * c)) for a, b in _wall_cache[m]]
+
+
+_wall_world = {}                # id(object) -> its walls in world metres
+WAY_TILE = 16                   # grid squares a side of a tile of the wall grid
+WAY_STEPS = 30000               # grid squares one search may look at
+_WAY_TILES = {}                 # (ti, tj) -> bytearray: squares too near a wall
+_WAY_Z = {}                     # (i, j, floor) -> the ground there
+
+
+def _walls_world(o):
+    if id(o) not in _wall_world:
+        _wall_world[id(o)] = _walls_of(o)
+    return _wall_world[id(o)]
+
+
+def _way_shut(i, j):
+    """Is grid square (i, j) - one fixed lattice for the whole build, WAY_CELL
+    metres a square - within WAY_CLEAR of a wall? Tiles are worked out once."""
+    ti, tj = i // WAY_TILE, j // WAY_TILE
+    t = _WAY_TILES.get((ti, tj))
+    if t is None:
+        t = bytearray(WAY_TILE * WAY_TILE)
+        i0, j0, span = ti * WAY_TILE, tj * WAY_TILE, WAY_TILE * WAY_CELL
+        x0, y0 = i0 * WAY_CELL, j0 * WAY_CELL
+        R = int(math.ceil(WAY_CLEAR / WAY_CELL)) + 1
+        for o, _r in _surface.near(x0 - 2, y0 - 2, x0 + span + 2, y0 + span + 2):
+            for a, b in _walls_world(o):
+                if max(a[0], b[0]) < x0 - 2 or min(a[0], b[0]) > x0 + span + 2 or \
+                        max(a[1], b[1]) < y0 - 2 or min(a[1], b[1]) > y0 + span + 2:
+                    continue
+                n = max(1, int(math.dist(a, b) / 0.25))
+                for k in range(n + 1):
+                    px, py = a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n
+                    ci, cj = int(math.floor(px / WAY_CELL)), int(math.floor(py / WAY_CELL))
+                    for jj in range(max(j0, cj - R), min(j0 + WAY_TILE, cj + R + 1)):
+                        cy = (jj + 0.5) * WAY_CELL
+                        for ii in range(max(i0, ci - R), min(i0 + WAY_TILE, ci + R + 1)):
+                            cx = (ii + 0.5) * WAY_CELL
+                            if (cx - px) ** 2 + (cy - py) ** 2 <= WAY_CLEAR ** 2:
+                                t[(jj - j0) * WAY_TILE + ii - i0] = 1
+        _WAY_TILES[(ti, tj)] = t
+    return t[(j - tj * WAY_TILE) * WAY_TILE + (i - ti * WAY_TILE)]
+
+
+def _way_z(i, j, near):
+    k = (i, j, int(math.floor(near)))
+    if k not in _WAY_Z:
+        _WAY_Z[k] = _ground_at((i + 0.5) * WAY_CELL, (j + 0.5) * WAY_CELL, near)
+    return _WAY_Z[k]
+
+
+def _way_to_walkways(g, gid, here, pos):
+    """(new points from here on, the walkway point they end at) - here first -
+    a way round the walls to one of the graph's nearest points on his floor
+    (pos: the points it may end at), or None. The grid is a guess at the
+    walls; every stretch is then put to the build's own test, and a square
+    that fails it is shut and the way looked for again."""
+    cands = sorted((math.dist(here[:2], p[:2]), nid) for nid, p in pos.items()
+                   if abs(p[2] - here[2]) <= JOIN_FLOOR)
+    cands = [c for c in cands if c[0] <= WAY_FAR][:12]
+    if not cands or _surface is None:
+        return None
+    xs = [here[0]] + [pos[n][0] for _, n in cands]
+    ys = [here[1]] + [pos[n][1] for _, n in cands]
+    lo_i, hi_i = int(math.floor((min(xs) - WAY_MARGIN) / WAY_CELL)), int(math.floor((max(xs) + WAY_MARGIN) / WAY_CELL))
+    lo_j, hi_j = int(math.floor((min(ys) - WAY_MARGIN) / WAY_CELL)), int(math.floor((max(ys) + WAY_MARGIN) / WAY_CELL))
+    shut = set()                                # squares this search found the test refuses
+
+    def centre(i, j):
+        return (i + 0.5) * WAY_CELL, (j + 0.5) * WAY_CELL
+
+    def cell(x, y):
+        return int(math.floor(x / WAY_CELL)), int(math.floor(y / WAY_CELL))
+    goals = collections.defaultdict(list)       # squares round each point: a way ends there
+    for _d, nid in cands:                       # if the last step to the point is clear
+        gi, gj = cell(*pos[nid][:2])
+        for j in range(gj - 1, gj + 2):
+            for i in range(gi - 1, gi + 2):
+                goals[(i, j)].append(nid)
+    targets = [pos[n][:2] for _d, n in cands]
+    si, sj = cell(*here[:2])
+    z0 = _ground_at(here[0], here[1], here[2])
+    zs = {(si, sj): z0 if z0 is not None and abs(z0 - here[2]) <= 0.6 else here[2]}
+    dead = set()                                # goal squares whose last step is not clear
+
+    def search():
+        best, prev = {(si, sj): 0.0}, {}
+        heap = [(0.0, 0.0, (si, sj))]
+        steps = 0
+        while heap and steps < WAY_STEPS:
+            _f, d, (i, j) = heapq.heappop(heap)
+            if d > best.get((i, j), 1e18):
+                continue
+            steps += 1
+            if (i, j) in goals and (i, j) not in dead:
+                at = centre(i, j) + (zs[(i, j)],)
+                ok = [n for n in goals[(i, j)] if _joining_line(g, gid, at, pos[n]) is not None]
+                if ok:
+                    cells = [(i, j)]
+                    while cells[-1] != (si, sj):
+                        cells.append(prev[cells[-1]])
+                    return cells[::-1], ok[0]
+                dead.add((i, j))
+            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+                ni, nj = i + di, j + dj
+                if not (lo_i <= ni <= hi_i and lo_j <= nj <= hi_j):
+                    continue
+                if ((ni, nj) in shut or _way_shut(ni, nj)) and (ni, nj) not in goals:
+                    continue
+                if di and dj and (_way_shut(ni, j) or _way_shut(i, nj)):
+                    continue                    # no cutting a wall's corner
+                step = math.hypot(di, dj) * WAY_CELL
+                if (ni, nj) not in zs:
+                    zs[(ni, nj)] = _way_z(ni, nj, zs[(i, j)])
+                z = zs[(ni, nj)]
+                if z is None or abs(z - zs[(i, j)]) > 0.7 * step:
+                    continue
+                nd = d + step
+                if nd < best.get((ni, nj), 1e18):
+                    best[(ni, nj)], prev[(ni, nj)] = nd, (i, j)
+                    cx, cy = centre(ni, nj)
+                    h = min(math.hypot(cx - tx, cy - ty) for tx, ty in targets)
+                    heapq.heappush(heap, (nd + h, nd, (ni, nj)))
+        return None
+
+    def trim(P):
+        """(points, None), or (None, k): the stretch P[k] -> P[k+1] fails the test."""
+        out, i, n = [here], 0, len(P) - 1
+        while i < n:
+            good, fail, stride = None, None, 1
+            k = i + 1
+            while True:                         # further and further ahead...
+                line = _joining_line(g, gid, P[i], P[k])
+                if line is None:
+                    fail = k
+                    break
+                good = (k, line)
+                if k == n:
+                    break
+                stride *= 2
+                k = min(n, i + stride)
+            if good is None:
+                return None, i
+            lo = good[0]
+            hi = fail if fail is not None else lo
+            while hi - lo > 1:                  # ...then the furthest that still goes
+                mid = (lo + hi) // 2
+                line = _joining_line(g, gid, P[i], P[mid])
+                if line is None:
+                    hi = mid
+                else:
+                    lo, good = mid, (mid, line)
+            k, line = good
+            out += line + ([P[k]] if k < n else [])
+            i = k
+        return out, None
+
+    for _attempt in range(12):
+        found = search()
+        if found is None:
+            return None
+        cells, goal = found
+        P = [here] + [centre(i, j) + (zs[(i, j)],) for i, j in cells[1:]] + [pos[goal]]
+        pts, bad = trim(P)
+        if pts is not None:
+            return pts, goal
+        # the grid let through what the build's test does not: shut that square
+        if bad + 1 < len(cells):
+            shut.add(cells[bad + 1])
+            goals.pop(cells[bad + 1], None)
+        elif cells[-1] in goals:
+            dead.add(cells[-1])
+        else:
+            return None
+    return None
+
+
 def _joining_way(g, gid, a, b):
     """New points on the ground from a to b (world), every step clear of walls
     and on the walkable slope: straight, else round what is in the way by a
@@ -1633,6 +1861,136 @@ def _joining_line(g, gid, a, b):
         return None
     return pts
 
+
+# ---------------------------------------------------------------- walkways round your buildings
+# A guard who goes after the player goes by the walkways to the point nearest
+# him, and from there straight at him: a point on the far side of a wall or a
+# fence takes him through it. The levels lay their walkways round their own
+# buildings; an empty map keeps those of the buildings it took away, and a
+# copy has none where you build away from the level's. Round level 6's depot
+# pasted onto level 4's empty map, a third of the places the player could
+# stand had their nearest walkway point behind a wall or the fence (12% round
+# the depot in level 6 itself). So the open ground round the buildings you
+# place gets walkways: points on a grid, kept off the walls and out of the
+# buildings, linked to each other and to the walkways there wherever nothing
+# big is between. A point that joins nothing is left out; a group of them
+# that joins only itself is joined below, like any piece that came apart.
+FILL_STEP = 6.0                 # metres between the points
+FILL_MARGIN = 15.0              # metres round your buildings
+FILL_NEAR = 4.0                 # a walkway point this close (and in sight) serves already
+FILL_CLEAR = 0.9                # metres a point keeps from a wall
+FILL_GRAPH_MAX = 400            # points a graph may have: the levels' biggest hold 380
+FILL_LAID = {}                  # gid -> [world xyz], for the editor
+
+
+def _fill_graph(x, y, z):
+    """The graph whose walkways are nearest (x, y) on its floor, within 80 m."""
+    best = None
+    for gid in origins:
+        g = edited_graphs.get(gid) or peek_graph(gid)
+        if g is None:
+            continue
+        for n in g.nodes:
+            w = node_world(gid, n)
+            if abs(w[2] - z) <= JOIN_FLOOR:
+                d = math.dist((x, y), w[:2])
+                if d <= 80.0 and (best is None or d < best[0]):
+                    best = (d, gid)
+    return best[1] if best else None
+
+
+def _fill_walkways():
+    if _surface is None or _surface.terrain is None:
+        return
+    mine = [o for o in objects if _surface.big(o) and not o.get("cutscene") and o.get("x") is not None]
+    if not mine:
+        return
+    span = [(o["x"] - _surface.radius(o) - FILL_MARGIN, o["x"] + _surface.radius(o) + FILL_MARGIN,
+             o["y"] - _surface.radius(o) - FILL_MARGIN, o["y"] + _surface.radius(o) + FILL_MARGIN) for o in mine]
+    bucket = collections.defaultdict(list)          # 10 m squares -> the wall lines in them
+    for o, r in _surface.objects:
+        if not any(x0 - r <= o["x"] <= x1 + r and y0 - r <= o["y"] <= y1 + r for x0, x1, y0, y1 in span):
+            continue
+        for a, b in _walls_of(o):
+            for i in range(int(math.floor(min(a[0], b[0]) / 10)), int(math.floor(max(a[0], b[0]) / 10)) + 1):
+                for j in range(int(math.floor(min(a[1], b[1]) / 10)), int(math.floor(max(a[1], b[1]) / 10)) + 1):
+                    bucket[(i, j)].append((a, b))
+
+    def off_walls(x, y):
+        i, j = int(math.floor(x / 10)), int(math.floor(y / 10))
+        near = [w for di in (-1, 0, 1) for dj in (-1, 0, 1) for w in bucket.get((i + di, j + dj), ())]
+        for (ax, ay), (bx, by) in near:
+            dx, dy = bx - ax, by - ay
+            L2 = dx * dx + dy * dy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / L2))
+            if (ax + t * dx - x) ** 2 + (ay + t * dy - y) ** 2 < FILL_CLEAR ** 2:
+                return False
+        return True
+    # the grid points round each building of yours, on the ground and in the open
+    cells = {}
+    for o in mine:
+        r = _surface.radius(o) + FILL_MARGIN
+        for i in range(int(math.floor((o["x"] - r) / FILL_STEP)), int(math.ceil((o["x"] + r) / FILL_STEP)) + 1):
+            for j in range(int(math.floor((o["y"] - r) / FILL_STEP)), int(math.ceil((o["y"] + r) / FILL_STEP)) + 1):
+                cells.setdefault((i, j), o["z"])
+    by_graph = collections.defaultdict(list)
+    for (i, j), oz in sorted(cells.items()):
+        x, y = i * FILL_STEP, j * FILL_STEP
+        z = _surface.terrain.z(x, y)
+        if z is None or abs(z - oz) > 6.0:
+            continue
+        if any(inside(o, x, y, z, margin=0.3) for o, _r in _surface.objects
+               if abs(o["x"] - x) < _r + 1 and abs(o["y"] - y) < _r + 1):
+            continue
+        if not off_walls(x, y):
+            continue
+        gid = _fill_graph(x, y, z)
+        if gid is not None:
+            by_graph[gid].append((x, y, z))
+    for gid, pts in sorted(by_graph.items()):
+        g = adopt(gid) or edit_graph(gid, "walkways round your buildings")
+        if g is None:
+            continue
+        pos = {n["id"]: node_world(gid, n) for n in g.nodes}
+        # a point of the graph's close by, and in sight, serves already
+        pts = [p for p in pts if not any(math.dist(p, q) <= FILL_NEAR and _link_ok(p, q) for q in pos.values()
+                                         if abs(q[0] - p[0]) <= FILL_NEAR and abs(q[1] - p[1]) <= FILL_NEAR)]
+        room = FILL_GRAPH_MAX - len(g.nodes)
+        if room <= 0 or not pts:
+            continue
+        if len(pts) > room:                 # the ones nearest the buildings first
+            pts.sort(key=lambda p: min(math.dist(p[:2], (o["x"], o["y"])) for o in mine))
+            pts = pts[:room]
+        try:
+            g.grow(len(pts))
+        except GE.GraphError:
+            continue
+        like = g.nodes[0] if g.nodes else None
+        ids = {}
+        for p in pts:
+            ids[p] = g.add_raw_node(p, origin_of(gid), like=like)
+        reach = FILL_STEP * 1.5
+        made = 0
+        for p, nid in ids.items():
+            for q, qid in ids.items():
+                if qid > nid and math.dist(p[:2], q[:2]) <= reach and _joining_line(g, gid, p, q) is not None:
+                    g.link(nid, qid)
+            for oid, q in pos.items():
+                if math.dist(p[:2], q[:2]) <= reach and abs(q[2] - p[2]) <= JOIN_FLOOR and \
+                        _joining_line(g, gid, p, q) is not None:
+                    g.link(nid, oid)
+        linked = {x for e in g.edges for x in e[:2]}
+        for p, nid in ids.items():
+            if nid in linked:
+                made += 1
+                FILL_LAID.setdefault(gid, []).append([round(c, 3) for c in p])
+            else:
+                g.remove_node(nid)
+        if made:
+            report.append("graph %s: %d walkway point(s) laid round your buildings, %.0f m apart" % (gid, made, FILL_STEP))
+
+
+_fill_walkways()
 
 _tmpl_of = {k: t for k, _o, t, _l in INTERIORS}
 JOIN_LAID = {}                  # gid -> [world xyz] of the points laid to join pieces
@@ -1691,6 +2049,28 @@ for gid in sorted(edited_graphs):
                 laid += len(line)
                 done, pair = "line", (u, v)
                 break
+        # 2b. a way round what is in the way, found on the grid
+        if done is None:
+            for u in sorted(piece, key=lambda u: min(math.dist(pos[u][:2], pos[v][:2]) for v in main))[:3]:
+                way = _way_to_walkways(g, gid, pos[u], {v: pos[v] for v in main})
+                if not way:
+                    continue
+                line = way[0][1:]
+                try:
+                    g.grow(len(line))
+                except GE.GraphError:
+                    line = []
+                    break
+                prev = u
+                for w in line:
+                    nid = g.add_raw_node(w, origin_of(gid), like=g._node(u))
+                    pos[nid] = w
+                    g.link(prev, nid)
+                    prev = nid
+                g.link(prev, way[1])
+                laid += len(line)
+                done, pair = "line", (u, way[1])
+                break
         # 3. the shortest of the level's own links that were cut
         if done is None:
             back = sorted((math.dist(pos[e[0]], pos[e[1]]), e, lab) for e, lab in CUT_EDGES.get(gid, [])
@@ -1737,194 +2117,6 @@ for gid in sorted(edited_graphs):
         warnings.append("graph %s: a guard's walkways reach the rest only by the link %s, through "
                         "whatever stands between" % (gid, r))
     JOIN_LAID[gid] = [[round(c, 3) for c in pos[n["id"]]] for n in g.nodes if n["id"] not in first]
-
-# ---------------------------------------------------------------- soldiers off their walkways
-# When the mission starts the game walks every soldier to his walkways (his
-# graph's nearest point) in a straight line, and goes everywhere else from
-# there: one put down away from them walks off through whatever stands
-# between. Level 4's empty map with level 6's fenced depot on it: Priboi, 35 m
-# out, walked through the electric fence. So a soldier whose straight way to
-# his walkways is not clear, or is long, gets walkways of his own: a point
-# where he stands, and a line of points round what is in the way to the
-# nearest point of his graph he can reach - found on a 1 m grid round the
-# walls (each solid's collision mesh cut at knee and chest height), every
-# link then checked with the build's own test (_link_ok).
-GUARD_REACH = 30.0                  # metres he may walk to his walkways
-GUARD_STEP = 2.5                    # the height difference a floor allows (SAME_FLOOR)
-WAY_CELL = 1.0                  # metres a grid square
-WAY_CLEAR = 0.6                 # metres kept from a wall
-WAY_MARGIN = 40.0               # metres searched round him and his walkways
-WAY_FAR = 120.0                 # metres: the furthest walkway point he is led to
-WAY_ON = 2.0                    # metres: this close to a point he is on the walkways
-_wall_cache = {}
-
-
-def _walls_of(o):
-    """A solid's walls as 2D lines (world metres): its collision mesh cut at
-    knee and chest height over its base, the heights _surface.blocked tests."""
-    m = o.get("model")
-    if m not in _wall_cache:
-        segs = []
-        for tri in _surface._solid(m) if _surface is not None else []:
-            for h in (0.5, 0.9, 1.3, 1.7, 2.1):
-                pts = []
-                for i in range(3):
-                    p, q = tri[i], tri[(i + 1) % 3]
-                    if (p[2] - h) * (q[2] - h) < 0:
-                        f = (h - p[2]) / (q[2] - p[2])
-                        pts.append((p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f))
-                if len(pts) == 2:
-                    segs.append((pts[0], pts[1]))
-        _wall_cache[m] = segs
-    g = o.get("gamma") or 0.0
-    c, s, ox, oy = math.cos(g), math.sin(g), o["x"], o["y"]
-    return [((ox + a[0] * c - a[1] * s, oy + a[0] * s + a[1] * c),
-             (ox + b[0] * c - b[1] * s, oy + b[0] * s + b[1] * c)) for a, b in _wall_cache[m]]
-
-
-def _way_to_walkways(g, gid, here, pos):
-    """(new points from here on, the walkway point they end at) - here first -
-    a way round the walls to one of the graph's nearest points on his floor,
-    or None. The grid is a guess at the walls; every stretch is then put to
-    the build's own test, and a square that fails it is shut and the way
-    looked for again."""
-    cands = sorted((math.dist(here[:2], p[:2]), nid) for nid, p in pos.items()
-                   if abs(p[2] - here[2]) <= JOIN_FLOOR)
-    cands = [c for c in cands if c[0] <= WAY_FAR][:12]
-    if not cands or _surface is None:
-        return None
-    xs = [here[0]] + [pos[n][0] for _, n in cands]
-    ys = [here[1]] + [pos[n][1] for _, n in cands]
-    x0, y0 = min(xs) - WAY_MARGIN, min(ys) - WAY_MARGIN
-    W = int((max(xs) + WAY_MARGIN - x0) / WAY_CELL) + 1
-    H = int((max(ys) + WAY_MARGIN - y0) / WAY_CELL) + 1
-    blocked = bytearray(W * H)
-    R = int(math.ceil(WAY_CLEAR / WAY_CELL)) + 1
-    for o, r in _surface.objects:
-        if o["x"] + r < x0 or o["x"] - r > x0 + W * WAY_CELL or o["y"] + r < y0 or o["y"] - r > y0 + H * WAY_CELL:
-            continue
-        for a, b in _walls_of(o):
-            n = max(1, int(math.dist(a, b) / 0.25))
-            for k in range(n + 1):
-                px, py = a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n
-                ci, cj = int((px - x0) / WAY_CELL), int((py - y0) / WAY_CELL)
-                for j in range(cj - R, cj + R + 1):
-                    if 0 <= j < H:
-                        cy = y0 + (j + 0.5) * WAY_CELL
-                        for i in range(ci - R, ci + R + 1):
-                            if 0 <= i < W:
-                                cx = x0 + (i + 0.5) * WAY_CELL
-                                if (cx - px) ** 2 + (cy - py) ** 2 <= WAY_CLEAR ** 2:
-                                    blocked[j * W + i] = 1
-
-    def cell(x, y):
-        return int((x - x0) / WAY_CELL), int((y - y0) / WAY_CELL)
-
-    def centre(i, j):
-        return x0 + (i + 0.5) * WAY_CELL, y0 + (j + 0.5) * WAY_CELL
-    goals = collections.defaultdict(list)       # squares round each point: a way ends there
-    for _d, nid in cands:                       # if the last step to the point is clear
-        gi, gj = cell(*pos[nid][:2])
-        for j in range(gj - 1, gj + 2):
-            for i in range(gi - 1, gi + 2):
-                goals[(i, j)].append(nid)
-    si, sj = cell(*here[:2])
-    z0 = _ground_at(here[0], here[1], here[2])
-    zs = {(si, sj): z0 if z0 is not None and abs(z0 - here[2]) <= 0.6 else here[2]}
-    dead = set()                                # goal squares whose last step is not clear
-
-    def search():
-        best, prev = {(si, sj): 0.0}, {}
-        heap = [(0.0, 0.0, (si, sj))]
-        steps = 0
-        while heap and steps < W * H:
-            _f, d, (i, j) = heapq.heappop(heap)
-            if d > best.get((i, j), 1e18):
-                continue
-            steps += 1
-            if (i, j) in goals and (i, j) not in dead:
-                at = centre(i, j) + (zs[(i, j)],)
-                ok = [n for n in goals[(i, j)] if _joining_line(g, gid, at, pos[n]) is not None]
-                if ok:
-                    cells = [(i, j)]
-                    while cells[-1] != (si, sj):
-                        cells.append(prev[cells[-1]])
-                    return cells[::-1], ok[0]
-                dead.add((i, j))
-            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
-                ni, nj = i + di, j + dj
-                if not (0 <= ni < W and 0 <= nj < H):
-                    continue
-                if blocked[nj * W + ni] and (ni, nj) not in goals:
-                    continue
-                if di and dj and (blocked[j * W + ni] or blocked[nj * W + i]):
-                    continue                    # no cutting a wall's corner
-                step = math.hypot(di, dj) * WAY_CELL
-                if (ni, nj) not in zs:
-                    zs[(ni, nj)] = _ground_at(*centre(ni, nj), zs[(i, j)])
-                z = zs[(ni, nj)]
-                if z is None or abs(z - zs[(i, j)]) > 0.7 * step:
-                    continue
-                nd = d + step
-                if nd < best.get((ni, nj), 1e18):
-                    best[(ni, nj)], prev[(ni, nj)] = nd, (i, j)
-                    cx, cy = centre(ni, nj)
-                    h = min(math.dist((cx, cy), pos[n][:2]) for _d, n in cands)
-                    heapq.heappush(heap, (nd + h, nd, (ni, nj)))
-        return None
-
-    def trim(P):
-        """(points, None), or (None, k): the stretch P[k] -> P[k+1] fails the test."""
-        out, i, n = [here], 0, len(P) - 1
-        while i < n:
-            good, fail, stride = None, None, 1
-            k = i + 1
-            while True:                         # further and further ahead...
-                line = _joining_line(g, gid, P[i], P[k])
-                if line is None:
-                    fail = k
-                    break
-                good = (k, line)
-                if k == n:
-                    break
-                stride *= 2
-                k = min(n, i + stride)
-            if good is None:
-                return None, i
-            lo = good[0]
-            hi = fail if fail is not None else lo
-            while hi - lo > 1:                  # ...then the furthest that still goes
-                mid = (lo + hi) // 2
-                line = _joining_line(g, gid, P[i], P[mid])
-                if line is None:
-                    hi = mid
-                else:
-                    lo, good = mid, (mid, line)
-            k, line = good
-            out += line + ([P[k]] if k < n else [])
-            i = k
-        return out, None
-
-    for _attempt in range(12):
-        found = search()
-        if found is None:
-            return None
-        cells, goal = found
-        P = [here] + [centre(i, j) + (zs[(i, j)],) for i, j in cells[1:]] + [pos[goal]]
-        pts, bad = trim(P)
-        if pts is not None:
-            return pts, goal
-        # the grid let through what the build's test does not: shut that square
-        if bad + 1 < len(cells):
-            i, j = cells[bad + 1]
-            blocked[j * W + i] = 1
-            goals.pop((i, j), None)
-        elif cells[-1] in goals:
-            dead.add(cells[-1])
-        else:
-            return None
-    return None
-
 
 WAY_LAID = []                   # (who, gid, points) for the report
 for s in soldiers + EDIT_SOLDIERS:
@@ -1990,6 +2182,7 @@ try:
         "cut": {g: [[e[0], e[1]] for e, _ in es] for g, es in CUT_EDGES.items() if es},
         "gone": {g: sorted(set(ns)) for g, ns in GONE_NODES.items() if ns},
         "laid": {g: ps for g, ps in JOIN_LAID.items() if ps},
+        "fill": {g: ps for g, ps in FILL_LAID.items() if ps},
         "pieces": JOIN_PIECES}), encoding="utf-8")
 except (OSError, TypeError, ValueError):
     pass
@@ -2353,9 +2546,10 @@ def follow_code(gid, kids):
     return code
 
 
-def orders_code(s, gid, route_pid, kids):
+def orders_code(s, gid, route_pid, kids, base_code=None):
     """(the IDLE handler's code, what he does in words) for a soldier with
-    orders, or (None, None) for one without."""
+    orders, or (None, None) for one without. base_code: what his IDLE handler
+    did before (a level guard's own), kept as what he does from the start."""
     start, steps = s.get("start"), [st for st in (s.get("orders") or []) if isinstance(st, dict)]
     if start != "follow" and not steps:
         return None, None
@@ -2364,6 +2558,8 @@ def orders_code(s, gid, route_pid, kids):
         base, words = follow_code(gid, kids), ["follows you from the start"]
     elif route_pid:
         base, words = "AIAction_Patrol(%d, 0, AIACTIONFLAG_NONE);" % route_pid, ["patrols from the start"]
+    elif base_code:
+        base, words = base_code, ["does what he did from the start"]
     else:
         base, words = "AIFunction_DefaultHandler();", ["stands from the start"]
     ids, iso = graph_ids(gid)
@@ -2400,6 +2596,87 @@ def orders_code(s, gid, route_pid, kids):
             "go": "%s to point %s" % ("runs" if st.get("run") else "walks", stops[0] if stops else "?"),
             "patrol": "patrols %d point(s)" % len(stops), "stand": "stands", "follow": "follows you"}[kind]))
     return code, words
+
+
+def _block_end(text, i):
+    """Just past the brace that closes the one at text[i]."""
+    depth, j = 0, i
+    while j < len(text):
+        depth += {"{": 1, "}": -1}.get(text[j], 0)
+        j += 1
+        if depth == 0:
+            return j
+    return None
+
+
+def _with_idle(text, code):
+    """A level's AI script with its IDLE handler made `code`, the rest as it is
+    (its alarm runs, its own reactions); one with no IDLE handler gets one in
+    front of whatever it does with other events. None if its shape is unknown."""
+    m = re.search(r"AIEVENT_IDLE\s*\)\s*\{", text or "")
+    if m:
+        e = _block_end(text, m.end() - 1)
+        return text[:m.end()] + "\n" + code + "\n}" + text[e:] if e else None
+    m = re.search(r"AIEVENT_CREATE\s*\)\s*\{", text or "")
+    e = _block_end(text, m.end() - 1) if m else None
+    if not e:
+        return None
+    m2 = re.match(r"\s*else\s*\{", text[e:])
+    if not m2:
+        return None
+    o = e + m2.end() - 1                # the else block after CREATE
+    c = _block_end(text, o)
+    if not c:
+        return None
+    inner = text[o + 1:c - 1]
+    return (text[:o + 1] + "\nif(AIFunction_GetCurrentEventType() == AIEVENT_IDLE)\n{\n" + code + "\n}\nelse\n{" +
+            inner + "}\n" + text[c - 1:])
+
+
+def level_guard_orders(e, seg):
+    """A level guard's orders: his step paths under his AI task, and his own
+    script with its IDLE handler taking the steps (plan.py, orders)."""
+    am = re.search(r'Task_New\((\d+), "HumanAI", "", "[A-Z_0-9]+", (-?\d+)\)', seg)
+    who = e.get("name") or e["ref"]
+    if not am:
+        warnings.append("%s: no AI task in his layout - his orders are left out" % who)
+        return seg
+    aid, gid = int(am.group(1)), str(e.get("graph") or am.group(2))
+    cur = ai_scripts.get(aid)
+    # what he does from the start: the patrol his script walks when idle
+    idle = cur if isinstance(cur, int) else None
+    if idle is None and not (aid in ai_scripts and cur is None):
+        ip = (_by_ref.get(e["ref"]) or {}).get("idlePath")
+        if isinstance(ip, int) and re.search(r'Task_New\(%d, "PatrolPath"' % ip, seg):
+            idle = ip
+    kids = []
+    old_idle = None
+    if not (isinstance(cur, dict) and "raw" not in cur) and not (aid in ai_scripts and not isinstance(cur, dict)):
+        text0 = cur["raw"] if isinstance(cur, dict) else script_text(aid)
+        m0 = re.search(r"AIEVENT_IDLE\s*\)\s*\{", text0 or "")
+        e0 = _block_end(text0, m0.end() - 1) if m0 else None
+        if e0:
+            old_idle = text0[m0.end():e0 - 1].strip() or None
+    code, words = orders_code(dict(e, name=who), gid, idle, kids, old_idle)
+    if not code:
+        return seg
+    if kids:
+        seg = seg[:am.end()] + ", " + EOL + (", " + EOL).join(kids) + seg[am.end():]
+    if isinstance(cur, dict) and "raw" not in cur:
+        cur["idle_code"] = code
+    elif aid in ai_scripts and not isinstance(cur, dict):
+        ai_scripts[aid] = {"idle": cur, "idle_code": code,
+                           "control": alarm_control_near(e.get("x") or 0, e.get("y") or 0) if e.get("x") is not None else None}
+    else:
+        text = cur["raw"] if isinstance(cur, dict) else script_text(aid)
+        new = _with_idle(text, code)
+        if not new:
+            warnings.append("%s: his AI script has a shape this editor does not rewrite - his orders are "
+                            "left out" % who)
+            return seg
+        ai_scripts[aid] = {"raw": new}
+    reactions.append("%s: %s" % (who, "; ".join(words)))
+    return seg
 
 # ---------------------------------------------------------------- emit tasks
 def q(v):
@@ -3537,6 +3814,10 @@ for _n, _e in enumerate(EVENTS, 1):
     _arrive = [x for x in soldiers if x.get("arriveOn") == _e["uid"]]
     if _arrive:
         _did.append("sends %d guard(s)" % len(_arrive))
+    _movers = [x for x in soldiers + [e for e in EDITS if e.get("type") == "soldier"]
+               if any(isinstance(st, dict) and st.get("on") == _e["uid"] for st in x.get("orders") or [])]
+    if _movers:
+        _did.append("moves %s on" % ", ".join(x.get("name") or "a guard" for x in _movers))
     report.append("event %d (%s): when %s, %s" % (_n, _name, _cond if len(_cond) < 70 else _cond[:67] + "...",
                                                 ", ".join(_did) or "nothing else"))
 
@@ -4373,6 +4654,8 @@ for e in EDITS:
                 seg = (seg[:am.end()] + ", " + EOL + 'Task_New(%d, "PatrolPath", "", ' % pid_new + EOL
                        + patrol_commands(route, 7) + ")" + seg[am.end():])
                 ai_scripts[int(am.group(1))] = pid_new           # its script must now patrol
+        if e.get("start") == "follow" or e.get("orders"):
+            seg = level_guard_orders(e, seg)
     out_src = out_src[:s0] + seg + out_src[s1:]
     edited += 1
 
@@ -5150,7 +5433,8 @@ for _e in EDITS:
         _cur.update({"sees": _e.get("sees"), "fov": _e.get("fov")})
         ai_scripts[_aid] = _cur
     else:
-        _txt = _with_sight(script_text(_aid), _e.get("sees"), _e.get("fov"))
+        # on his script as this build has it (his orders in it), else the level's
+        _txt = _with_sight(_cur["raw"] if isinstance(_cur, dict) else script_text(_aid), _e.get("sees"), _e.get("fov"))
         if _txt is None:
             warnings.append("%s: his script has a shape this editor does not change - his sight stays as it was"
                             % (_e.get("name") or "a guard"))

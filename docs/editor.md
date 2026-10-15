@@ -2538,9 +2538,39 @@ others, and a point left inside it is taken out (a fuel tank on level 4's
 walkways used to keep the links 13-43-44 through it, and guards walked
 through the tank). A building of the level's that you move keeps its own.
 
+**A link's line, not its width.** A guard has no body the game stops: he walks
+the line of a link, and one that clips a fence's end or a building's corner
+takes him through it. The wall test used to forgive a link unless its centre
+line and lines 0.6 m to either side all hit, for the level's own links that
+shave corners; so links through level 6's electric fence and the Fuel Depot's
+corner, pasted onto level 4, stayed. Now the centre line alone is enough for
+anything big - 2 m or more long or wide: walls, fences, buildings, tanks
+(`surface.blocked(strict=True)`, `BIG`) - when the build cuts the level's links
+at your things and whenever it makes a link of its own; chairs, crates and
+poles keep the old slack. A point of yours that then reaches nothing is put in
+unlinked, and the joining that follows lays a way round (the same grid search,
+from the piece to the rest).
+
+**Walkways round your buildings.** A guard going after you goes by the
+walkways to the point nearest you, and from there straight at you: a nearest
+point on the far side of a wall or a fence takes him through it. The levels lay
+their walkways round their own buildings; an empty map keeps the walkways of
+the buildings it took away, and a copy has none where you build away from the
+level's. Round level 6's depot pasted onto level 4's empty map, 35-39% of the
+places you could stand had their nearest walkway point behind a wall or the
+fence (12% round the depot in level 6 itself). So Apply lays walkways on the
+open ground round every building of yours: points 6 m apart out to 15 m round
+it, kept 0.9 m off the walls and out of buildings, each linked to its
+neighbours and to the walkways there wherever nothing big is between, up to
+400 points a graph (the levels' biggest hold 380). On that mission: 261 points,
+and 8% of the places behind a wall. They show as small rings with the
+walkways, and the Navigation tab says how many there are (`walkways.json`
+"fill").
+
 ## Orders: soldiers that move with the story
 
-A soldier of yours has **Orders** in his panel, under his patrol:
+Every soldier has **Orders** in his panel, under his patrol - yours, and the
+level's own in a copy of a mission:
 
 - **From the start**: his patrol (or he stands), or **Follows you**.
 - **Steps**, each started by one of the mission's events (Events tab: an area
@@ -2563,7 +2593,18 @@ step at the end of a round.
 How the build does it (`plan.py`, *orders*): each step a `PatrolPath` of his
 (walk or run to each point; quit), and his script's `AIEVENT_IDLE`:
 `if (EditVariable_<step n's event>.nValue == 1) Patrol(step n) else if (...)
-... else <from the start>`. The events' latches are what the steps test.
+... else <from the start>`. The events' latches are what the steps test. A
+level guard keeps his own script - his alarm control, his alarm runs, his
+reactions - with only its `AIEVENT_IDLE` handler replaced (one is put in front
+of the rest if it has none), and what that handler did before stays what he
+does from the start (`level_guard_orders`, `_with_idle`); the step paths go
+under his `HumanAI`.
+
+**From the event's side**: an event card lists the soldiers who move on when
+it happens (click one to select him), and **Add what happens… → A soldier moves
+on** asks you to click a soldier, gives him a step on that event and lets you
+click where he goes. An event can do nothing of its own and only start
+soldiers' steps; the check list no longer calls it one that does nothing.
 
 **Follows you**: IGI.exe has no follow action (its AI actions are Patrol,
 WalkToNode, RunToNode, MoveToEvent, LookAtEvent, Idle, Combat...). So the
@@ -2573,7 +2614,8 @@ him to the walkway point of the area the player is in. He keeps up part by
 part along his walkways, not at your heels; past the areas he waits. **To be
 confirmed in the game**: how closely he keeps up, doors, stairs.
 
-The AI designer gives orders with `set_orders`.
+The AI designer gives orders with `set_orders` (yours or the level's), and
+`add_event` makes an event with no actions of its own for steps to start on.
 
 ## Guards reacting to gunfire
 
