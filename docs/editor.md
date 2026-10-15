@@ -967,24 +967,49 @@ view never ends at a cliff.
   **cuts** everything above the first ceiling, so the room is open from
   above (the slider moves the cut). **X-ray** makes other buildings
   see-through.
-- **Moving the item:** drag it. A floor item (guard, pickup, crate, desk, any
-  prop) slides over upward-facing surfaces - ground, floors, desk and crate
-  tops - with its base on them; a wall item (camera, alarm button, siren,
-  alarm light) slides along walls, turned to face out. A **building** moves
-  only with **Alt+drag**, so a plain drag inside one always looks around. **Shift+drag** lifts or
-  lowers it, **R** / **Shift+R** turns it 15° (Alt: 1°), **Ctrl+arrows**
-  nudge it 5 cm (Shift 50 cm), Ctrl+PgUp/PgDn change its height. The readout says what it stands
-  or hangs on and how far above or into it it is.
+- **One mode, as in Unreal Engine's editor** (`view3d.js`, *the mouse and
+  the keys*). With no button held the mouse is free: it names what it points
+  at, and a click selects that (the ground or the sky: nothing selected).
+  **Left-drag** looks round (the pointer locked while the button is held),
+  **right-drag** circles the selected thing - or the middle of the view when
+  nothing is - and **middle-drag** pans. While a button is held, **W A S D**
+  fly and **Q / E** go down and up; the **arrows** fly any time, **Shift**
+  three times as fast. The **wheel** sets the camera's speed, eight steps
+  from 1 to 50 m/s, shown on the bar and remembered. With no button held,
+  **W**, **E** and **Q** pick the gizmo (move, rotate, none), as Unreal's keys
+  do; **R** (scale) says why there is none.
+- **The gizmo:** the selected thing moves only by its handles, drawn over
+  everything and the same size on screen. **Move:** an arrow east (red),
+  north (green) and up (blue) moves it along that axis only, a square moves
+  it across the plane square to that axis, and the white ball drags it over
+  surfaces as before - a floor item (guard, pickup, crate, desk, any prop)
+  over upward-facing surfaces with its base on them, a wall item (camera,
+  alarm button, siren, alarm light) along walls, turned to face out; Shift
+  with the ball lifts or lowers it. **Rotate:** a ring about each axis. A
+  soldier, a pickup, a camera or a switch turns only about up - its heading;
+  a building or a prop about all three, the game's alpha, beta and gamma
+  (`tilts`). The bar has **Select / Move / Rotate / Scale**, and snapping:
+  **0.5 m** for moves (off to start) and **15°** for turns (on). While
+  dragging, the distance or the angle shows by the pointer. **End** drops it
+  onto the floor or the ground below; **Ctrl+arrows** nudge it 5 cm (Shift
+  50 cm), Ctrl+PgUp/PgDn change its height. The readout says what it stands or
+  hangs on and how far above or into it it is.
+- **No scale:** a building, a prop - any `Building` or `EditRigidObj` - is a
+  position, an orientation and a model (docs/TASK-PARAMETERS.md); the "1, 1,
+  1, 0, 0, 0" after an EditRigidObj's model is its light (Dirlight Angular and
+  Ambient Effect), not a size. So **Scale** is on the bar, greyed, and says so.
+- **Tilt:** the alpha and beta set with the rings go with the plan (`alpha`,
+  `beta` on your buildings; an edit of the level's), are drawn in 3D and are
+  written into the game: "alpha, beta, gamma" for yours (it used to be "0, 0,
+  gamma"), the first two of a level building's three angles for its edit.
 - **Placing:** with something picked in the inventory, a ghost of it follows
   the pointer over floors (or walls, for cameras and alarm parts) and a click
   puts it down right there.
 - Click another item to edit it (or, if it can't be moved, to look at it).
   Every move is an ordinary edit: undo, the change log and saving all work,
   and the map shows the result.
-- **Edit mode:** holding **Alt** frees the mouse for as long as you hold it;
-  the **Edit** button at the top does the same until you press it again (it
-  reads *Camera* while it is on, and Esc leaves it). With the mouse free,
-  click to select, drag to move.
+- **Esc** lets go of the selection; again, it closes the close-up (an item in
+  hand: puts it back; a gizmo drag: undoes it).
 - **Delete** takes the selected item away, **Ctrl+C** copies it and **Ctrl+V**
   puts a copy where the view is aimed (the crosshair, on the ground or a
   floor); **Ctrl+D** leaves a copy there too. Undo works as everywhere else.
@@ -995,7 +1020,7 @@ view never ends at a cliff.
   whatever rests on a moved crate all show in the open close-up straight
   away, from where you are looking.
 - **Every heading turns the same way:** a larger heading is further
-  anticlockwise, R turns anticlockwise, on the map and in 3D alike. A weapon
+  anticlockwise, the up ring turns anticlockwise, on the map and in 3D alike. A weapon
   lying on its side keeps its heading in the first angle (alpha), which turns
   the other way, so the build writes minus the heading there. Plans saved
   before this (2026-09-18) are converted once when they load (`ccwLying`),

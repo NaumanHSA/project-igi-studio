@@ -34,12 +34,13 @@
  *   opts.view   how to start: "orbit" (round the item), "top", "eye", "walk",
  *               "player" (behind the player start, looking the way it faces)
  *
- * Driving it, as a shooter's free camera: the mouse is the view's, held in the
- * window (pointer lock), so moving it looks around; W A S D fly, Q and E down
- * and up, Shift fast, easing in and gliding to a stop. Holding Alt lets the
- * mouse go: click to select, Alt+drag to move anything, Shift+Alt+drag to lift
- * it or lower it, Alt+right-drag to circle it. Letting go of Alt takes the view
- * back. Esc frees the mouse; Esc again closes.
+ * Driving it, as Unreal Engine's editor: one mode. The mouse is free when no
+ * button is held; a click selects (the ground or the sky: nothing). Left-drag
+ * looks round, right-drag circles the selected thing (or the middle of the
+ * view), middle-drag pans; while a button is held W A S D fly and Q E go down
+ * and up; the arrows fly any time; the wheel sets the speed. The selected
+ * thing moves only by its gizmo: W move, E rotate, Q none (R: the game has no
+ * scale). Esc lets go of the selection, again closes.
  *
  * Angles are the game's: alpha about x, then beta about y, then gamma about z
  * (a rifle lying on a desk is (heading, 1.5708, 0) - its heading is alpha). The
@@ -116,7 +117,16 @@ function css() {
 .v3d-hint[hidden]{display:none}
 .v3d-hint b{display:block;font:600 17px "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--player)}
 .v3d-hint span{font-size:12px;color:var(--muted)}
-.v3d.editing canvas{cursor:default}
+.v3d canvas{cursor:default}
+.v3d.looking canvas{cursor:none}
+.v3d-scalebtn{opacity:.5}
+.v3d-snapm.on,.v3d-snapr.on{border-color:var(--accent);color:var(--ink)}
+.v3d-speed{font:12px "IBM Plex Mono",monospace;color:var(--muted);padding:3px 8px;border:1px solid var(--line);border-radius:4px;transition:background .3s}
+.v3d-speed b{color:var(--ink)}
+.v3d-speed.flash{background:rgba(255,210,74,.25)}
+.v3d-flash{position:absolute;left:50%;top:58px;transform:translateX(-50%);background:rgba(10,20,12,.92);border:1px solid var(--line);color:var(--ink);
+  font-size:12.5px;padding:6px 12px;border-radius:5px;pointer-events:none;z-index:6}
+.v3d-flash[hidden]{display:none}
 .v3d-load{position:absolute;left:50%;bottom:22px;width:min(420px,56%);transform:translateX(-50%);pointer-events:none}
 .v3d-load[hidden]{display:none}
 .v3d-load span{display:flex;justify-content:space-between;gap:12px;font:600 10px "IBM Plex Mono",monospace;
@@ -168,7 +178,14 @@ function build(host) {
     <input type="range" class="v3d-cut" min="0" max="100" value="100"><span class="v3d-cutv">off</span></label>
   <label title="Other buildings see-through"><input type="checkbox" class="v3d-xray">X-ray</label>
   <label title="Guard walkways: the navmesh's points and links, and the selected guard's patrol in gold"><input type="checkbox" class="v3d-nav">Walkways</label>
-  <button class="btn v3d-edit" title="Edit mode\nThe mouse is free: click to select, drag to move, Delete removes, Ctrl+C and Ctrl+V copy. Click again (or Esc) to take the camera back. Holding Alt does the same for as long as you hold it">Edit</button>
+  <div class="v3d-seg" data-g="giz" role="group" aria-label="Gizmo">
+    <button class="btn" data-v="select" title="Select only (Q)\nNo gizmo: a click selects, nothing moves">Select</button>
+    <button class="btn" data-v="move" title="Move (W)\nDrag an arrow along it, a square across its plane, the ball over floors and walls">Move</button>
+    <button class="btn" data-v="rotate" title="Rotate (E)\nDrag a ring to turn it about that axis. Soldiers, pickups and cameras turn only about up">Rotate</button>
+    <button class="btn v3d-scalebtn" data-v="scale" title="Scale (R)\nThe game has no size for a building or a prop: only where it stands and how it is turned">Scale</button></div>
+  <button class="btn v3d-snapm" title="Snap moves to half a metre">0.5 m</button>
+  <button class="btn v3d-snapr" title="Snap turns to 15 degrees">15°</button>
+  <span class="v3d-speed" title="The camera's speed (the wheel changes it)">Speed <b>5</b></span>
   <button class="btn v3d-addnode" title="Add a walkway point: click a floor or the ground. It links to the walkway points on its floor within 15 m" hidden>Add walkway point</button>
   <button class="btn v3d-test" title="Test from here\nBuild the mission with the player starting where you stand, facing where you look, and start the game" hidden>Test from here</button>
   <label title="The game's own textures (off: plain colours - the level's grey-green, yours gold)"><input type="checkbox" class="v3d-tex" checked>Textures</label>
@@ -177,7 +194,8 @@ function build(host) {
 <canvas tabindex="0"></canvas>
 <canvas class="v3d-mini" hidden aria-hidden="true"></canvas>
 <div class="v3d-cross"></div>
-<div class="v3d-hint" hidden><b>Click to look around</b><span>The mouse turns the view, W A S D fly · hold Alt to edit</span></div>
+<div class="v3d-hint" hidden></div>
+<div class="v3d-flash" hidden></div>
 <div class="v3d-read"></div>
 <div class="v3d-help"><div class="v3d-help-head"><span class="v3d-help-title">Keys</span>
   <button class="v3d-help-fold" aria-expanded="true" title="Hide the keys">−</button></div><div class="v3d-help-rows"></div></div>
@@ -225,6 +243,18 @@ function build(host) {
     raf: 0, turn: 0, viewMode: "orbit", size: [0, 0], textured: true
   };
   try { s.textured = localStorage.getItem("plotter:v3dtex") !== "0"; } catch (e) { /* private window */ }
+  s.giz = gizBuild();
+  s.gizMode = "move"; s.speed = 4; s.snapMove = false; s.snapRot = true;
+  try {
+    const gm = localStorage.getItem("plotter:v3dgiz"); if (gm === "select" || gm === "move" || gm === "rotate") s.gizMode = gm;
+    const sp = localStorage.getItem("plotter:v3dspeed"); if (sp != null && isFinite(+sp)) s.speed = Math.max(0, Math.min(SPEEDS.length - 1, +sp));
+    s.snapMove = localStorage.getItem("plotter:v3dsnapm") === "1";
+    s.snapRot = localStorage.getItem("plotter:v3dsnapr") !== "0";
+  } catch (e) { /* private window */ }
+  el.querySelectorAll('[data-g="giz"] .btn').forEach(b => b.classList.toggle("on", b.dataset.v === s.gizMode));
+  el.querySelector(".v3d-snapm").classList.toggle("on", s.snapMove);
+  el.querySelector(".v3d-snapr").classList.toggle("on", s.snapRot);
+  el.querySelector(".v3d-speed").innerHTML = "Speed <b>" + (s.speed + 1) + "</b>";
   el.querySelector(".v3d-tex").checked = s.textured;
   scene.add(s.root);
   el.querySelector(".v3d-done").addEventListener("click", close);
@@ -259,7 +289,15 @@ function build(host) {
     setFolded(f);
     try { localStorage.setItem("plotter:v3dhelp", f ? "folded" : "open"); } catch (err) { /* private window */ }
   });
-  el.querySelector(".v3d-edit").addEventListener("click", () => setEditMode(!S.editMode));
+  el.querySelectorAll('[data-g="giz"] .btn').forEach(b => b.addEventListener("click", () => setGizMode(b.dataset.v)));
+  el.querySelector(".v3d-snapm").addEventListener("click", e => {
+    S.snapMove = !S.snapMove; e.currentTarget.classList.toggle("on", S.snapMove);
+    try { localStorage.setItem("plotter:v3dsnapm", S.snapMove ? "1" : "0"); } catch (err) { /* private window */ }
+  });
+  el.querySelector(".v3d-snapr").addEventListener("click", e => {
+    S.snapRot = !S.snapRot; e.currentTarget.classList.toggle("on", S.snapRot);
+    try { localStorage.setItem("plotter:v3dsnapr", S.snapRot ? "1" : "0"); } catch (err) { /* private window */ }
+  });
   el.querySelector(".v3d-addnode").addEventListener("click", () => setAddingNode(!S.addingNode));
   el.querySelector(".v3d-test").addEventListener("click", () => {
     const p = S.camera.position, o = O.origin;
@@ -278,7 +316,7 @@ function build(host) {
   canvas.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("keydown", onKey, true);
   window.addEventListener("keyup", onKeyUp, true);
-  window.addEventListener("blur", () => { held.clear(); if (S) { S.alt = false; editing(); } });
+  window.addEventListener("blur", () => { held.clear(); if (S) S.mouseHeld = false; });
   document.addEventListener("pointerlockchange", onLockChange);
   document.addEventListener("pointerlockerror", () => { if (S) hint(); });
   return s;
@@ -895,7 +933,7 @@ function sunOver(x, y, z) {
 // reach is made and what fell out of it goes, so you can fly or walk the whole
 // level from anywhere you opened it.
 function explore(now) {
-  if (!O || !O.explore || S.drag) return;
+  if (!O || !O.explore || S.drag || S.gdrag) return;
   if (now - (S.youAt || 0) > 200 && away()) { S.youAt = now; readout(); }
   if (now - (S.exploredAt || 0) < 250) return;
   const o = O.origin, p = S.camera.position, wx = p.x + o[0], wy = p.y + o[1];
@@ -973,12 +1011,6 @@ function itemCentre() {
   const m = S.target ? S.target.userData.body.children.find(c => c.isMesh) : null;
   const b = m ? new THREE.Box3().setFromObject(m) : null;
   return b && !b.isEmpty() ? b.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0, 1);
-}
-function onWheel(e) {
-  e.preventDefault();
-  if (S.walking) return;                      // a walker's feet stay on the floor
-  const step = (e.shiftKey ? 4 : 1.2) * Math.sign(e.deltaY) * -1;
-  vel.addScaledVector(dirOf(S.yaw, S.pitch), step * 4.5);
 }
 
 function setView(mode) {
@@ -1329,53 +1361,35 @@ function applyPose(p) {
   readout(p);
 }
 
-// ------------------------------------------------------------------ the mouse: looking, or editing
-// Looking, the pointer is locked to the view and the mouse turns it. Holding Alt
-// lets it go, to edit; so does an item in hand or adding walkway points, which
-// need a pointer to aim with.
+// ------------------------------------------------------------------ the mouse and the keys
+// One mode, as in Unreal Engine. With no button held the mouse is free: it
+// points (what is under it is named), and a click selects what it is on - or
+// nothing (the ground, the sky). The selected thing moves only by its gizmo
+// (W move, E rotate; Q none). Holding the left button looks round (the
+// pointer locked while it is held), the right button circles the selected
+// thing (or the middle of the view), the middle button pans; while one is held
+// W A S D fly and Q E go down and up. The arrows fly at any time. The wheel
+// sets how fast the camera flies.
 const SENS = 0.0024;            // radians of turn per pixel of mouse
-function lockable() { return !!S && !S.dead && !S.placing && !S.addingNode && !S.film; }
+const SPEEDS = [1, 2, 4, 7, 11, 18, 30, 50];       // the camera's speeds, metres a second
+function lockable() { return !!S && !S.dead && !S.film; }
 function lock() {
   if (!lockable() || S.el.hidden || document.pointerLockElement === S.canvas) return;
   try {
     const p = S.canvas.requestPointerLock();
-    if (p && p.catch) p.catch(() => hint());
-  } catch (e) { hint(); }
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) { /* the mouse is turned by its moves without it */ }
 }
 function unlock() { if (document.pointerLockElement === S.canvas) document.exitPointerLock(); }
 function onLockChange() {
   if (!S) return;
-  const was = S.locked;
   S.locked = document.pointerLockElement === S.canvas;
-  // Esc frees the mouse without closing the view (see onKey)
-  if (was && !S.locked && !S.altUnlock) S.lockLostAt = performance.now();
-  S.altUnlock = false;
+  // Esc took the pointer back in the middle of a look: the look is over
+  if (!S.locked && S.look) { S.look = null; S.down = null; S.mouseHeld = false; }
   S.el.classList.toggle("looking", S.locked);
   if (S.locked) tip(null);
-  hint();
 }
-function hint() {
-  if (!S) return;
-  S.el.querySelector(".v3d-hint").hidden = S.locked || editOn() || !!S.placing || !!S.addingNode || S.el.hidden || !!S.dead;
-}
-// editing: the mouse free to select, drag and delete - while Alt is held, or
-// for as long as the Edit button is on
-function editOn() { return !!(S && (S.alt || S.editMode)); }
-function editing() {
-  if (!S) return;
-  S.el.classList.toggle("editing", editOn());
-  const b = S.el.querySelector(".v3d-edit");
-  if (b) { b.classList.toggle("on", !!S.editMode); b.textContent = S.editMode ? "Camera" : "Edit"; }
-  hint();
-}
-// the Edit button: the mouse stays free until it is clicked again
-function setEditMode(on) {
-  if (!S || S.dead) return;
-  S.editMode = !!on;
-  S.relock = false;
-  if (S.editMode) unlock(); else if (!S.alt) lock();
-  editing();
-}
+function hint() { if (S) S.el.querySelector(".v3d-hint").hidden = true; }
 // Where the view is aimed, in game metres: what the crosshair is on (the ground,
 // a floor, anything solid), else a few metres in front of the camera. Copies are
 // pasted here.
@@ -1385,133 +1399,134 @@ function aimPoint() {
   const p = h ? h.point.clone() : S.camera.position.clone().addScaledVector(dirOf(S.yaw, S.pitch), 8);
   return { x: +(p.x + O.origin[0]).toFixed(2), y: +(p.y + O.origin[1]).toFixed(2), z: +(p.z + O.origin[2]).toFixed(2) };
 }
-// in the middle of the view, while looking: what the crosshair is on
-function centreTip() {
+// what a right-drag circles: the selected thing, else what the middle of the
+// view is on, else a point 10 m ahead
+function orbitPivot() {
+  if (selected()) return itemCentre();
   const r = S.canvas.getBoundingClientRect(), e = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
   const h = cast(e, false)[0];
-  tip(h ? h.item : null, e);
+  if (h && h.dist < 400) return h.point.clone();
+  return S.camera.position.clone().addScaledVector(dirOf(S.yaw, S.pitch), 10);
+}
+// is the target selected (a click on the ground or the sky leaves nothing selected)
+function selected() { return !!(S && O && O.target && !S.noSel && S.target); }
+function movable() { const t = O && O.target; return !!(selected() && t.editable && t.kind !== "fixed"); }
+function setSpeed(i) {
+  S.speed = Math.max(0, Math.min(SPEEDS.length - 1, i));
+  try { localStorage.setItem("plotter:v3dspeed", String(S.speed)); } catch (e) { /* private window */ }
+  const b = S.el.querySelector(".v3d-speed");
+  b.innerHTML = "Speed <b>" + (S.speed + 1) + "</b>";
+  b.title = "The camera's speed: " + SPEEDS[S.speed] + " m/s (the wheel changes it; Shift is three times as fast)";
+  b.classList.add("flash");
+  clearTimeout(S.speedFlash);
+  S.speedFlash = setTimeout(() => b.classList.remove("flash"), 900);
+}
+function onWheel(e) {
+  e.preventDefault();
+  if (S.film) return;
+  setSpeed((S.speed == null ? 4 : S.speed) + (e.deltaY < 0 ? 1 : -1));
 }
 function onDown(e) {
   S.canvas.focus();
   // a cutscene playing: a click pauses it, or plays it on, as a film's would
   if (S.film) { e.preventDefault(); if (e.button === 0) filmPlay(!S.film.playing); return; }
-  // looking: the mouse turns the view, and a click does nothing
-  if (S.locked) { e.preventDefault(); return; }
-  // not editing: a click takes the mouse back to looking
-  if (e.button === 0 && !e.altKey && !S.editMode && lockable()) { lock(); return; }
   try { S.canvas.setPointerCapture(e.pointerId); } catch (err) { /* a synthetic pointer */ }
-  const hs = cast(e, false);
-  const h = hs[0];
-  S.down = { x: e.clientX, y: e.clientY, hit: h || null, moved: false };
-  // Alt: whatever is under the pointer is taken, the item being edited or any
-  // other one (it becomes the one being edited, the view kept), and moved
-  if (e.button === 0 && (e.altKey || S.editMode) && h) {
-    if (h.item.key !== O.target.key && pickable(h.item) && O.onPick) O.onPick(h.item.key);
-    const t = O.target;
-    if (h.item.key === t.key && t.editable && t.kind !== "fixed") {
-      S.drag = { lift: e.shiftKey, y0: e.clientY, z0: t.z, pose: null };
-      return;
-    }
+  S.mouseHeld = true;
+  // the gizmo first: only a handle of it moves or turns the selected thing
+  if (e.button === 0 && !S.placing && !S.addingNode) {
+    const g = gizHit(e);
+    if (g) { gizStart(g, e); return; }
   }
-  // a walkway point where the floor is clicked (on release, if it was a click)
-  if (S.addingNode && e.button === 0) { S.look = { orbit: false, x: e.clientX, y: e.clientY, yaw: S.yaw, pitch: S.pitch,
-    pivot: itemCentre(), pos: S.camera.position.clone() }; return; }
-  // looking around (left) or circling the item (right)
-  S.look = { orbit: e.button === 2 && !S.walking, x: e.clientX, y: e.clientY, yaw: S.yaw, pitch: S.pitch,
-    pivot: itemCentre(), pos: S.camera.position.clone() };
+  const h = cast(e, false)[0];
+  S.down = { x: e.clientX, y: e.clientY, button: e.button, hit: h || null, moved: false };
+}
+function startLook(e) {
+  const d = S.down, b = d.button;
+  S.look = { orbit: b === 2 && !S.walking, pan: b === 1, pivot: b === 2 ? orbitPivot() : null };
+  if (S.look.orbit) S.look.pivot = orbitPivot();
+  tip(null);
+  lock();
 }
 function onMove(e) {
-  if (S.locked) {
-    S.yaw -= (e.movementX || 0) * SENS;
-    S.pitch -= (e.movementY || 0) * SENS;
-    applyLook();
-    centreTip();
-    return;
-  }
-  if (S.down && Math.hypot(e.clientX - S.down.x, e.clientY - S.down.y) > 4) S.down.moved = true;
+  if (S.gdrag) { gizDrag(e); return; }
+  if (S.down && !S.look && Math.hypot(e.clientX - S.down.x, e.clientY - S.down.y) > 4) { S.down.moved = true; startLook(e); }
   if (S.look) {
-    const L = S.look, dx = e.clientX - L.x, dy = e.clientY - L.y, k = 0.0042;
+    const L = S.look, dx = e.movementX || 0, dy = e.movementY || 0;
     if (L.orbit) {
-      // round the item: the camera's offset from it turned, and looking at it
-      const off = new THREE.Vector3().subVectors(L.pos, L.pivot);
-      const r = off.length(), a0 = Math.atan2(off.y, off.x), e0 = Math.asin(Math.max(-1, Math.min(1, off.z / (r || 1))));
-      const a = a0 - dx * k, el = Math.max(-1.45, Math.min(1.45, e0 + dy * k));
+      // round the pivot: the camera's offset from it turned, and looking at it
+      const off = new THREE.Vector3().subVectors(S.camera.position, L.pivot);
+      const r = off.length() || 1, a0 = Math.atan2(off.y, off.x), e0 = Math.asin(Math.max(-1, Math.min(1, off.z / r)));
+      const a = a0 - dx * 0.0062, el = Math.max(-1.45, Math.min(1.45, e0 + dy * 0.0062));
       S.camera.position.set(L.pivot.x + r * Math.cos(el) * Math.cos(a), L.pivot.y + r * Math.cos(el) * Math.sin(a), L.pivot.z + r * Math.sin(el));
       lookAt(L.pivot);
+    } else if (L.pan) {
+      // sideways and up as the view is turned, more the faster the camera is set
+      const k = 0.004 * SPEEDS[S.speed] + 0.004;
+      const right = new THREE.Vector3(Math.cos(S.yaw), Math.sin(S.yaw), 0);
+      const up = new THREE.Vector3().crossVectors(right, dirOf(S.yaw, S.pitch)).normalize();
+      S.camera.position.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
     } else {
-      S.yaw = L.yaw - dx * k;
-      S.pitch = L.pitch - dy * k;
+      S.yaw -= dx * SENS;
+      S.pitch -= dy * SENS;
       applyLook();
     }
-    tip(null);
-    return;
-  }
-  if (S.drag) {
-    const it = O.target;
-    let p;
-    if (S.drag.lift || e.shiftKey && S.drag.pose) {
-      // straight up or down: a metre per so many pixels at this distance
-      const d = S.camera.position.distanceTo(itemCentre());
-      const dz = (S.drag.y0 - e.clientY) * d / 600;
-      p = { x: it.x, y: it.y, z: S.drag.z0 + dz, rot: (it.rot || [0, 0, 0]).slice(), on: "", gamma: headOf(it, it.rot) };
-    } else {
-      const h = surfaceFor(e);
-      if (!h) return;
-      p = poseFrom(h, e);
-    }
-    S.drag.pose = p;
-    applyPose(p);
     return;
   }
   if (e.buttons) { tip(null); return; }
   if (S.placing && S.ghost) { ghostAt(e); tip(null); return; }
+  // pointing: the handle under it lit, else what it is on named
+  const g = !S.addingNode ? gizHit(e) : null;
+  gizHot(g ? g.handle : null);
+  S.canvas.style.cursor = g ? "pointer" : "";
+  if (g) { tip(null); return; }
   const h = cast(e, false)[0];
   tip(h ? h.item : null, e);
 }
 function onUp(e) {
   const d = S.down;
   S.down = null;
-  S.look = null;
+  S.mouseHeld = false;
   try { S.canvas.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
-  // Alt was let go during the drag: the view is taken back now it is done
-  if (S.relockAfterUp && !editOn()) { S.relockAfterUp = false; setTimeout(lock, 0); }
-  if (S.drag) {
-    const pose = S.drag.pose;
-    S.drag = null;
-    if (pose) commit(pose);
-    return;
-  }
-  if (e.button !== 0) return;
-  if (d && !d.moved && S.addingNode) {
+  if (S.gdrag) { gizEnd(); return; }
+  if (S.look) { S.look = null; unlock(); return; }
+  if (!d || d.moved || d.button !== 0) return;
+  if (S.addingNode) {
     const h = cast(e, false).find(q => q.normal.z > FLOOR_UP && support(q.item));
     if (h && O.onAddNode) O.onAddNode({ x: +(h.point.x + O.origin[0]).toFixed(2), y: +(h.point.y + O.origin[1]).toFixed(2),
       z: +(h.point.z + O.origin[2]).toFixed(2) });
     return;
   }
   // with an item in hand, a click puts it down
-  if (d && !d.moved && S.placing && S.ghost) {
+  if (S.placing && S.ghost) {
     const p = ghostAt(e);
     if (p && O.onPlace) O.onPlace({ x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3),
       gamma: +headOf(S.ghost.userData.item, p.rot).toFixed(5), on: p.on || "" });
     return;
   }
-  // a click on something else: that one instead (to edit, or just to look at)
-  if (d && !d.moved && d.hit && d.hit.item.key !== O.target.key && pickable(d.hit.item) && O.onPick) O.onPick(d.hit.item.key);
+  // a click selects what it is on; the ground, the sky or the level's fixtures: nothing
+  const it = d.hit && d.hit.item;
+  if (it && it.key === O.target.key) { S.noSel = false; readout(); help(); return; }
+  if (it && pickable(it) && O.onPick) { S.noSel = false; O.onPick(it.key); return; }
+  S.noSel = true;
+  readout();
+  help();
 }
 function commit(p) {
   const it = O.target;
   it.x = p.x; it.y = p.y; it.z = p.z; it.rot = p.rot;
-  // the editor's heading: the angle that carries it, less what the level added
-  if (O.onMove) O.onMove(it.key, { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3),
-    gamma: +headOf(it, p.rot).toFixed(5), on: p.on || "" });
+  // the editor's heading: the angle that carries it, less what the level added;
+  // a building or a prop also its tilt (alpha about east, beta about north)
+  const q = { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), gamma: +headOf(it, p.rot).toFixed(5), on: p.on || "" };
+  if (tilts(it)) { q.alpha = +((p.rot[0] || 0)).toFixed(5); q.beta = +((p.rot[1] || 0)).toFixed(5); }
+  if (O.onMove) O.onMove(it.key, q);
   S.miniStale = true;
   readout(p);
 }
 function turnBy(a) {
   const it = O.target;
-  if (!it.editable || it.kind === "fixed") return;
+  if (!movable()) return;
   const rot = (it.rot || [0, 0, 0]).slice();
-  rot[hi(it)] = (rot[hi(it)] || 0) + sgn(it) * a;      // R turns anticlockwise, whatever carries it
+  rot[hi(it)] = (rot[hi(it)] || 0) + sgn(it) * a;      // anticlockwise, whatever carries it
   S.turn += a;
   const p = { x: it.x, y: it.y, z: it.z, rot, on: "" };
   applyPose(p);
@@ -1519,7 +1534,7 @@ function turnBy(a) {
 }
 function nudge(dx, dy, dz) {
   const it = O.target;
-  if (!it.editable || it.kind === "fixed") return;
+  if (!movable()) return;
   // along the view: "up" is away from the camera
   const f = dirOf(S.yaw, 0);
   const r = new THREE.Vector3(f.y, -f.x, 0);
@@ -1527,11 +1542,287 @@ function nudge(dx, dy, dz) {
   applyPose(p);
   commit(p);
 }
-// Flying: arrows or W A S D move the view while held, Q and E take it down and up,
-// Shift is faster. The item itself nudges with Ctrl and the same keys.
+// End: down onto the floor or the ground under it
+function dropToFloor() {
+  const it = O.target, o = O.origin;
+  if (!movable()) return;
+  const rot = (it.rot || [0, 0, 0]).slice();
+  const h = below(new THREE.Vector3(it.x - o[0], it.y - o[1], it.z - o[2] + 0.3), 200);
+  if (!h) return;
+  const p = { x: it.x, y: it.y, z: h.point.z + o[2] - footOf(it, rot), rot, on: h.item.name };
+  applyPose(p);
+  commit(p);
+}
+
+// ------------------------------------------------------------------ the gizmo
+// As in Unreal: the selected thing moves only by its gizmo, drawn over
+// everything at the same size on screen. Move: arrows east (red), north
+// (green) and up (blue), the squares between two of them for their plane, and
+// the ball in the middle, which drags it over floors and walls under the
+// pointer as before (a wall item onto walls). Rotate: a ring about each axis;
+// a soldier, a pickup, a camera or a switch turns only about up (their
+// heading), a building or a prop about all three (the game's alpha, beta,
+// gamma). Scale the game does not have: a building or a prop is a position, an
+// orientation and a model, nothing for its size.
+const GIZ = { x: 0xe8473e, y: 0x62d26c, z: 0x4f8dff, free: 0xf4f4f4, plane: 0xffd24a, hot: 0xffe37a };
+const GIZ_PX = 120;                         // its size on screen, pixels
+function tilts(it) { return !!it && (it.type === "building" || it.type === "prop") && hi(it) === 2 && it.kind !== "wall"; }
+function gizBuild() {
+  const scene = new THREE.Scene(), g = new THREE.Group();
+  scene.add(g);
+  const parts = { move: new THREE.Group(), rotate: new THREE.Group() };
+  g.add(parts.move, parts.rotate);
+  const handles = [];
+  function mesh(geo, col, handle, group, op) {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, depthTest: false, depthWrite: false,
+      transparent: true, opacity: op || 1, side: THREE.DoubleSide }));
+    m.renderOrder = 1000;
+    m.userData = { handle, col, op: op || 1 };
+    group.add(m);
+    return m;
+  }
+  function pick(geo, handle, group) {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ visible: false }));
+    m.userData = { handle, pick: true };
+    group.add(m);
+    handles.push(m);
+    return m;
+  }
+  // the three arrows: built along +y, turned onto their axis
+  const turn = { x: [0, 0, -Math.PI / 2], y: [0, 0, 0], z: [Math.PI / 2, 0, 0] };
+  ["x", "y", "z"].forEach(a => {
+    const shaft = new THREE.CylinderGeometry(0.022, 0.022, 0.78, 10).translate(0, 0.39, 0);
+    const head = new THREE.ConeGeometry(0.075, 0.22, 16).translate(0, 0.89, 0);
+    const hit = new THREE.CylinderGeometry(0.09, 0.09, 1.0, 8).translate(0, 0.52, 0);
+    [shaft, head, hit].forEach(geo => geo.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...turn[a]))));
+    const h = { kind: "move", axis: a };
+    mesh(shaft, GIZ[a], h, parts.move); mesh(head, GIZ[a], h, parts.move); pick(hit, h, parts.move);
+  });
+  // the planes: a square between two arrows
+  [["xy", [0.29, 0.29, 0], [0, 0, 0]], ["xz", [0.29, 0, 0.29], [Math.PI / 2, 0, 0]], ["yz", [0, 0.29, 0.29], [0, Math.PI / 2, 0]]].forEach(([a, at, rot]) => {
+    const geo = new THREE.PlaneGeometry(0.24, 0.24);
+    geo.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot)));
+    geo.translate(...at);
+    const h = { kind: "move", axis: a };
+    // in the colour of the axis it is square to, as Unreal's
+    mesh(geo, GIZ["xyz".replace(a[0], "").replace(a[1], "")], h, parts.move, 0.55); pick(geo.clone(), h, parts.move);
+  });
+  // the ball: over floors and walls, as an item was dragged before
+  const ball = new THREE.SphereGeometry(0.075, 16, 12);
+  mesh(ball, GIZ.free, { kind: "move", axis: "free" }, parts.move);
+  pick(new THREE.SphereGeometry(0.12, 10, 8), { kind: "move", axis: "free" }, parts.move);
+  // the rings: about x (a ring in the y-z plane), y and z
+  const ringTurn = { x: [0, Math.PI / 2, 0], y: [Math.PI / 2, 0, 0], z: [0, 0, 0] };
+  ["x", "y", "z"].forEach(a => {
+    const geo = new THREE.TorusGeometry(0.8, 0.016, 6, 72);
+    const hit = new THREE.TorusGeometry(0.8, 0.07, 6, 48);
+    [geo, hit].forEach(q => q.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...ringTurn[a]))));
+    const h = { kind: "rotate", axis: a };
+    const m = mesh(geo, GIZ[a], h, parts.rotate);
+    m.userData.ring = a;
+    const p = pick(hit, h, parts.rotate);
+    p.userData.ring = a;
+  });
+  g.visible = false;
+  return { scene, g, parts, handles, hot: null };
+}
+function gizShown() {
+  return !!(S && S.giz && O && movable() && !S.placing && !S.film && !S.addingNode &&
+    (S.gizMode === "move" || S.gizMode === "rotate"));
+}
+// placed at the selected thing's origin, as big on screen whatever the distance
+function gizPlace() {
+  const G = S.giz;
+  if (!G) return;
+  const on = gizShown();
+  G.g.visible = on;
+  if (!on) return;
+  G.parts.move.visible = S.gizMode === "move";
+  G.parts.rotate.visible = S.gizMode === "rotate";
+  // a soldier, a pickup, a camera turns only about up
+  const full = tilts(O.target);
+  G.parts.rotate.children.forEach(c => { if (c.userData.ring && c.userData.ring !== "z") c.visible = full; });
+  G.g.position.copy(S.target.position);
+  const d = S.camera.position.distanceTo(G.g.position);
+  const h = S.canvas.clientHeight || 600;
+  G.g.scale.setScalar(Math.max(0.05, 2 * d * Math.tan(S.camera.fov * Math.PI / 360) * GIZ_PX / h));
+}
+function gizHot(handle) {
+  const G = S.giz;
+  if (!G || G.hot === handle) return;
+  G.hot = handle;
+  G.g.traverse(m => {
+    if (!m.isMesh || m.userData.pick || !m.material) return;
+    const on = handle && m.userData.handle && m.userData.handle.kind === handle.kind && m.userData.handle.axis === handle.axis;
+    m.material.color.setHex(on ? GIZ.hot : m.userData.col);
+    m.material.opacity = on ? 1 : m.userData.op;
+  });
+}
+function gizHit(e) {
+  if (!gizShown()) return null;
+  gizPlace();
+  const r = S.canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  S.ray.setFromCamera(ndc, S.camera);
+  const list = S.giz.handles.filter(m => {
+    for (let p = m; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  });
+  S.giz.g.updateMatrixWorld(true);
+  const h = S.ray.intersectObjects(list, false)[0];
+  return h ? { handle: h.object.userData.handle } : null;
+}
+const AXES = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+function rayAt(e) {
+  const r = S.canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  S.ray.setFromCamera(ndc, S.camera);
+  return S.ray.ray;
+}
+// where along the line P + t a the pointer's ray passes closest
+function axisT(ray, P, a) {
+  const w0 = new THREE.Vector3().subVectors(P, ray.origin);
+  const b = a.dot(ray.direction), d = a.dot(w0), e2 = ray.direction.dot(w0), den = 1 - b * b;
+  if (Math.abs(den) < 1e-3) return null;
+  return (b * e2 - d) / den;
+}
+function planeHit(ray, P, n) {
+  const pl = new THREE.Plane().setFromNormalAndCoplanarPoint(n, P), out = new THREE.Vector3();
+  return ray.intersectPlane(pl, out) ? out : null;
+}
+// the angle of the pointer round axis a through P, in the ring's plane
+function ringAngle(ray, P, a) {
+  if (Math.abs(ray.direction.dot(a)) < 0.06) return null;          // the ring seen edge-on
+  const h = planeHit(ray, P, a);
+  if (!h) return null;
+  const u = Math.abs(a.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+  const u1 = new THREE.Vector3().crossVectors(u, a).normalize(), u2 = new THREE.Vector3().crossVectors(a, u1);
+  const v = h.sub(P);
+  return Math.atan2(v.dot(u2), v.dot(u1));
+}
+function gizStart(g, e) {
+  const it = O.target, o = O.origin, h = g.handle;
+  const P = new THREE.Vector3(it.x - o[0], it.y - o[1], it.z - o[2]);
+  const ray = rayAt(e);
+  const D = { h, P, x0: it.x, y0: it.y, z0: it.z, rot0: (it.rot || [0, 0, 0]).slice(), pose: null, cx: e.clientX, cy: e.clientY, turned: 0 };
+  if (h.kind === "move" && AXES[h.axis]) D.t0 = axisT(ray, P, AXES[h.axis]);
+  else if (h.kind === "move" && h.axis.length === 2) {
+    D.n = AXES["xyz".replace(h.axis[0], "").replace(h.axis[1], "")];
+    D.h0 = planeHit(ray, P, D.n);
+  } else if (h.kind === "rotate") { D.a0 = ringAngle(ray, P, AXES[h.axis]); D.last = D.a0; }
+  S.gdrag = D;
+  gizHot(h);
+  tip(null);
+}
+function snapTo(v, step) { return Math.round(v / step) * step; }
+function gizDrag(e) {
+  const D = S.gdrag, it = O.target, h = D.h, ray = rayAt(e);
+  let p = null, label = "";
+  if (h.kind === "move" && h.axis === "free") {
+    // over floors and walls, as before; Shift: straight up and down
+    if (e.shiftKey) {
+      const d = S.camera.position.distanceTo(itemCentre());
+      p = { x: it.x, y: it.y, z: D.z0 + (D.cy - e.clientY) * d / 600, rot: D.rot0.slice(), on: "" };
+    } else {
+      const s = surfaceFor(e);
+      if (!s) return;
+      p = poseFrom(s, e);
+    }
+  } else if (h.kind === "move") {
+    let dx = 0, dy = 0, dz = 0;
+    if (AXES[h.axis]) {
+      const t = axisT(ray, D.P, AXES[h.axis]);
+      if (t == null || D.t0 == null) return;
+      const v = t - D.t0;
+      if (h.axis === "x") dx = v; else if (h.axis === "y") dy = v; else dz = v;
+    } else {
+      const q = planeHit(ray, D.P, D.n);
+      if (!q || !D.h0) return;
+      const v = q.sub(D.h0);
+      dx = h.axis.includes("x") ? v.x : 0; dy = h.axis.includes("y") ? v.y : 0; dz = h.axis.includes("z") ? v.z : 0;
+    }
+    // too far a pull (the ray almost along the axis) is no move at all
+    if (Math.hypot(dx, dy, dz) > 400) return;
+    let x = D.x0 + dx, y = D.y0 + dy, z = D.z0 + dz;
+    if (S.snapMove) {
+      if (dx) x = snapTo(x, SNAP_M); if (dy) y = snapTo(y, SNAP_M); if (dz) z = snapTo(z, SNAP_M);
+    }
+    p = { x, y, z, rot: D.rot0.slice(), on: "" };
+    label = (Math.hypot(x - D.x0, y - D.y0, z - D.z0)).toFixed(2) + " m";
+  } else {
+    const a = AXES[h.axis];
+    let ang = ringAngle(ray, D.P, a);
+    if (ang == null || D.last == null) {
+      // edge-on: across the screen turns it
+      D.turned = ((D.turnScreen || 0) + (e.clientX - D.cx) * 0.012);
+    } else {
+      let dd = ang - D.last;
+      while (dd > Math.PI) dd -= 2 * Math.PI;
+      while (dd < -Math.PI) dd += 2 * Math.PI;
+      D.turned += dd;
+      D.last = ang;
+      D.turnScreen = D.turned;
+      D.cx = e.clientX;
+    }
+    let t = D.turned;
+    if (S.snapRot) t = snapTo(t, SNAP_R);
+    const rot = D.rot0.slice();
+    if (tilts(it)) {
+      const q0 = new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0] || 0, rot[1] || 0, rot[2] || 0, "ZYX"));
+      const q = new THREE.Quaternion().setFromAxisAngle(a, t).multiply(q0);
+      const eu = new THREE.Euler().setFromQuaternion(q, "ZYX");
+      rot[0] = Math.abs(eu.x) < 1e-6 ? 0 : eu.x; rot[1] = Math.abs(eu.y) < 1e-6 ? 0 : eu.y; rot[2] = eu.z;
+    } else rot[hi(it)] = (rot[hi(it)] || 0) + sgn(it) * t;
+    p = { x: it.x, y: it.y, z: it.z, rot, on: "" };
+    label = (t >= 0 ? "+" : "") + Math.round(t * 180 / Math.PI) + "°";
+  }
+  D.pose = p;
+  applyPose(p);
+  if (label) gizLabel(label, e); else tip(null);
+}
+function gizLabel(text, e) {
+  const t = S.el.querySelector(".v3d-tip"), r = S.el.getBoundingClientRect();
+  t.textContent = text;
+  t.style.left = (e.clientX - r.left) + "px";
+  t.style.top = (e.clientY - r.top) + "px";
+  t.hidden = false;
+}
+function gizEnd() {
+  const D = S.gdrag;
+  S.gdrag = null;
+  gizHot(null);
+  tip(null);
+  if (D && D.pose) commit(D.pose);
+}
+function setGizMode(m) {
+  if (!S) return;
+  if (m === "scale") {
+    flash("The game has no size for a building or a prop - only where it stands and how it is turned");
+    return;
+  }
+  S.gizMode = m;
+  try { localStorage.setItem("plotter:v3dgiz", m); } catch (e) { /* private window */ }
+  S.el.querySelectorAll('[data-g="giz"] .btn').forEach(b => b.classList.toggle("on", b.dataset.v === m));
+  gizPlace();
+  help();
+}
+// a word under the toolbar for a moment
+function flash(text) {
+  const f = S.el.querySelector(".v3d-flash");
+  f.textContent = text;
+  f.hidden = false;
+  clearTimeout(S.flashT);
+  S.flashT = setTimeout(() => { f.hidden = true; }, 3200);
+}
+const SNAP_M = 0.5, SNAP_R = Math.PI / 12;   // half a metre, 15 degrees
+
+// Flying: the arrows any time, W A S D while a mouse button is held; Q and E
+// take it down and up then (PageDown, PageUp any time), Shift is faster. The
+// selected thing nudges with Ctrl and the arrows.
 const FLY = { ArrowUp: [0, 1, 0], w: [0, 1, 0], ArrowDown: [0, -1, 0], s: [0, -1, 0],
   ArrowLeft: [-1, 0, 0], a: [-1, 0, 0], ArrowRight: [1, 0, 0], d: [1, 0, 0],
   q: [0, 0, -1], PageDown: [0, 0, -1], e: [0, 0, 1], PageUp: [0, 0, 1] };
+const ANYTIME = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, PageUp: 1, PageDown: 1 };
 const held = new Set();
 let fast = false, lastT = 0;
 const vel = new THREE.Vector3();          // the free camera's speed, metres a second
@@ -1556,7 +1847,7 @@ function fly(now) {
   const want = new THREE.Vector3().addScaledVector(f, my).addScaledVector(r, mx);
   want.z += mz;
   if (want.lengthSq() > 1) want.normalize();
-  want.multiplyScalar(fast ? 32 : 11);
+  want.multiplyScalar(SPEEDS[S.speed == null ? 4 : S.speed] * (fast ? 3 : 1));
   vel.lerp(want, 1 - Math.exp(-(want.lengthSq() ? EASE_IN : GLIDE) * dt));
   if (!want.lengthSq() && vel.lengthSq() < 0.0004) { vel.set(0, 0, 0); return; }
   S.camera.position.addScaledVector(vel, dt);
@@ -1565,21 +1856,11 @@ function onKeyUp(e) {
   const k = flyKey(e.key);
   if (k) held.delete(k);
   fast = e.shiftKey;
-  if (e.key === "Alt" && S && !S.el.hidden) {
-    // the browser's own use of a lone Alt (its menu) would take the keys away
-    e.preventDefault();
-    S.alt = false;
-    if (S.relock) {
-      S.relock = false;
-      if (S.drag || S.look) S.relockAfterUp = true; else lock();
-    }
-    editing();
-  }
 }
 function onKey(e) {
   if (!S || S.el.hidden) return;
   if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && e.target.type !== "range" && e.target.type !== "checkbox") return;
-  const k = e.key, ctrl = e.ctrlKey || e.metaKey, st = e.shiftKey ? 0.5 : e.altKey ? 0.01 : 0.05;
+  const k = e.key, lk = k.length === 1 ? k.toLowerCase() : k, ctrl = e.ctrlKey || e.metaKey, st = e.shiftKey ? 0.5 : e.altKey ? 0.01 : 0.05;
   let used = true;
   if (S.film) {
     // a cutscene playing: its own keys, and nothing flies
@@ -1593,28 +1874,19 @@ function onKey(e) {
     return;
   }
   fast = e.shiftKey;
-  // Alt: the mouse is let go, to edit; letting go of Alt takes the view back
-  if (k === "Alt") {
-    e.preventDefault();
-    if (!S.alt) {
-      S.alt = true;
-      S.relock = S.locked;
-      if (S.locked) { S.altUnlock = true; unlock(); }
-      editing();
-    }
-    return;
-  }
+  const flying = S.mouseHeld || !!S.look;
   if (k === "Escape") {
-    // the Esc that freed the mouse is not the one that closes the view
-    if (document.pointerLockElement === S.canvas || performance.now() - (S.lockLostAt || 0) < 300) { e.preventDefault(); return; }
-    if (S.placing && O.onCancelPlace) O.onCancelPlace();
-    else if (S.editMode) { setEditMode(false); e.preventDefault(); }
+    if (document.pointerLockElement === S.canvas) { e.preventDefault(); return; }
+    if (S.gdrag) { const D = S.gdrag; S.gdrag = null; gizHot(null); applyPose({ x: D.x0, y: D.y0, z: D.z0, rot: D.rot0, on: "" }); }
+    else if (S.placing && O.onCancelPlace) O.onCancelPlace();
+    else if (S.addingNode) setAddingNode(false);
+    else if (selected()) { S.noSel = true; readout(); help(); }
     else close();
   }
-  else if ((k === "Delete" || k === "Backspace") && O.onRemove) O.onRemove(O.target.key);
-  else if (ctrl && (k === "c" || k === "C") && O.onCopy) O.onCopy(O.target.key);
-  else if (ctrl && (k === "v" || k === "V") && O.onPaste) O.onPaste(aimPoint());
-  else if (ctrl && (k === "d" || k === "D") && O.onDuplicate) O.onDuplicate(O.target.key, aimPoint());
+  else if ((k === "Delete" || k === "Backspace") && O.onRemove) { if (selected()) O.onRemove(O.target.key); }
+  else if (ctrl && lk === "c" && O.onCopy) { if (selected()) O.onCopy(O.target.key); }
+  else if (ctrl && lk === "v" && O.onPaste) O.onPaste(aimPoint());
+  else if (ctrl && lk === "d" && O.onDuplicate) { if (selected()) O.onDuplicate(O.target.key, aimPoint()); }
   else if (ctrl && k === "ArrowLeft") nudge(-st, 0, 0);
   else if (ctrl && k === "ArrowRight") nudge(st, 0, 0);
   else if (ctrl && k === "ArrowUp") nudge(0, st, 0);
@@ -1622,11 +1894,16 @@ function onKey(e) {
   else if (ctrl && k === "PageUp") nudge(0, 0, st);
   else if (ctrl && k === "PageDown") nudge(0, 0, -st);
   else if (ctrl) used = false;              // undo, redo and saving belong to the editor
-  else if (flyKey(k)) held.add(flyKey(k));
-  else if (k === "r" || k === "R") turnBy((e.shiftKey ? -1 : 1) * (e.altKey ? Math.PI / 180 : STEP));
-  else if (k === "t" || k === "T") setView("top");
-  else if (k === "g" || k === "G") setView(S.walking ? "orbit" : "walk");
-  else if (k === "f" || k === "F") setView("orbit");
+  else if (flyKey(k) && (flying || ANYTIME[k])) held.add(flyKey(k));
+  // no mouse button held: the gizmo's keys, as in Unreal
+  else if (lk === "q") setGizMode("select");
+  else if (lk === "w") setGizMode("move");
+  else if (lk === "e") setGizMode("rotate");
+  else if (lk === "r") setGizMode("scale");
+  else if (k === "End") dropToFloor();
+  else if (lk === "t") setView("top");
+  else if (lk === "g") setView(S.walking ? "orbit" : "walk");
+  else if (lk === "f") { if (selected()) setView("orbit"); }
   else used = false;
   if (used) { e.preventDefault(); e.stopPropagation(); }
 }
@@ -1680,22 +1957,27 @@ function help() {
       ["Drag", "look around"], ["Add walkway point", "again to stop"]]);
     return;
   }
-  const move = [["Mouse", "look around"], ["W A S D", S.walking ? "walk" : "fly"]]
-    .concat(S.walking ? [] : [["Q E", "down and up"]])
-    .concat([["Shift", "faster"], ["Esc", "free the mouse, again to close"]]);
+  const move = [["Left-drag", "look around"], ["Right-drag", selected() ? "circle round it" : "circle round the middle of the view"],
+    ["Middle-drag", "pan"], ["Hold a button + W A S D", S.walking ? "walk" : "fly"]]
+    .concat(S.walking ? [] : [["Hold a button + Q E", "down and up"]])
+    .concat([["Arrows", S.walking ? "walk" : "fly, any time"], ["Wheel", "camera speed"], ["Shift", "faster"]]);
   if (pl) {
     helpRows("Placing " + pl.label, [
       ["Click", "put it down " + (pl.kind === "wall" ? "on a wall" : "on a floor, a desk or the ground")],
-      ["Esc", "stop placing"], ["Drag", "look around"], ["W A S D", "fly"], ["Q E", "down and up"], ["Shift", "faster"]]);
+      ["Esc", "stop placing"]].concat(move));
     return;
   }
   if (S.walking) {
-    helpRows("Walking", move.concat([["Alt", "hold to edit"], ["G", "fly again, or pick another view"]]));
+    helpRows("Walking", move.concat([["G", "fly again, or pick another view"]]));
     return;
   }
-  const edit = [["Alt", "hold to edit"], ["Alt+click", "select"], ["Alt+drag", "move anything"],
-    ["Shift+Alt+drag", "up and down"], ["Alt+right-drag", "circle round it"]];
-  if (t.editable && t.kind !== "fixed") edit.push(["R", "turn 15° (Shift+R the other way)"], ["Ctrl+arrows", "nudge 5 cm"]);
+  const edit = [["Click", "select (the ground or the sky: nothing)"]];
+  if (movable()) {
+    edit.push(["W", "move: drag an arrow, a square, or the ball over floors and walls"],
+      ["E", "rotate: drag a ring" + (tilts(t) ? "" : " (about up)")], ["Q", "no gizmo"],
+      ["End", "down onto the floor"], ["Ctrl+arrows", "nudge 5 cm"], ["Delete", "remove it"]);
+  }
+  edit.push(["Esc", selected() ? "let go of it, again to close" : "close"]);
   helpRows("Keys", move.concat(edit));
 }
 
@@ -1714,7 +1996,7 @@ function youReadout() {
       (S.walking ? `${(feet - g) > 0.3 ? (feet - g).toFixed(1) + " m below you" : "under your feet"}` : `${(p.z - g).toFixed(1)} m over the ground`) : "");
 }
 function readout(p) {
-  if (!p && away()) return youReadout();
+  if (!p && (away() || !selected())) return youReadout();
   const it = O.target, el = S.el.querySelector(".v3d-read"), o = O.origin;
   p = p || it;
   // a building from its base (its foundation goes into the ground), anything else from its lowest point
@@ -1742,8 +2024,8 @@ function tip(it, e) {
   const t = S.el.querySelector(".v3d-tip");
   if (!it || it.type === "terrain") { t.hidden = true; return; }
   const r = S.el.getBoundingClientRect();
-  t.innerHTML = esc(it.name) + (it.key === O.target.key ? (O.target.editable && O.target.kind !== "fixed" ? " <i>Alt+drag to move</i>" : "") :
-    it.editable ? " <i>Alt+drag to move</i>" : pickable(it) ? " <i>Alt+click to look at it</i>" : "");
+  t.innerHTML = esc(it.name) + (it.key === O.target.key ? (movable() ? " <i>selected - drag the gizmo</i>" : selected() ? "" : " <i>click to select</i>") :
+    pickable(it) ? " <i>click to select</i>" : "");
   t.style.left = (e.clientX - r.left) + "px";
   t.style.top = (e.clientY - r.top) + "px";
   t.hidden = false;
@@ -2020,6 +2302,13 @@ function loop() {
   if (S.film) filmTick(now); else fly(now);
   explore(now);
   S.renderer.render(S.scene, S.camera);
+  gizPlace();
+  if (S.giz && S.giz.g.visible) {
+    S.renderer.autoClear = false;
+    S.renderer.clearDepth();
+    S.renderer.render(S.giz.scene, S.camera);
+    S.renderer.autoClear = true;
+  }
   minimap(now);
   S.raf = requestAnimationFrame(loop);
 }
@@ -2101,6 +2390,7 @@ function open(opts) {
   const camState = keep ? { p: S.camera.position.clone(), yaw: S.yaw, pitch: S.pitch, o: O.origin } : null;
   O = opts;
   O.origin = [opts.target.x, opts.target.y, opts.target.z];
+  if (S) S.noSel = false;              // what it was opened on (or picked) is the one selected
   if (S) { S.centre = [O.origin[0], O.origin[1]]; S.exploredAt = 0; S.cutFreed = false; }
   if (!S) { S = build(opts.host); S.centre = [O.origin[0], O.origin[1]]; }
   S.miniStale = true;                 // the mission may have changed: the corner's map is drawn again soon
@@ -2148,7 +2438,7 @@ function open(opts) {
   if (!S.raf) S.raf = requestAnimationFrame(loop);
   S.canvas.focus();
   // opened fresh (a click, so the browser allows it): the mouse is the view's
-  if (!keep) { vel.set(0, 0, 0); if (!S.alt) lock(); }
+  if (!keep) vel.set(0, 0, 0);
   hint();
 }
 function close() {
@@ -2157,9 +2447,8 @@ function close() {
   unlock();
   S.el.hidden = true;
   S.drag = null;
-  S.alt = false;
-  S.editMode = false;
-  editing();
+  S.gdrag = null;
+  S.look = null;
   const cb = O && O.onClose;
   if (cb) cb();
 }
@@ -2170,7 +2459,7 @@ function isOpen() { return !!S && !S.el.hidden && !S.dead; }
 // looks different is made again, what is gone goes.
 const LOOK = ["model", "type", "own", "solid", "lift", "cam", "name"];
 function update(opts) {
-  if (!isOpen() || !O || S.drag) return;
+  if (!isOpen() || !O || S.drag || S.gdrag) return;
   if (opts.target && opts.target.key !== O.target.key) return;
   if (opts.target) Object.assign(O.target, opts.target);
   const next = new Map((opts.objects || []).map(it => [it.key, it]));
@@ -2215,6 +2504,27 @@ function screenOf(x, y, z) {
 
 window.View3D = { open, close, isOpen, follow, update, screenOf, setPlacing, prepare, target: () => O && O.target,
   film, filmStop, filmSeek, filmPlay,
+  // for the tests: the gizmo, and where on screen a point of a handle is (move:
+  // along the arrow, 0..1; rotate: round the ring, an angle)
+  gizmo: () => S && S.giz ? { shown: gizShown(), mode: S.gizMode, selected: selected(), speed: S.speed,
+    scale: +S.giz.g.scale.x.toFixed(3), dragging: !!S.gdrag } : null,
+  gizPick: (x, y) => { const g = S && gizHit({ clientX: x, clientY: y }); return g ? g.handle.kind + ":" + g.handle.axis : null; },
+  handleAt: (kind, axis, f) => {
+    if (!gizShown()) return null;
+    gizPlace();
+    const G = S.giz, s = G.g.scale.x, P = G.g.position.clone(), v = new THREE.Vector3();
+    if (kind === "move" && axis === "free") v.set(0, 0, 0);
+    else if (kind === "move" && axis.length === 1) v.copy(AXES[axis]).multiplyScalar((f == null ? 0.6 : f) * s);
+    else if (kind === "move") { v.set(0, 0, 0); for (const c of axis) v.add(AXES[c].clone().multiplyScalar(0.29 * s)); }
+    else {
+      const a = AXES[axis], u = Math.abs(a.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+      const u1 = new THREE.Vector3().crossVectors(u, a).normalize(), u2 = new THREE.Vector3().crossVectors(a, u1);
+      const t = f || 0;
+      v.copy(u1).multiplyScalar(Math.cos(t) * 0.8 * s).addScaledVector(u2, Math.sin(t) * 0.8 * s);
+    }
+    const w = P.add(v).project(S.camera), r = S.canvas.getBoundingClientRect();
+    return [r.left + (w.x + 1) / 2 * r.width, r.top + (1 - w.y) / 2 * r.height];
+  },
   // for the tests: where a cutscene is, and the camera
   filmState: () => S && S.film ? { t: S.film.t, total: S.film.total, shot: S.film.shot, playing: S.film.playing,
     subtitle: S.el.querySelector(".v3d-film .subt").textContent, fov: S.camera.fov,

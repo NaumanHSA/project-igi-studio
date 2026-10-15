@@ -5345,7 +5345,7 @@ var edits={}, removeRefs=[];
 // (studio/build/textures.py). Name is the texture's, as the model names it.
 var MTEX=[];
 function texOwn(name){return MTEX.filter(function(x){return x.name===name})[0]||null}
-var EDIT_KEYS=["x","y","z","gamma","model","weapon","ai","team","patrol","patrolCmds","start","orders","settle","interior","cam","alarmId","exact","lock","pick","openOn","sees","fov"];
+var EDIT_KEYS=["x","y","z","gamma","alpha","beta","model","weapon","ai","team","patrol","patrolCmds","start","orders","settle","interior","cam","alarmId","exact","lock","pick","openOn","sees","fov"];
 function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v))}
 function objByRef(ref){
   if(!LEVEL||!ref)return null;
@@ -11020,6 +11020,8 @@ function rot3d(o){
     if(id==="WEAPON_ID_PROXIMITYMINE")return {rot:[1.5708,0,g],head:2,off:0};
     return {rot:[-g,1.5708,0],head:0,off:0,sign:-1};
   }
+  // a tilt set in 3D (alpha about east, beta about north) over the level's own
+  if(o.alpha!=null||o.beta!=null)return {rot:[o.alpha||0,o.beta||0,g],head:2,off:0};
   if(o.orient)return {rot:[o.orient[0],o.orient[1],g],head:2,off:0};
   return {rot:[0,0,g],head:2,off:0};
 }
@@ -11552,6 +11554,7 @@ function open3d(o,keep,view){
       lastChangeAt=0;
       var f={x:p.x,y:p.y,z:p.z,gamma:p.gamma,exact:true};
       if(WALL_ITEMS[q.type]&&q.own&&p.on)f.mount=p.on;
+      if(p.alpha!=null&&(q.type==="building"||q.type==="prop")){f.alpha=Math.abs(p.alpha)<1e-5?0:p.alpha;f.beta=Math.abs(p.beta)<1e-5?0:p.beta}
       setProp(q,f);
       if(q.type==="soldier"&&q.own)q.graph=guardGraph(q.x,q.y,q.z)||q.graph;
       renderSide();draw();
@@ -13389,6 +13392,7 @@ function planOf(){
         weapon:p.weapon||null,pickupId:p.pickupId||null,count:p.count||null,name:p.name,graph:p.graph||null,
         team:p.team!=null?p.team:undefined,
         patrol:p.patrol||[],x:p.x,y:p.y,z:p.z,gamma:p.gamma,
+        alpha:p.type==="building"&&p.alpha?p.alpha:undefined,beta:p.type==="building"&&p.beta?p.beta:undefined,
         start:p.type==="soldier"&&p.start==="follow"?"follow":undefined,
         orders:p.type==="soldier"&&p.orders&&p.orders.length?JSON.parse(JSON.stringify(p.orders)):undefined,
         interior:p.type==="building"?p.interior!==false:undefined,

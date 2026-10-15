@@ -51,6 +51,17 @@ section is also that release's notes on GitHub.
   to, and the library shows which of your missions have an intro and an
   outro. Won, a mission plays its outro, and the game goes on to the next one
   in the order the library lists them, which plays its intro.
+- **The 3D view works like Unreal Engine's editor.** One mode: the mouse is
+  free until you hold a button. Left-drag looks around, right-drag circles the
+  selected thing (or the middle of the view), middle-drag pans; holding a
+  button, W A S D fly and Q E go down and up; the arrows fly any time; the
+  wheel sets the camera's speed. A click selects; the ground or the sky
+  selects nothing. Things move only by their **gizmo**: arrows, planes and a
+  ball to move (W), rings to rotate (E), Q for none - with snapping to 0.5 m
+  and 15°, and End to drop onto the floor. A drag meant to look around never
+  moves a building again. Buildings and props now tilt on all three axes, and
+  the game gets the same angles. (The game has no scale for an object, so the
+  Scale button says so.)
 - **Soldiers that move with the story.** Every soldier - yours, or the
   level's in a copy - has Orders: from the start his patrol, standing, or
   following you; then steps, each started by an event - he goes to a point

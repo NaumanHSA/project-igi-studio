@@ -2841,8 +2841,11 @@ for o in objects:
     ob_id = take_id() if isinstance(o.get("label"), dict) and (o["label"].get("title") or "").strip() else -1
     if ob_id >= 0:
         o["_tid"] = ob_id
-    blocks.append('Task_New(%d, "EditRigidObj", "%s", %s, %s, %s, 0, 0, %s, "%s", 1, 1, 1, 0, 0, 0), %s'
+    # its tilt, set in the 3D view: alpha about east, beta about north, then the heading
+    blocks.append('Task_New(%d, "EditRigidObj", "%s", %s, %s, %s, %s, %s, %s, "%s", 1, 1, 1, 0, 0, 0), %s'
                   % (ob_id, o.get("name", "Object"), q(o["x"]), q(o["y"]), q(o["z"]),
+                     round(float(o["alpha"]), 5) if o.get("alpha") else 0,
+                     round(float(o["beta"]), 5) if o.get("beta") else 0,
                      round(o.get("gamma", 0), 5), o.get("model") or "219_01_1", EOL))
 
 # ---------------------------------------------------------------- vehicles of yours that drive
@@ -4609,6 +4612,15 @@ for e in EDITS:
         else:
             # yaw is the last number before the model - see extract_levels.py
             nums = re.sub(r"(%s)$" % NUM, repr(round(float(e["gamma"]), 6)), nums)
+    # a building's or a prop's tilt, set in the 3D view: the first two of its angles
+    if (e.get("alpha") is not None or e.get("beta") is not None) and e.get("type") in ("building", "prop") and nums:
+        vals = re.findall(NUM, nums)
+        if len(vals) == 3:
+            if e.get("alpha") is not None:
+                vals[0] = repr(round(float(e["alpha"]), 6))
+            if e.get("beta") is not None:
+                vals[1] = repr(round(float(e["beta"]), 6))
+            nums = "".join(", " + v for v in vals)
     model = e.get("model") or e.get("pickupId") or h.group(6)
     rest = seg[h.end():]
     if e.get("type") == "camera" and isinstance(e.get("cam"), dict):
