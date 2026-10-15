@@ -38,21 +38,22 @@ create table if not exists neon_auth.dev_session (token text primary key, user_i
 create table if not exists neon_auth.dev_code (email text not null, kind text not null, code text not null,
   expires_at timestamptz not null, primary key (email, kind));
 create table if not exists neon_auth.dev_verifier (verifier text primary key, token text not null, expires_at timestamptz not null);
-create table if not exists public._migrations (name text primary key, at timestamptz not null default now());
+create schema if not exists community;
+create table if not exists community._migrations (name text primary key, at timestamptz not null default now());
 `
 
 export async function openDb({ dir } = {}) {
   if (dir) fs.mkdirSync(dir, { recursive: true })
   const pg = await PGlite.create({ dataDir: dir || undefined, extensions: { pg_trgm } })
   await pg.exec(NEON)
-  const done = new Set((await pg.query('select name from public._migrations')).rows.map(r => r.name))
+  const done = new Set((await pg.query('select name from community._migrations')).rows.map(r => r.name))
   for (const f of fs.readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql')).sort()) {
     if (done.has(f)) continue
     const text = fs.readFileSync(path.join(MIGRATIONS, f), 'utf8')
     try {
       await pg.transaction(async tx => {
         await tx.exec(text)
-        await tx.query('insert into public._migrations (name) values ($1)', [f])
+        await tx.query('insert into community._migrations (name) values ($1)', [f])
       })
     } catch (e) {
       // where in the file, for whoever is writing it

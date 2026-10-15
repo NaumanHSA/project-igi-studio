@@ -656,7 +656,7 @@ begin
   select coalesce(jsonb_agg(x.card order by x.rn), '[]'::jsonb), count(*) into items, cnt from (
     select community.card(m) as card,
            row_number() over (order by
-             case when srt = 'relevance' then ts_rank(m.search, tsq) + similarity(m.name_key, qk) end desc nulls last,
+             case when srt = 'relevance' then ts_rank(m.search, tsq) + word_similarity(qk, m.name_key) end desc nulls last,
              case when srt in ('week', 'month') then
                (select coalesce(sum(v.value), 0) from community.votes v
                  where v.mission = m.id
@@ -673,7 +673,9 @@ begin
        and (aid is null or m.author = aid)
        and (rmx is null or (rmx = 'only' and jsonb_array_length(m.lineage) > 0)
                         or (rmx = 'none' and jsonb_array_length(m.lineage) = 0))
-       and (q = '' or m.search @@ tsq or m.name_key % qk or (qk <> '' and m.name_key like '%' || qk || '%'))
+       -- the words, or the name as typed (a letter missing or swapped: "radr" finds "Radar Dome Raid")
+       and (q = '' or m.search @@ tsq or word_similarity(qk, m.name_key) >= 0.5
+            or (qk <> '' and m.name_key like '%' || qk || '%'))
      order by rn
      limit lim + 1 offset off
   ) x;

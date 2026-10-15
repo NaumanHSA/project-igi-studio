@@ -3,7 +3,7 @@
 // to Neon's Data API and to Neon Auth, with a pretend Google page. For
 // development and the tests; nothing here is ever used by the real community.
 //
-//   node server.mjs [--port 8790] [--memory] [--dir <folder>] [--tools]
+//   node dev/server.mjs [--port 8790] [--memory] [--dir <folder>] [--tools]     (in cloud/, after npm install)
 //
 //   <base>/neondb/rest/v1/rpc/<fn>      the Data API: POST {"p": {...}}, Bearer JWT
 //   <base>/neondb/auth/...              Neon Auth (Better Auth): email, codes, Google, sessions

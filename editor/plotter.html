@@ -424,6 +424,196 @@ canvas{display:block}
 .mc-st{font-size:11.5px;color:var(--muted)}.mc-st.ok{color:var(--ok)}
 .mc-more{position:absolute;right:6px;bottom:8px;padding:0 8px;font-size:16px;line-height:1.3}
 .mc-from{margin:0 10px 10px;padding:3px 8px;font-size:12px}
+.mc-cm{font-size:11.5px;color:var(--player)}.mc-cm.up{color:var(--accent)}
+
+/* ---- the community (community.js): a page over the workspace, like the library ---- */
+.community{z-index:21}
+.cm-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:10px}
+.cm-title{flex:1;min-width:0}
+.cm-title h1{font-family:"Barlow Condensed",sans-serif;font-weight:600;letter-spacing:.02em;font-size:30px;margin:0 0 4px}
+.cm-title .sub{color:var(--muted);margin:0;font-size:13.5px}
+.cm-acts{display:flex;gap:8px;align-items:center;flex:none}
+.lib .cm-back{padding:6px 10px}
+.cm .btn.ghost{background:none}
+.cm .btn.danger,.sheet .btn.danger{color:var(--danger)}
+.cm .btn.danger:hover,.sheet .btn.danger:hover{border-color:var(--danger);color:var(--danger)}
+.lib .cm-me{display:flex;align-items:center;gap:7px;text-transform:none;letter-spacing:.02em;padding:4px 12px 4px 5px}
+.cm-av{width:22px;height:22px;border-radius:50%;object-fit:cover;flex:none;background:var(--sunken);border:1px solid var(--line)}
+.cm-av.sm{width:16px;height:16px}
+.cm-av.lg{width:84px;height:84px}
+.cm-av-i{display:inline-grid;place-items:center;font:600 11px "Barlow Condensed",sans-serif;color:var(--player)}
+.cm-av-i.lg{font-size:36px}
+.cm-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 14px}
+.cm-tools input[type=search]{flex:1 1 260px;min-width:200px;width:auto}
+.cm-tools select{flex:0 1 auto;width:auto;max-width:220px}
+.cm-tools .sel{flex:0 1 165px;min-width:130px}
+.cm-tools .sel-btn{padding:7px 9px;background:var(--sunken)}
+.cm-tools input,.cm-tools select,.cm-f input,.cm-f textarea,.cm-c-write textarea,.cm-c-b textarea,.cm-url{
+  background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:7px 9px;font:inherit;font-size:13.5px}
+.cm-tools input:focus,.cm-tools select:focus,.cm-f input:focus,.cm-f textarea:focus,.cm-c-write textarea:focus,.cm-c-b textarea:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cm-f textarea,.cm-c-write textarea,.cm-c-b textarea{resize:vertical;line-height:1.45}
+.cm-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.cm-grid.one{grid-template-columns:minmax(0,300px)}
+.cm-card .cm-img{aspect-ratio:16/9;background-size:cover;background-position:center}
+.cm-badges{position:absolute;right:6px;top:6px;display:flex;gap:4px}
+.cm-badge{display:inline-block;font:600 10.5px "IBM Plex Mono",monospace;padding:1px 6px;border-radius:3px;margin-left:6px;vertical-align:middle;
+  background:color-mix(in srgb,var(--surface) 85%,transparent);color:var(--player);border:1px solid var(--line);letter-spacing:0;text-transform:none}
+.cm-badges .cm-badge{margin:0}
+.cm-badge.bad{color:var(--danger)}
+.cm-sum{color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cm-by{display:flex;align-items:center;gap:6px;color:var(--faint);font-size:12px}
+.cm-stats{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:2px}
+.cm-stats .up{color:var(--player)}.cm-stats .down{color:var(--danger)}
+.cm-more{display:flex;justify-content:center;margin:16px 0 4px}
+.cm-empty{margin-top:8px}
+.cm-loading{text-align:center;margin:30px 0}
+.cm-mission{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+@media (max-width:900px){.cm-mission{grid-template-columns:1fr}}
+.cm-cover{aspect-ratio:16/9;border:1px solid var(--line);border-radius:6px;background:var(--ground) center/cover no-repeat}
+.cm-shots{display:flex;gap:6px;margin-top:6px}
+.cm-shot{all:unset;cursor:pointer;width:96px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:4px;background:var(--ground) center/cover no-repeat}
+.cm-shot.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cm-shot:focus-visible{outline:2px solid var(--accent)}
+.cm-name{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:28px;letter-spacing:.02em;margin:14px 0 2px}
+.cm-ver{font:500 13px "IBM Plex Mono",monospace;color:var(--faint)}
+.cm-summary{margin:0 0 8px;color:var(--ink);font-size:14.5px}
+.cm-byline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:12px}
+.cm-who{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-size:13px}
+.cm-who i{font-style:normal;color:var(--faint)}
+.cm-who:hover span{color:var(--player)}
+.cm-who:focus-visible{outline:2px solid var(--accent)}
+.cm-who.gone{cursor:default;color:var(--faint)}
+.cm-desc{white-space:pre-wrap;line-height:1.55;font-size:14px;color:var(--ink);margin:0 0 6px;user-select:text;-webkit-user-select:text}
+.cm-h{margin:18px 0 6px}
+.cm-h .count{font:12px "IBM Plex Mono",monospace;color:var(--faint);margin-left:6px}
+.cm-objs{margin:0;padding-left:22px;line-height:1.5}
+.cm-objs li{margin:3px 0}
+.cm-ok{display:inline-block;min-width:64px;font:600 10.5px "IBM Plex Mono",monospace;color:var(--player);text-transform:uppercase;letter-spacing:.06em;margin-right:8px}
+.cm-facts{border-collapse:collapse;font-size:13px}
+.cm-facts th{text-align:left;color:var(--faint);font-weight:500;padding:3px 16px 3px 0;vertical-align:top;white-space:nowrap}
+.cm-facts td{padding:3px 0;color:var(--ink)}
+.cm-vers{list-style:none;margin:0;padding:0}
+.cm-vers li{padding:5px 0;border-top:1px solid var(--line);font-size:13px}
+.cm-vers li:first-child{border-top:0}
+.cm-vers div{color:var(--muted);white-space:pre-wrap}
+.cm-side{display:flex;flex-direction:column;gap:12px;position:sticky;top:0}
+.cm-box{border:1px solid var(--line);border-radius:6px;background:var(--sunken);padding:12px}
+.cm-box .lbl{margin-bottom:6px}
+.cm-do .btn.primary{width:100%}
+.cm-look{display:flex;gap:6px;margin-top:8px}
+.cm-look .btn{flex:1;padding:7px 8px}
+.cm-do .hint{margin:8px 0 0}
+.cm-vote{display:flex;align-items:center;gap:10px;justify-content:center}
+.cm-vb{all:unset;cursor:pointer;width:38px;height:34px;display:grid;place-items:center;border:1px solid var(--line);border-radius:4px;color:var(--muted);font-size:15px}
+.cm-vb:hover{border-color:var(--player);color:var(--player)}
+.cm-vb.up.on{background:color-mix(in srgb,var(--player) 18%,transparent);border-color:var(--player);color:var(--player)}
+.cm-vb.down.on{background:color-mix(in srgb,var(--danger) 18%,transparent);border-color:var(--danger);color:var(--danger)}
+.cm-vb:focus-visible{outline:2px solid var(--accent)}
+.cm-score{display:flex;flex-direction:column;align-items:center;min-width:84px}
+.cm-score b{font:600 26px "Barlow Condensed",sans-serif;color:var(--ink);line-height:1}
+.cm-score i{font-style:normal;font-size:11px;color:var(--faint)}
+.cm-nums{display:flex;justify-content:space-around;gap:10px;font-size:12px;color:var(--faint)}
+.cm-nums b{color:var(--ink);font:600 16px "Barlow Condensed",sans-serif;margin-right:3px}
+.cm-line,.cm-tree{margin:0;padding-left:18px;font-size:13px;line-height:1.5}
+.cm-line li.cm-here{color:var(--player)}
+.cm-tree .cm-tree{padding-left:14px}
+.cm-link{all:unset;cursor:pointer;color:var(--player);text-decoration:underline;text-underline-offset:2px;text-decoration-color:color-mix(in srgb,var(--player) 40%,transparent)}
+.cm-link:hover{color:var(--accent)}
+.cm-link:focus-visible{outline:2px solid var(--accent)}
+.cm-own{display:flex;flex-direction:column;gap:6px}
+.cm-own .hint{margin:4px 0 0}
+.cm-report{align-self:flex-start;font-size:12px!important;padding:4px 10px!important}
+.cm-c{border-top:1px solid var(--line);padding:10px 0}
+.cm-c.reply{border-top:0;padding:8px 0 0 0}
+.cm-c-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12px}
+.cm-c-acts{margin-left:auto;display:flex;gap:10px;font-size:12px}
+.cm-c-b{white-space:pre-wrap;margin:5px 0 0 29px;font-size:13.5px;line-height:1.5;color:var(--ink);user-select:text;-webkit-user-select:text}
+.cm-c-b textarea,.cm-c-write textarea{width:100%;box-sizing:border-box}
+.cm-replies{margin:6px 0 0 29px;border-left:2px solid var(--line);padding-left:12px}
+.cm-c-new{margin-left:29px}
+.cm-c-write{margin:8px 0}
+.cm-c-row{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
+.cm-c-row .btn{padding:4px 12px!important;font-size:12.5px!important}
+.cm-person{display:flex;gap:18px;align-items:flex-start;margin:6px 0 18px}
+.cm-p-t{flex:1;min-width:0}
+.cm-p-t h2{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:26px;margin:0}
+.cm-bio{white-space:pre-wrap;margin:8px 0;font-size:13.5px}
+.cm-links{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);margin-bottom:8px;user-select:text;-webkit-user-select:text}
+.cm-person .cm-nums{justify-content:flex-start;gap:18px}
+.cm-p-acts{display:flex;flex-direction:column;gap:6px;flex:none}
+.cm-reports{list-style:none;margin:0;padding:0}
+.cm-reports li{border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--sunken);font-size:13px}
+/* the community's dialogs */
+.cm-f{display:flex;flex-direction:column;gap:4px;margin:0 0 12px;font-size:13px}
+.cm-f>span{color:var(--muted);font-size:12.5px}
+.cm-f input,.cm-f textarea{width:100%;box-sizing:border-box}
+.cm-f>i{font-style:normal;font-size:12px;min-height:1em}
+.cm-f>i.good,.cm-f i.good{color:var(--ok)}.cm-f>i.bad{color:var(--danger)}
+.cm-f .hint{margin:2px 0 0}
+.cm-check{display:flex;gap:8px;align-items:flex-start;margin:4px 0 12px;font-size:13px;line-height:1.45}
+.cm-row2{display:flex;gap:16px;flex-wrap:wrap}
+.cm-row2>*{flex:1 1 200px}
+.cm-seg .btn{text-transform:none;letter-spacing:.02em}
+.cm-tags{display:flex;flex-wrap:wrap;gap:6px}
+.cm-tag{all:unset;cursor:pointer;font-size:12.5px;padding:3px 10px;border:1px solid var(--line);border-radius:12px;color:var(--muted)}
+.cm-tag:hover{border-color:var(--player);color:var(--player)}
+.cm-tag.on{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.cm-tag:focus-visible{outline:2px solid var(--accent)}
+.cm-why{margin:0 0 12px}
+.sheet .btn.cm-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;text-transform:none;letter-spacing:.02em;
+  font:500 15px "IBM Plex Sans",sans-serif;padding:10px;background:#fff;color:#1f1f1f;border-color:#dadce0}
+.sheet .btn.cm-google:hover{color:#1f1f1f;box-shadow:0 0 18px rgba(255,255,255,.25)}
+.sheet .btn.cm-google::before{display:none}
+.cm-google svg{width:18px;height:18px}
+.cm-or{display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:var(--faint);font-size:12px}
+.cm-or::before,.cm-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.cm-si-foot{align-items:center}
+.cm-si-foot .cm-link{margin-right:auto;font-size:12.5px}
+.cm-code{font:600 22px "IBM Plex Mono",monospace;letter-spacing:.3em;text-align:center}
+.cm-wait{text-align:center;padding:10px 0}
+.cm-url{width:100%;margin-top:6px;font:11px "IBM Plex Mono",monospace}
+.cm-spin{width:34px;height:34px;margin:6px auto 12px;border:3px solid var(--line);border-top-color:var(--player);border-radius:50%;animation:cmspin 1s linear infinite}
+@keyframes cmspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.cm-spin{animation:none}}
+.cm-pf{display:flex;gap:14px;align-items:center;margin-bottom:14px}
+.cm-pf-av{width:64px;height:64px;border-radius:50%;overflow:hidden;border:1px solid var(--line);background:var(--sunken);display:grid;place-items:center;flex:none}
+.cm-pf-av img{width:100%;height:100%;object-fit:cover}
+.cm-pf-av span{font:600 26px "Barlow Condensed",sans-serif;color:var(--faint)}
+.cm-steps{display:flex;gap:4px;list-style:none;margin:0 0 16px;padding:0;counter-reset:s}
+.cm-steps li{flex:1;display:flex;align-items:center;gap:7px;font:600 12px "Barlow Condensed",sans-serif;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);border-bottom:2px solid var(--line);padding:0 0 6px}
+.cm-steps li b{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);font:600 11px "IBM Plex Mono",monospace}
+.cm-steps li.on{color:var(--accent);border-bottom-color:var(--accent)}
+.cm-steps li.on b{border-color:var(--accent)}
+.cm-steps li.done{color:var(--player);border-bottom-color:var(--player)}
+.cm-wz-foot{margin-top:16px}
+.cm-warns{margin:0 0 10px;padding-left:20px;font-size:12.5px;color:var(--warn)}
+.cm-pics{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:760px){.cm-pics{grid-template-columns:1fr}}
+.cm-coverbox{aspect-ratio:16/9;border:1px dashed var(--line);border-radius:6px;display:grid;place-items:center;overflow:hidden;background:var(--sunken)}
+.cm-coverbox img{width:100%;height:100%;object-fit:cover}
+.cm-src{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.cm-src .btn{padding:5px 10px!important;font-size:12.5px!important}
+.cm-shotlist{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.cm-shotx{position:relative;aspect-ratio:16/9;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.cm-shotx img{width:100%;height:100%;object-fit:cover}
+.cm-shotx button{position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;border:0;cursor:pointer;
+  background:rgba(0,0,0,.65);color:#fff;font-size:14px;line-height:20px;padding:0}
+.cm-review{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start}
+@media (max-width:760px){.cm-review{grid-template-columns:1fr}}
+.cm-up{margin:0 0 12px;padding-left:20px;font-size:13px;line-height:1.55;color:var(--muted)}
+/* the left wall: the community, apart from the mission's own tabs */
+.tabs::before{content:"";flex:1}
+.tabgap{flex:1}
+.tab.tab-cm{margin-bottom:12px;border-color:color-mix(in srgb,var(--player) 55%,var(--line));color:var(--player);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--player) 10%,var(--surface)),var(--surface))}
+.tab.tab-cm:hover{color:var(--ink);border-color:var(--player)}
+/* a short window: the wall's tabs get tighter, and at the shortest keep only
+   their icons (the name in a tooltip) rather than run off the wall */
+@media (max-height:860px){.tabs .tab{padding:9px 4px;gap:5px;font-size:11px;letter-spacing:.08em}.tabs{gap:5px}}
+@media (max-height:780px){.tabs .tab{padding:8px 4px;font-size:10.5px;letter-spacing:.04em}.tabs .tab svg{width:12px;height:12px}}
+@media (max-height:740px){.tabs .tab{font-size:0;gap:0;padding:10px 6px}.tabs .tab svg{width:14px;height:14px}}
 .gslots{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .gs{display:flex;align-items:center;gap:12px;padding:8px 10px;border-top:1px solid var(--line);background:var(--sunken)}
 .gs:first-child{border-top:0}
@@ -1527,6 +1717,8 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
       <button class="tab" role="tab" id="tab-sec" aria-controls="panel-sec" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 13.5 4v4.3c0 3.3-2.3 5.4-5.5 6.2C4.8 13.7 2.5 11.6 2.5 8.3V4z"/><path d="M8 5.6v3.2M8 10.8v.2"/></svg>Security</button>
       <button class="tab" role="tab" id="tab-nav" aria-controls="panel-nav" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="4" cy="11.5" r="1.8"/><circle cx="12" cy="4.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="m5.4 10.3 5.2-4.6M5.8 11.7h4.4"/></svg>Navigation</button>
       <button class="tab" role="tab" id="tab-cut" aria-controls="panel-cut" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4" width="9.5" height="8" rx="1"/><path d="m11 7 3.5-2v6L11 9"/></svg>Cutscenes</button>
+      <span class="tabgap" aria-hidden="true"></span>
+      <button class="tab tab-cm" id="tab-community" type="button" hidden title="Missions others shared: browse, look, pull"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg>Community</button>
     </nav>
     <aside class="panel" id="panel-inv" role="tabpanel" aria-labelledby="tab-inv">
       <div class="inv-search"><input id="invq" type="search" placeholder="Search characters, weapons, structures…" aria-label="Search inventory" autocomplete="off"></div>
@@ -1601,7 +1793,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
     <div class="lib-head">
       <div><h1>Missions</h1>
         <p class="sub">Built-in missions stay exactly as the game ships them. Each mission of yours is built from one of them, as a copy or from just its map, and gets its own slot in the game.</p></div>
-      <div class="lib-acts"><button class="btn" id="lib-back" hidden>Back</button><button class="btn primary" id="lib-new">New mission</button></div>
+      <div class="lib-acts"><button class="btn" id="lib-back" hidden>Back</button><button class="btn" id="lib-community" hidden>Community</button><button class="btn primary" id="lib-new">New mission</button></div>
     </div>
     <div id="libbody"></div>
   </div>
@@ -5892,7 +6084,7 @@ function objectInspector(el){
     acts+='<button class="btn act danger" id="idel" title="Delete">'+IC.trash+(own?'Remove':'Remove from mission')+'</button>';
   if(acts)h+='<div class="ins-acts">'+acts+'</div>';
   if(READONLY)
-    h+='<p class="hint" style="margin:8px 0 0">A built-in mission is only looked at. View it in 3D, copy it (Ctrl+C), or keep it in Your items to place it in a mission of yours.</p>';
+    h+='<p class="hint" style="margin:8px 0 0">'+(PREVIEW?"A community mission":"A built-in mission")+' is only looked at. View it in 3D, copy it (Ctrl+C), or keep it in Your items to place it in a mission of yours.</p>';
   else if(!own&&o.ref)
     h+='<p class="hint" style="margin:8px 0 0">'+(move?'Drag it on the map once selected. ':'')+'Changes are made to this object itself when the mission is built. The original level is never touched.</p>';
   el.innerHTML=h;
@@ -9557,7 +9749,7 @@ function groupInspector(el){
     '<button class="btn ro-ok" data-g="copy" title="Ctrl+C">'+IC.copy+'Copy</button></div>'+
     (ro?'':'<button class="btn act danger" data-g="del" title="Delete">'+IC.trash+'Remove all</button>')+'</div>'+
     '<p class="hint" style="margin:8px 0 6px">'+(ro
-      ?'A built-in mission is only looked at: keep them in Your items, or copy them (Ctrl+C), to use in a mission of yours. Shift+click adds or drops one. Esc clears.'
+      ?(PREVIEW?'A community mission':'A built-in mission')+' is only looked at: keep them in Your items, or copy them (Ctrl+C), to use in a mission of yours. Shift+click adds or drops one. Esc clears.'
       :'Drag any of them to move the group. Arrow keys nudge it. Shift+click adds or drops one. Esc clears.')+'</p>'+
     '<div class="placed-list">';
   list.forEach(function(o,i){
@@ -13773,6 +13965,7 @@ function renderLibrary(){
         '<span>'+esc(baseLabel(m.base))+'</span>'+
         '<span class="mc-meta">'+m.guards+' guard'+(m.guards===1?'':'s')+' · '+m.changes+' change'+(m.changes===1?'':'s')+scenesText(m)+' · '+esc(ago(m.updated))+'</span>'+
         (st?'<span class="mc-st'+(m.installed&&m.upToDate?' ok':'')+'">'+esc(st)+'</span>':'')+
+        communityLine(m)+
         '</span></button>'+
         '<button class="btn ghost mc-more" data-more="'+esc(m.id)+'" aria-label="More actions for '+esc(m.name)+'">⋯</button></div>';
     });
@@ -13822,6 +14015,15 @@ function renderLibrary(){
   if($("lib-trash"))$("lib-trash").addEventListener("click",showTrash);
   if($("lib-setup"))$("lib-setup").addEventListener("click",function(){setupSheet({first:true})});
   if($("lib-legacy"))$("lib-legacy").addEventListener("click",importLegacy);
+}
+// a mission of yours and the community: pulled from it (an update there?), or shared to it
+function communityLine(m){
+  var c=m.community;if(!c)return "";
+  var up=window.Community&&Community.updates()[m.id];
+  if(up)return '<span class="mc-cm up">version '+up.version+' of “'+esc(up.name)+'” is out</span>';
+  if(c.published)return '<span class="mc-cm">in the community · v'+c.published.version+'</span>';
+  if(c.origin)return '<span class="mc-cm">from the community'+(c.origin.author?' · @'+esc(c.origin.author):'')+'</span>';
+  return "";
 }
 function missionCardItems(m){
   var srv=Store&&!Store.local;
@@ -14292,8 +14494,28 @@ function openMission(id){
   Store.get(id).then(function(m){
     if(!m){toast("That mission is no longer there");showLibrary();return}
     if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
-    READONLY=false;M=m;MISSION=m.name;MODE=m.base.kind==="empty"?"empty":"copy";
-    var p=m.plan||{};
+    READONLY=false;PREVIEW=null;M=m;MISSION=m.name;MODE=m.base.kind==="empty"?"empty":"copy";
+    loadPlanState(m.plan||{});
+    rememberLast(id);
+    $("start").hidden=true;$("banner").hidden=true;
+    applyModeUi();
+    loadLevel(m.base.level,function(){
+      chip(Store.local?"local":"saved");paintStatus();
+      // where guards and pickups stand comes from the height sync (the build's own
+      // heights); settling them on the terrain first made the two disagree, so a
+      // mission looked changed each time it opened
+      if(!SRV||(Store&&Store.local))settleAll();
+      seedObjectives();heightsSoon();
+      try{gridExisting()}catch(e){console.warn("buildings not set onto the ground grid:",e)}
+      if(m.base.kind==="empty"&&!placements.length)
+        banner("<b>An empty map.</b> "+esc(baseLabel(m.base))+": terrain, sky and weather, with nothing built. Place buildings, guards and pickups from the left.");
+    });
+  }).catch(function(e){toast("Could not open it: "+e.message);showLibrary()});
+}
+// A mission's plan into the editor: what it placed, changed and took out, its
+// objectives, events, cutscenes and settings (a mission of yours, or one from
+// the community only looked at)
+function loadPlanState(p){
     ccwLying(p);
     placements=(p.placements||[]).map(function(q){if(!q.uid)q.uid=uid();q.own=true;q.patrol=q.patrol||[];return q});
     groundEdits=(p.ground||[]).map(function(a){if(!a.uid)a.uid=uid();return a});GSEL=null;
@@ -14314,21 +14536,33 @@ function openMission(id){
       (c.shots||[]).forEach(function(sh){delete sh.cams;if(!sh.uid)sh.uid=uid()});return c});CUTPICK=null;
     events=(p.events||[]).map(function(v){v=JSON.parse(JSON.stringify(v));if(!v.uid)v.uid=uid();v.do=v.do||[];v.when=v.when||{kind:"area"};return v});EVPICK=null;EVOPEN=null;
     nodeVer++;planVer++;sel=null;tool=null;patrolMode=false;coverAt=0;
-    rememberLast(id);
-    $("start").hidden=true;$("banner").hidden=true;
-    applyModeUi();
-    loadLevel(m.base.level,function(){
-      chip(Store.local?"local":"saved");paintStatus();
-      // where guards and pickups stand comes from the height sync (the build's own
-      // heights); settling them on the terrain first made the two disagree, so a
-      // mission looked changed each time it opened
-      if(!SRV||(Store&&Store.local))settleAll();
-      seedObjectives();heightsSoon();
-      try{gridExisting()}catch(e){console.warn("buildings not set onto the ground grid:",e)}
-      if(m.base.kind==="empty"&&!placements.length)
-        banner("<b>An empty map.</b> "+esc(baseLabel(m.base))+": terrain, sky and weather, with nothing built. Place buildings, guards and pickups from the left.");
-    });
-  }).catch(function(e){toast("Could not open it: "+e.message);showLibrary()});
+}
+// A mission from the community, only looked at: its plan over its base level,
+// as a built-in mission is looked at (READONLY), saying where it came from. The
+// map and the 3D view work as for any mission; nothing is saved or applied.
+var PREVIEW=null;      // {id, version, name, author, allow_remix} while one is looked at
+function viewCommunity(doc,meta,in3d){
+  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
+  if(window.View3D&&View3D.isOpen())toggle3d(false);
+  M=null;READONLY=true;PREVIEW=meta;MODE=doc.base.kind==="empty"?"empty":"copy";MISSION=doc.name;
+  loadPlanState(JSON.parse(JSON.stringify(doc.plan||{})));
+  rememberLast(null);
+  $("start").hidden=true;
+  applyModeUi();
+  loadLevel(doc.base.level,function(){
+    chip("");paintStatus();builtinBanner(false);renderSide();draw();
+    if(in3d)setTimeout(function(){toggle3d(true)},50);
+  });
+}
+function previewBanner(warn){
+  var p=PREVIEW,by=p.author?" by @"+p.author.handle:"";
+  banner('<b>'+esc(p.name)+'</b>'+esc(by)+', from the community. '+(warn
+      ?'It can’t be changed here: pull it into your studio to make it yours, then change it.'
+      :'Look around and view it in 3D; to change it, pull it into your studio.')+
+    ' <button class="btn primary" id="bn-pull">Pull to my studio</button> <button class="btn" id="bn-cm">Back to the community</button>',
+    warn?"warn":"");
+  $("bn-pull").addEventListener("click",function(){Community.pull(PREVIEW)});
+  $("bn-cm").addEventListener("click",function(){Community.open({kind:"mission",id:PREVIEW.id})});
 }
 // Buildings placed before the grid mattered: moved onto it once, as the mission
 // opens, each an ordinary move (the change log shows it, undo takes it back),
@@ -14352,7 +14586,7 @@ function gridExisting(){
 function viewBuiltin(level){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
   var b=builtin(level);
-  M=null;READONLY=true;MODE="copy";MISSION=b?b.name:"Level "+level;
+  M=null;READONLY=true;PREVIEW=null;MODE="copy";MISSION=b?b.name:"Level "+level;
   placements=[];removals=[];navNodes=[];nodeEdits={};edits={};removeRefs=[];nodeVer++;planVer++;
   objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];levelScenes={};levelVehicles={};cutscenes=[];CUTPICK=null;groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
   sel=null;tool=null;patrolMode=false;
@@ -14404,10 +14638,10 @@ function pendingChanges(){
   return total-AS.n+gone;
 }
 function paintStatus(){
-  $("lvchip").textContent=M?baseLabel(M.base):READONLY?"built-in · level "+LV:"";
+  $("lvchip").textContent=M?baseLabel(M.base):PREVIEW?"community · level "+LV:READONLY?"built-in · level "+LV:"";
   // the open mission knows what the game has: up to date when nothing differs from it
   if(M&&M.installed&&M.applied){var pend=pendingChanges();M.upToDate=pend===0}
-  var st=M?gameStatus(M):READONLY?"read-only":"";
+  var st=M?gameStatus(M):PREVIEW?"looking":READONLY?"read-only":"";
   $("modechip").textContent=st;
   $("modechip").classList.toggle("ok",!!(M&&M.installed&&M.upToDate));
 }
@@ -14429,6 +14663,7 @@ function banner(html,kind){
 }
 // the banner a built-in mission opens with; warn: something tried to change it
 function builtinBanner(warn){
+  if(PREVIEW)return previewBanner(warn);
   banner(warn
     ?'<b>A built-in mission can’t be changed</b>'+esc(MISSION)+' stays exactly as the game ships it. To change it, make a mission of your own '+
       'from it: a full copy, or just its map. Here you can look around, view things in 3D, copy them, and keep them in Your items.'+
@@ -14771,10 +15006,18 @@ function renderMenu(host,items,close){
 // What needs a mission of yours open is greyed until one is, saying so.
 function mine(it){
   if(!it||it==="-")return it;
-  if(READONLY||!M)return Object.assign({},it,{disabled:true,title:READONLY?"A built-in mission is only looked at: make a mission from it first":"Open a mission of yours first",act:null});
+  if(READONLY||!M)return Object.assign({},it,{disabled:true,title:PREVIEW?"A community mission is only looked at: pull it into your studio first":
+    READONLY?"A built-in mission is only looked at: make a mission from it first":"Open a mission of yours first",act:null});
   return it;
 }
 function missionMenuItems(){
+  if(PREVIEW)return [
+    {label:"Pull “"+PREVIEW.name+"” to my studio",act:function(){Community.pull(PREVIEW)}},
+    {label:"Back to the community",act:function(){Community.open({kind:"mission",id:PREVIEW.id})}},
+    "-",
+    {label:"New mission…",act:function(){newMissionDialog({})}},
+    {label:"Mission library…",act:showLibrary}
+  ];
   if(READONLY||!M)return [
     {label:"New mission…",act:function(){newMissionDialog(READONLY?{kind:"copy",level:LV}:{})}},
     READONLY?{label:"New mission from this one…",act:function(){newMissionDialog({kind:"copy",level:LV})}}:null,
@@ -14824,8 +15067,16 @@ function gameMenuItems(){
   ];
 }
 function shareMenuItems(){
-  var srv=Store&&!Store.local;
+  var srv=Store&&!Store.local,C=window.Community,cs=C?C.state():{},pub=M&&M.community&&M.community.published;
+  var cm=srv&&C&&cs.configured!==false;
   return [
+    cm&&PREVIEW?{label:"Pull “"+PREVIEW.name+"” to my studio",act:function(){C.pull(PREVIEW)}}:null,
+    cm&&!PREVIEW?mine({label:pub?"Share with the community (again or as new)…":"Share with the community…",act:function(){C.share()}}):null,
+    cm&&pub&&!READONLY?{label:"Publish an update…",act:function(){C.share("update")}}:null,
+    cm?{label:"Community missions",act:function(){C.open()}}:null,
+    cm?(cs.signed_in&&cs.profile?{label:"Your community profile (@"+cs.profile.handle+")",act:C.profile}:{label:"Sign in to the community…",act:C.signIn}):null,
+    cm&&cs.signed_in?{label:"Sign out of the community",act:C.signOut}:null,
+    cm?"-":null,
     mine({label:"Export mission file (.json)",act:function(){exportMissionData(Object.assign({},M,{name:MISSION,plan:planOf()}))}}),
     srv?{label:"Export all my missions in one file",act:exportAllMissions}:null,
     {label:"Import mission file…",act:function(){$("importfile").click()}},
@@ -15367,6 +15618,7 @@ function onKey(e){
   if(window.View3D&&View3D.isOpen()&&!(ctrl&&/^[zZyYsS]$/.test(k)))return;
   if(ctrl&&(k==="s"||k==="S")){e.preventDefault();saveNow();return}
   if(/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName))return;
+  if(window.Community&&Community.isOpen())return;     // the community page has the keys
   if(!$("sheet").hidden&&k!=="Escape")return;
   if(VROUTE&&(k==="Escape"||k==="Enter")){e.preventDefault();endRoute();return}
   if(ORDERPICK&&(k==="Escape"||k==="Enter")){e.preventDefault();endOrderPick();return}
@@ -18514,6 +18766,50 @@ var AIB=(function(){
     register:function(dsg){if(dsg&&dsg.id&&dsg.data&&!DESIGNS[dsg.id]&&dsg.id.indexOf("grp:")!==0)DESIGNS[dsg.id]=dsg}
   };
 })();
+// ---- the community's way in (community.js)
+function communityObjectives(){
+  return objectives.map(function(o){
+    var k=objKind(o.kind),t=o.kind==="level"?(o.text||o.key||""):(o.text||objDefaultText(o)||"");
+    return {kind:o.kind==="level"?"level":k&&k[1]?String(k[1]):String(o.kind||""),text:String(t).slice(0,300)};
+  }).filter(function(o){return o.text});
+}
+function communityFacts(){
+  var lvl=MODE==="empty"?[]:((LEVEL&&LEVEL.objects)||[]).filter(function(o){return !isRemoved(o)});
+  function n(list,t){return list.filter(function(o){return o.type===t}).length}
+  var f={guards:n(placements,"soldier")+n(lvl,"soldier"),cameras:n(placements,"camera")+n(lvl,"camera"),
+    pickups:n(placements,"pickup"),placements:placements.length,cutscenes:cutscenes.length,events:events.length,
+    fail_on_alarm:!!failOnAlarm};
+  if(MSET.timeLimit>0)f.time_limit=Math.round(MSET.timeLimit);
+  if(MSET.fall)f.weather=MSET.fall;
+  if(MSET.music)f.music=musicName(MSET.music);
+  var b=builtin(LV);if(b)f.level_name=b.name;
+  return f;
+}
+window.StudioCommunity={
+  toast:function(t){toast(t)},
+  sheet:function(title,html,wide){sheet(title,html);if(wide)$("sheet").querySelector(".sheet-card").classList.add("wide")},
+  closeSheet:function(){$("sheet").hidden=true},
+  levelName:function(n){var b=builtin(n);return b?b.name:"Level "+n},
+  current:function(){
+    if(PREVIEW)return {preview:true,readonly:true,name:MISSION};
+    if(!M)return null;
+    return {id:M.id,name:MISSION,description:M.description||"",base:M.base,readonly:READONLY,community:M.community||null};
+  },
+  shareInfo:function(){return {objectives:communityObjectives(),facts:communityFacts()}},
+  // saved first (the server shares what it has), then the whole check list
+  check:function(){return serverCheckRes().then(function(res){return allChecks(res)})},
+  can3d:function(){return !!(window.View3D&&View3D.isOpen())},
+  capture3d:function(){return window.View3D&&View3D.isOpen()?View3D.capture():null},
+  captureMap:function(){if(!W||!H)return null;present();return cv.toDataURL("image/png")},
+  pictureUrl:function(){return M?"api/missions/"+M.id+"/picture.png?v="+Date.now():null},
+  openMission:function(id){openMission(id)},
+  preview:function(doc,meta,in3d){viewCommunity(doc,meta,in3d)},
+  library:function(){showLibrary()},
+  communityChanged:function(){},
+  // closed with nothing open behind it: the library, as at the start
+  communityClosed:function(){if(!M&&!READONLY)showLibrary()},
+  communityPublished:function(r){if(M)M.community=Object.assign({},M.community||{},{published:{id:r.id,version:r.version}})}
+};
 window.StudioAI={
   ready:function(){return !!(LEVEL&&CATALOG&&MODELS)},
   tools:AIB.tools,run:AIB.run,isLook:AIB.isLook,kindOf:AIB.kindOf,
@@ -18643,11 +18939,17 @@ $("btncfg").addEventListener("click",showConfig);
 $("sheet-close").addEventListener("click",function(){$("sheet").hidden=true});
 $("sheet").addEventListener("click",function(e){if(e.target===$("sheet"))$("sheet").hidden=true});
 $("lib-new").addEventListener("click",function(){newMissionDialog({})});
+$("lib-community").addEventListener("click",function(){if(window.Community)Community.open()});
+$("tab-community").addEventListener("click",function(){if(window.Community)Community.open()});
+// the wall's tabs say their names when a short window leaves them only their icons
+document.querySelectorAll(".tabs .tab").forEach(function(t){if(!t.title)t.title=t.textContent.trim()});
 $("lib-back").addEventListener("click",function(){$("start").hidden=true});
 $("brandbtn").addEventListener("click",showLibrary);
 loadLevel(1);                 // the map behind the library
 probeServer().then(function(ok){
   Store=makeStore(ok);
+  // the community goes through the studio's server: none, no community
+  $("tab-community").hidden=$("lib-community").hidden=!!Store.local;
   loadGroups();
   // not set up yet: the setup is the first and only thing on screen
   // (probeServer has opened it); the library would only have nothing to show
@@ -18662,4 +18964,5 @@ probeServer().then(function(ok){
 })();
 </script>
 <script src="ai.js"></script>
+<script src="community.js"></script>
 

@@ -1,0 +1,15 @@
+{
+  "name": "igi-community",
+  "private": true,
+  "description": "The community's database: its migrations (migrations/), the tool that runs them on Neon (migrate.mjs), and a stand-in for the Neon project on this machine for development and the tests (dev/).",
+  "type": "module",
+  "scripts": {
+    "migrate": "node migrate.mjs",
+    "dev": "node dev/server.mjs",
+    "test": "node dev/test.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "pg": "8.23.0"
+  }
+}

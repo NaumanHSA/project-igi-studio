@@ -38,6 +38,7 @@
 #   GET  /api/community/avatar?u=<url>          a Google profile picture (kept)
 #   GET  /api/community/plan/<id>?v=<version>   {mission: {name, description, base, plan, version}}
 #   GET  /api/community/updates                 {updates: {mission id here: newer version there}}
+#   GET  /api/community/precheck?mission=<id>   {unchanged, origin, lineage, published, picture}: before sharing
 #   POST /api/community/auth/signup {email, password, name}, auth/verify {email, code},
 #        auth/resend {email, kind}, auth/signin {email, password}, auth/reset {email, code, password},
 #        auth/signout, account/delete
@@ -685,6 +686,18 @@ def publish(mid, form):
     return r
 
 
+def precheck(mid):
+    """What the share wizard needs to know about a mission here before it starts."""
+    m = MS.load(mid)
+    c = m.get("community") or {}
+    o = c.get("origin") or {}
+    return {"name": m["name"], "base": m["base"],
+            "unchanged": bool(o.get("id")) and c.get("base_sha") == plan_sha(m["plan"]),
+            "origin": o or None, "lineage": c.get("lineage") or [],
+            "published": c.get("published") or None,
+            "picture": (MS.STORE / mid / MS.PICTURE).exists()}
+
+
 def upload_avatar(data_url):
     return {"id": _upload("avatar", *_data_url(data_url))}
 
@@ -716,6 +729,8 @@ def handle(method, path, query, body):
             return 200, dict(google_state(), ok=True)
         if method == "GET" and route == "updates":
             return 200, {"ok": True, "updates": updates()}
+        if method == "GET" and route == "precheck":
+            return 200, dict(precheck((query.get("mission") or [""])[0]), ok=True)
         if method != "POST":
             raise CommunityError("Not a community call.", 404)
         b = body or {}

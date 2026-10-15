@@ -1,5 +1,5 @@
 // The community's rules, checked on the database itself (in memory):
-//   cd cloud/dev && npm install && npm test
+//   cd cloud && npm install && npm test
 import assert from 'node:assert/strict'
 import { openDb } from './db.mjs'
 
@@ -88,6 +88,7 @@ await t('a guest browses, searches (words, objectives, typos) and opens it', asy
   assert.equal(all.items[0].objectives, 2); assert.deepEqual(all.items[0].facts, { guards: 12, cameras: 2, weather: 'snow' })
   assert.equal((await guest('list_missions', { q: 'generator' })).items.length, 1)
   assert.equal((await guest('list_missions', { q: 'radr dome' })).items.length, 1)
+  assert.equal((await guest('list_missions', { q: 'radr' })).items.length, 1)
   assert.equal((await guest('list_missions', { q: 'helicopter' })).items.length, 0)
   assert.equal((await guest('list_missions', { level: 4 })).items.length, 0)
   assert.equal((await guest('list_missions', { tag: 'stealth', difficulty: 'hard' })).items.length, 1)

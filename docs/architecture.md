@@ -10,6 +10,7 @@ project-igi-studio/
 ├── editor/                 the 2D mission editor (also published as a claude.ai Artifact)
 │   ├── plotter.html        the page: vanilla JS + Canvas 2D, no build step
 │   ├── ai.js               the AI designer panel: chats, pictures, the model's tools
+│   ├── community.js        the Community page, its dialogs, the share wizard (docs/community.md)
 │   ├── icons.js            SVG-path icons: guards, player, pickups, vehicles, trees, fittings
 │   ├── meshes.js           top-down renders of the game's own models (buildings, towers, props)
 │   ├── view3d.js, fx.js    the 3D close-up, and the map computer's zoom transition
@@ -61,8 +62,10 @@ project-igi-studio/
 │   └── server/             what the editor talks to
 │       ├── app.py          local server: editor, mission library API, Apply, Settings
 │       ├── ai.py           the AI designer's proxy: the API key, the models, streaming
+│       ├── community.py    the community's client: the account, the calls, pulling, sharing
 │       ├── missions.py     custom missions: base + plan, history, trash (missions/custom/)
 │       └── live_pos.py     find and read the player's live position in a running game
+├── cloud/                  the community's database on Neon: migrations, and a stand-in for the tests
 ├── app/                    the desktop app: the Electron window, the installer, the bundled server
 ├── docs/                   how the studio works: the editor, the engine, this page, releasing
 └── missions/

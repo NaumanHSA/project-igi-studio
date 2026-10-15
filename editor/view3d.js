@@ -2559,8 +2559,16 @@ function screenOf(x, y, z) {
   return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height];
 }
 
+// the view as it is now, without the gizmo: a picture for a mission's cover
+function capture() {
+  if (!isOpen()) return null;
+  resize();
+  S.renderer.render(S.scene, S.camera);
+  return S.canvas.toDataURL("image/png");      // read before the frame is handed on, so it is still there
+}
+
 window.View3D = { open, close, isOpen, follow, update, screenOf, setPlacing, prepare, target: () => O && O.target,
-  film, filmStop, filmSeek, filmPlay,
+  film, filmStop, filmSeek, filmPlay, capture,
   // for the tests: the gizmo, and where on screen a point of a handle is (move:
   // along the arrow, 0..1; rotate: round the ring, an angle)
   gizmo: () => S && S.giz ? { shown: gizShown(), mode: S.gizMode, selected: selected(), speed: S.speed,

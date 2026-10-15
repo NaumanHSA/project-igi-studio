@@ -3,7 +3,7 @@ community's stand-in on this machine (cloud/dev/server.mjs, the same SQL in
 PGlite): accounts by email and by Google, sharing, browsing as a guest,
 pulling, a changed copy shared back with its line, a new version, deleting.
 
-Needs Node and `npm install` in cloud/dev; skipped without them."""
+Needs Node and `npm install` in cloud/; skipped without them."""
 import base64, json, os, pathlib, re, shutil, subprocess, tempfile, threading, unittest, urllib.parse
 import urllib.request
 
@@ -13,10 +13,10 @@ WEBP = "data:image/webp;base64," + base64.b64encode(b"RIFF\x20\x00\x00\x00WEBPVP
 
 
 def _node_ready():
-    return shutil.which("node") and (DEV / "node_modules" / "@electric-sql" / "pglite").is_dir()
+    return shutil.which("node") and (DEV.parent / "node_modules" / "@electric-sql" / "pglite").is_dir()
 
 
-@unittest.skipUnless(_node_ready(), "the community stand-in needs Node and npm install in cloud/dev")
+@unittest.skipUnless(_node_ready(), "the community stand-in needs Node and npm install in cloud/")
 class CommunityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -63,6 +63,17 @@ section is also that release's notes on GitHub.
   to look around never moves a building again. Buildings and props now tilt
   on all three axes, and the game gets the same angles. (The game has no scale
   for an object.)
+- **The community.** Share missions with other players and play theirs: a
+  Community page (the globe at the bottom of the left wall, the Share menu,
+  or the library) to browse and search them, each with its objectives,
+  pictures, author, votes, comments and versions. Look at one's map and 3D
+  view without taking it, or pull it into the studio to change it - shared
+  again, it is a remix that credits everyone before it. *Share with the
+  community* walks through it: the studio checks the mission and fills in
+  its name, objectives and facts; you add a summary, a cover from the 3D view
+  or the map, screenshots, and credits, and see it as others will before it
+  goes. Browsing needs no account; sharing, pulling, voting and commenting
+  need one (Google, or email and password).
 - **A menu bar.** The one long Mission menu is now five beside the studio's
   name: **Mission** (new, the library, save, duplicate, rename, delete),
   **Edit** (undo, redo, tidy up, shortcuts), **Design** (time and weather,
