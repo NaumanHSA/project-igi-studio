@@ -974,21 +974,27 @@ view never ends at a cliff.
   **right-drag** circles the selected thing - or the middle of the view when
   nothing is - and **middle-drag** pans. While a button is held, **W A S D**
   fly and **Q / E** go down and up; the **arrows** fly any time, **Shift**
-  three times as fast. The **wheel** sets the camera's speed, eight steps
-  from 1 to 50 m/s, shown on the bar and remembered. With no button held,
-  **W**, **E** and **Q** pick the gizmo (move, rotate, none), as Unreal's keys
-  do; **R** (scale) says why there is none.
+  three times as fast. The **wheel** sets the camera's speed, ten steps from
+  1 to 120 m/s, 8 (50 m/s) to start, shown on the bar and remembered. With no
+  button held, **W** and **E** pick the gizmo (move, rotate), as Unreal's keys
+  do. A selected thing always has its gizmo: there is no select-only mode,
+  and a click on the ground or the sky lets go of it - in 3D and on the map
+  (`onDeselect`), its selected look gone with it.
 - **The gizmo:** the selected thing moves only by its handles, drawn over
-  everything and the same size on screen. **Move:** an arrow east (red),
-  north (green) and up (blue) moves it along that axis only, a square moves
-  it across the plane square to that axis, and the white ball drags it over
+  everything, 120 px on screen - but never bigger than about one and a half
+  times the thing once it is far off and small, and never under 36 px (a
+  handle to take hold of). **Move:** an arrow east (red), north (green) and up
+  (blue) moves it along that axis only, a right angle joining two arrows (each
+  side in the colour of the arrow it runs along, a faint square inside to take
+  hold of) moves it across their plane, and the white ball drags it over
   surfaces as before - a floor item (guard, pickup, crate, desk, any prop)
   over upward-facing surfaces with its base on them, a wall item (camera,
   alarm button, siren, alarm light) along walls, turned to face out; Shift
-  with the ball lifts or lowers it. **Rotate:** a ring about each axis. A
+  with the ball lifts or lowers it. **Rotate:** half a ring about each axis,
+  the half towards the camera (it turns as the camera moves). A
   soldier, a pickup, a camera or a switch turns only about up - its heading;
   a building or a prop about all three, the game's alpha, beta and gamma
-  (`tilts`). The bar has **Select / Move / Rotate / Scale**, and snapping:
+  (`tilts`). The bar has **Move / Rotate**, and snapping:
   **0.5 m** for moves (off to start) and **15°** for turns (on). While
   dragging, the distance or the angle shows by the pointer. **End** drops it
   onto the floor or the ground below; **Ctrl+arrows** nudge it 5 cm (Shift
@@ -997,7 +1003,7 @@ view never ends at a cliff.
 - **No scale:** a building, a prop - any `Building` or `EditRigidObj` - is a
   position, an orientation and a model (docs/TASK-PARAMETERS.md); the "1, 1,
   1, 0, 0, 0" after an EditRigidObj's model is its light (Dirlight Angular and
-  Ambient Effect), not a size. So **Scale** is on the bar, greyed, and says so.
+  Ambient Effect), not a size. So there is no scale gizmo.
 - **Tilt:** the alpha and beta set with the rings go with the plan (`alpha`,
   `beta` on your buildings; an edit of the level's), are drawn in 3D and are
   written into the game: "alpha, beta, gamma" for yours (it used to be "0, 0,

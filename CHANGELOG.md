@@ -56,12 +56,13 @@ section is also that release's notes on GitHub.
   selected thing (or the middle of the view), middle-drag pans; holding a
   button, W A S D fly and Q E go down and up; the arrows fly any time; the
   wheel sets the camera's speed. A click selects; the ground or the sky
-  selects nothing. Things move only by their **gizmo**: arrows, planes and a
-  ball to move (W), rings to rotate (E), Q for none - with snapping to 0.5 m
-  and 15°, and End to drop onto the floor. A drag meant to look around never
-  moves a building again. Buildings and props now tilt on all three axes, and
-  the game gets the same angles. (The game has no scale for an object, so the
-  Scale button says so.)
+  selects nothing, on the map too. A selected thing always has its **gizmo**,
+  and moves only by it: arrows, right angles for the planes and a ball to move
+  (W), half rings to rotate (E) - with snapping to 0.5 m and 15°, End to drop
+  onto the floor, and a size that shrinks with a far-off thing. A drag meant
+  to look around never moves a building again. Buildings and props now tilt
+  on all three axes, and the game gets the same angles. (The game has no scale
+  for an object.)
 - **Soldiers that move with the story.** Every soldier - yours, or the
   level's in a copy - has Orders: from the start his patrol, standing, or
   following you; then steps, each started by an event - he goes to a point

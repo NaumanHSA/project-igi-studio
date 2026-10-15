@@ -11365,6 +11365,8 @@ function open3dAt(x,y,R,keep,host){
     level:SRV?(LEVEL?LEVEL.level:LV):0,
     onMove:function(){},
     onPick:function(k){var q=byKey3d(k);if(q){sel=q;multi=[];renderSide();open3d(q,true)}},
+    // a click on the ground or the sky in 3D: nothing selected here either
+    onDeselect:function(){sel=null;multi=[];renderSide();draw()},
     onRadius:function(r){open3dAt(x,y,r)},
     onClose:function(){V3D.spot=null;V3D.at=null;renderSide();draw();sync3dSwitch()}});
   sync3dSwitch();
@@ -11560,6 +11562,8 @@ function open3d(o,keep,view){
       renderSide();draw();
     },
     onPick:function(k){var q=byKey3d(k);if(q){sel=q;multi=[];renderSide();open3d(q,true)}},
+    // a click on the ground or the sky in 3D: nothing selected here either
+    onDeselect:function(){sel=null;multi=[];renderSide();draw()},
     onRadius:function(r){V3D.radius=r;var q=byKey3d(V3D.key);if(q)open3d(q,true)},
     // an inventory item put down in the close-up: made as on the map, then set
     // exactly where it was put, and edited from there
