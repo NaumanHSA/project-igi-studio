@@ -1,0 +1,13 @@
+{
+  "name": "igi-community-dev",
+  "private": true,
+  "description": "A stand-in for the community's Neon project on this machine: the same SQL in PGlite, behind the same HTTP calls (Data API RPC, Neon Auth). For development and the tests only.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
+}

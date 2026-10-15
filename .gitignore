@@ -41,3 +41,6 @@ app/build-server/
 
 # Plans for larger changes and the roadmap: kept on this machine, not published
 .dev/
+
+# The community stand-in's database on this machine (cloud/dev/server.mjs)
+cloud/dev/.data/

@@ -6,6 +6,11 @@
 #   cover.png      a picture of the map, saved by the editor
 #   history/       earlier versions (the last 30 saves, and every Apply)
 #
+# A mission pulled from the community, or shared there, says so in
+# mission.json's "community" (studio/server/community.py): where it came from
+# (origin), every mission before it (lineage), its plan as pulled (base_sha),
+# and what it is on the community when shared from here (published).
+#
 # Deleting moves the folder to missions/custom/.trash/, from where it can be
 # restored. Built-in missions are never stored here - they are read-only.
 import hashlib, json, math, pathlib, re, shutil, time, uuid
@@ -57,7 +62,43 @@ def summary(m):
             "cover": (_dir(m["id"]) / "cover.png").exists(),
             # a picture of the mission's own: the library's card and the game's list
             "picture": (_dir(m["id"]) / PICTURE).exists(),
-            "installed": inst, "upToDate": bool(inst and inst.get("hash") == plan_hash(m))}
+            "installed": inst, "upToDate": bool(inst and inst.get("hash") == plan_hash(m)),
+            "community": _community_summary(m.get("community"))}
+
+
+def _community_summary(c):
+    if not isinstance(c, dict):
+        return None
+    o, p = c.get("origin") or {}, c.get("published") or {}
+    return {"origin": {"id": o.get("id"), "version": o.get("version"), "name": o.get("name"),
+                       "author": (o.get("author") or {}).get("handle")} if o.get("id") else None,
+            "published": {"id": p.get("id"), "version": p.get("version")} if p.get("id") else None}
+
+
+def set_community(mid, info):
+    """What a mission is on the community (see the top of this file)."""
+    m = load(mid)
+    m["community"] = info
+    m["updated"] = now()
+    _write(m)
+    return m
+
+
+def list_community():
+    """{mission id: its "community"} for every mission that has one."""
+    out = {}
+    if STORE.is_dir():
+        for d in STORE.iterdir():
+            f = d / "mission.json"
+            if d.name.startswith(".") or not f.exists():
+                continue
+            try:
+                c = json.load(f.open(encoding="utf-8")).get("community")
+            except (OSError, ValueError):
+                continue
+            if isinstance(c, dict):
+                out[d.name] = c
+    return out
 
 
 def list_missions(view=None):
@@ -196,16 +237,23 @@ def create(name, base_level, kind="copy", description="", copy_from=None):
     if kind not in ("copy", "empty"):
         raise ValueError("kind must be copy or empty")
     plan = empty_plan()
+    community = None
     if copy_from:
         src = load(copy_from)
         base_level, kind = src["base"]["level"], src["base"]["kind"]
         plan = json.loads(json.dumps(src["plan"]))
         description = description or src.get("description", "")
+        # a copy came from where its original came from; it is not what the original shared
+        c = src.get("community")
+        if isinstance(c, dict) and c.get("origin"):
+            community = {k: c[k] for k in ("origin", "lineage", "base_sha") if k in c}
     mid = "%s-%s" % (_slug(name), uuid.uuid4().hex[:6])
     t = now()
     m = {"id": mid, "name": (name or "Untitled mission").strip()[:60], "description": (description or "")[:200],
          "base": {"level": base_level, "kind": kind}, "slot": None, "created": t, "updated": t,
          "plan": plan, "installed": None}
+    if community:
+        m["community"] = community
     _write(m, snapshot=True)
     if copy_from and (_dir(copy_from) / "cover.png").exists():
         shutil.copyfile(_dir(copy_from) / "cover.png", _dir(mid) / "cover.png")

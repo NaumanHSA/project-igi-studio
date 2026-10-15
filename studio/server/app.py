@@ -44,6 +44,8 @@
 #   GET/PUT/DELETE /api/missions/<id>/ai/<thread>   one thread
 #   GET /api/groups, POST (save), PUT /api/groups/<id> {name, cat, description}, DELETE:
 #          the user's own items for the inventory ("Your items"), in missions/groups/
+# The community (studio/server/community.py, which lists its routes):
+#   GET/POST /api/community/...   the account, browsing, pictures, pulling and sharing
 import base64, collections, hmac, json, os, pathlib, re, subprocess, sys, threading, time, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
@@ -70,6 +72,7 @@ from studio import protect
 from studio.build import slots as SL
 from studio.extract import model3d as M3
 from studio.server import ai as AI
+from studio.server import community as CM
 from urllib.parse import urlparse, parse_qs
 from studio import paths
 from studio.qvm import source as qvm_source
@@ -1149,7 +1152,22 @@ class Handler(SimpleHTTPRequestHandler):
         m = re.match(r"^/api/missions/([a-z0-9-]+)/runs(?:/(\d+))?/?$", self.path)
         return (m.group(1), m.group(2) or "") if m else (None, None)
 
+    def _community(self, method):
+        u = urlparse(self.path)
+        code, out = CM.handle(method, u.path, parse_qs(u.query), self._body() if method == "POST" else {})
+        if not isinstance(out, tuple):
+            return self._json(out, code)
+        mime, body = out                 # a picture: kept for good, it never changes
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "private, max-age=31536000, immutable")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        if self.path.startswith("/api/community/"):
+            return self._guard(lambda: self._community("GET"))
         rm, rid = self._run_route()
         if rm:
             if rid:
@@ -1270,6 +1288,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.path.startswith("/api/community/"):
+                return self._guard(lambda: self._community("POST"))
             if self.path.startswith("/api/ai/chat"):
                 return self._ai_chat()
             if self.path.startswith("/api/ai/settings"):
