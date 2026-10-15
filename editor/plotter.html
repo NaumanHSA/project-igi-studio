@@ -262,8 +262,9 @@ canvas{display:block}
 .graphrow .bar{grid-column:2/-1;height:3px;border-radius:2px;background:var(--sunken);overflow:hidden}
 .graphrow .bar i{display:block;height:100%;background:var(--node)}
 .graphrow .bar i.full{background:var(--danger)}
-/* ---- menus: mission menu, right-click menu, quick add ---- */
+/* ---- menus: the menu bar, right-click menu, quick add ---- */
 .menuwrap{position:relative}
+.menubar{display:flex;align-items:center;gap:1px;flex:none}
 .menubtn{display:flex;align-items:center;gap:6px}
 .menubtn svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2}
 .menu{position:absolute;min-width:220px;background:var(--surface);border:1px solid var(--line);border-radius:6px;
@@ -1338,14 +1339,17 @@ input,textarea,select,[contenteditable="true"],.ai-log,.ai-log *,.applylog,.appl
    both (hover cards 25-41, the Settings and other sheets 30, the category list
    55, tooltips 60, the right-click menu 70). */
 .workspace{isolation:isolate}
-.topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:14px;padding:7px 14px;
+.topbar{display:flex;flex-wrap:nowrap;align-items:center;gap:14px;padding:7px 14px;
   padding-top:calc(7px + env(safe-area-inset-top,0px));background:linear-gradient(180deg,#10301a,#0a2010);position:relative;z-index:10;
   border-bottom:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;opacity:.7;
   background:linear-gradient(90deg,transparent,rgba(141,255,154,.6),transparent)}
-.tb-left,.tb-right{display:flex;align-items:center;gap:10px;min-width:0}
-.tb-right{justify-content:flex-end}
-.tb-mid{display:flex;justify-content:center}
+.tb-left,.tb-right{display:flex;align-items:center;gap:10px;flex:1 1 0}
+.tb-right{justify-content:flex-end;min-width:0}
+.tb-right>*:not(.savechip){flex:none}
+.tb-mid{display:flex;justify-content:center;flex:none}
+/* a narrow window: the studio's name goes, its mark stays */
+@media (max-width:1240px){.topbar .brand-t{display:none}.topbar .brand{padding-right:2px}}
 .brand{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:2px 8px 2px 2px;border-radius:3px;flex:none}
 .brand:focus-visible{outline:2px solid var(--accent)}
 .brand-logo{width:30px;height:30px;flex:none;filter:drop-shadow(0 0 8px rgba(141,255,154,.45))}
@@ -1355,7 +1359,7 @@ input,textarea,select,[contenteditable="true"],.ai-log,.ai-log *,.applylog,.appl
 .brand-t span{font:500 10px "IBM Plex Mono",monospace;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
 .brand:hover .brand-t b{color:var(--player)}
-.mission-name{background:rgba(3,11,4,.6);border-color:var(--line);border-radius:3px;height:32px;min-width:150px;flex:0 1 220px;
+.mission-name{background:rgba(3,11,4,.6);border-color:var(--line);border-radius:3px;height:32px;width:0;min-width:110px;flex:0 1 220px;
   font:500 14px "IBM Plex Sans",sans-serif;transition:border-color .15s,box-shadow .15s}
 .mission-name:hover{border-color:#3b8a45}
 .mission-name:focus-visible{outline:none;border-color:var(--player);box-shadow:0 0 0 2px rgba(141,255,154,.18)}
@@ -1384,6 +1388,10 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
   clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
 .topbar .btn.primary{background:linear-gradient(180deg,#ffe38e,#ffc933);padding:7px 18px}
 .topbar .menubtn svg{width:11px;height:11px}
+/* the menu bar: plain words that light up, the open one lit and underlined */
+.topbar .menubar .menubtn{background:none;border-color:transparent;clip-path:none;padding:7px 9px;box-shadow:none;color:var(--muted)}
+.topbar .menubar .menubtn:hover{color:var(--player);background:rgba(141,255,154,.06)}
+.topbar .menubar .menubtn[aria-expanded="true"]{color:var(--player);background:rgba(141,255,154,.1);box-shadow:inset 0 -2px 0 var(--player)}
 /* menus: a lit panel, a gold mark on the item under the pointer */
 .menu{background:linear-gradient(180deg,#0f2b13,#0a200e);border:1px solid var(--line);border-top:2px solid var(--player);border-radius:3px;
   box-shadow:0 18px 40px rgba(0,0,0,.55),0 0 26px rgba(141,255,154,.08);padding:5px}
@@ -1467,12 +1475,19 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
     <div class="tb-left">
       <button class="brand" id="brandbtn" title="Mission library"><img class="brand-logo" src="icon.png" alt="" width="30" height="30">
         <span class="brand-t"><b>IGI <em>Studio</em></b><span id="lvchip"></span></span></button>
-      <div class="menuwrap">
-        <button id="btnmenu" class="btn ghost menubtn" aria-haspopup="menu" aria-expanded="false">Mission
-          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>
-        <div class="menu" id="missionmenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div>
+      <nav class="menubar" id="menubar" role="menubar" aria-label="Menu">
+        <div class="menuwrap"><button id="btnmenu" class="btn ghost menubtn" data-menu="mission" role="menuitem" aria-haspopup="menu" aria-expanded="false">Mission</button>
+          <div class="menu" id="missionmenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div></div>
+        <div class="menuwrap"><button id="btnedit" class="btn ghost menubtn" data-menu="edit" role="menuitem" aria-haspopup="menu" aria-expanded="false">Edit</button>
+          <div class="menu" id="editmenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div></div>
+        <div class="menuwrap"><button id="btndesign" class="btn ghost menubtn" data-menu="design" role="menuitem" aria-haspopup="menu" aria-expanded="false">Design</button>
+          <div class="menu" id="designmenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div></div>
+        <div class="menuwrap"><button id="btngame" class="btn ghost menubtn" data-menu="game" role="menuitem" aria-haspopup="menu" aria-expanded="false">Game</button>
+          <div class="menu" id="gamemenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div></div>
+        <div class="menuwrap"><button id="btnshare" class="btn ghost menubtn" data-menu="share" role="menuitem" aria-haspopup="menu" aria-expanded="false">Share</button>
+          <div class="menu" id="sharemenu" role="menu" hidden style="left:0;top:calc(100% + 4px)"></div></div>
         <input type="file" id="importfile" accept=".json,application/json" hidden>
-      </div>
+      </nav>
       <input id="mname" class="mission-name" value="" aria-label="Mission name">
     </div>
     <div class="tb-mid">
@@ -14240,7 +14255,7 @@ function pictureFingerprint(dataUrl){
   return crypto.subtle.digest("SHA-1",u).then(function(h){
     return Array.prototype.map.call(new Uint8Array(h),function(x){return ("0"+x.toString(16)).slice(-2)}).join("").slice(0,12)});
 }
-// Mission ▾ → Music and picture…
+// Design → Music and picture…
 function musicPictureDialog(){
   if(!canEdit()||!M)return;
   var MP=musicPicker({value:MSET.music||"",base:M.base.level});
@@ -14718,7 +14733,7 @@ function bind(){
 }
 
 /* ---------------- menus ---------------- */
-// One small menu model drives both the Mission menu and the right-click menu:
+// One small menu model drives the menu bar, Help and the right-click menu:
 // items are {label, kbd, act, disabled, danger, sub:[...]}, "-" for a separator,
 // {head:"..."} for a group title.
 function renderMenu(host,items,close){
@@ -14752,17 +14767,18 @@ function renderMenu(host,items,close){
   });
 }
 
-// ---- Mission menu
+// ---- the menu bar: Mission, Edit, Design, Game, Share (Help on the right).
+// What needs a mission of yours open is greyed until one is, saying so.
+function mine(it){
+  if(!it||it==="-")return it;
+  if(READONLY||!M)return Object.assign({},it,{disabled:true,title:READONLY?"A built-in mission is only looked at: make a mission from it first":"Open a mission of yours first",act:null});
+  return it;
+}
 function missionMenuItems(){
-  var srv=Store&&!Store.local;
   if(READONLY||!M)return [
     {label:"New mission…",act:function(){newMissionDialog(READONLY?{kind:"copy",level:LV}:{})}},
     READONLY?{label:"New mission from this one…",act:function(){newMissionDialog({kind:"copy",level:LV})}}:null,
-    {label:"Mission library…",act:showLibrary},
-    {label:"Import mission file…",act:function(){$("importfile").click()}},
-    "-",
-    srv?{label:"Settings…",act:showConfig}:null,
-    {label:"Keyboard shortcuts",kbd:"?",act:showShortcuts}
+    {label:"Mission library…",act:showLibrary}
   ];
   return [
     {label:"New mission…",act:function(){newMissionDialog({})}},
@@ -14771,33 +14787,57 @@ function missionMenuItems(){
     {label:"Save",kbd:"Ctrl+S",act:saveNow},
     {label:"Duplicate…",act:function(){duplicateDialog(M)}},
     {label:"Rename & in-game description…",act:function(){renameDialog(M)}},
-    {label:"Time limit and weather…",act:settingsDialog},
-    srv?{label:"Music and picture…",act:musicPictureDialog}:null,
-    {label:"A draft from a description…",act:draftDialog},
-    srv?{label:"Easy, normal and hard versions…",act:versionsDialog}:null,
-    srv?{label:"Make a campaign…",act:function(){campaignDialog({})}}:null,
-    "-",
-    {label:"Export mission file (.json)",act:function(){exportMissionData(Object.assign({},M,{name:MISSION,plan:planOf()}))}},
-    srv?{label:"Export all my missions in one file",act:exportAllMissions}:null,
-    {label:"Import mission file…",act:function(){$("importfile").click()}},
-    {label:"Copy plan to clipboard",act:function(){
-      navigator.clipboard.writeText(JSON.stringify(payload(),null,2))
-        .then(function(){toast("Plan copied")}).catch(function(){toast("Copy failed")});
-    }},
-    srv?"-":null,
-    {label:"Check mission…",act:function(){showChecks(false)}},
-    srv?{label:M.slot?"Apply to game (mission "+M.slot+")…":"Apply to game…",act:function(){showChecks(true)}}:null,
-    srv&&M.slot?{label:"Remove from the game…",act:function(){uninstallDialog(M)}}:null,
-    srv?{label:"Tidy up: floating & duplicate objects…",act:showCleanup}:null,
-    srv?{label:"Settings…",act:showConfig}:null,
-    "-",
-    {label:"Undo",kbd:"Ctrl+Z",act:undo},
-    {label:"Redo",kbd:"Ctrl+Y",act:redo},
-    {label:"Keyboard shortcuts",kbd:"?",act:showShortcuts},
     "-",
     {label:"Delete mission…",danger:true,act:function(){deleteDialog(M)}}
   ];
 }
+function editMenuItems(){
+  var srv=Store&&!Store.local;
+  return [
+    mine({label:"Undo",kbd:"Ctrl+Z",act:undo}),
+    mine({label:"Redo",kbd:"Ctrl+Y",act:redo}),
+    srv?"-":null,
+    srv?mine({label:"Tidy up: floating & duplicate objects…",act:showCleanup}):null,
+    "-",
+    {label:"Keyboard shortcuts",kbd:"?",act:showShortcuts}
+  ];
+}
+function designMenuItems(){
+  var srv=Store&&!Store.local;
+  return [
+    mine({label:"Time limit and weather…",act:settingsDialog}),
+    srv?mine({label:"Music and picture…",act:musicPictureDialog}):null,
+    "-",
+    mine({label:"A draft from a description…",act:draftDialog}),
+    srv?mine({label:"Easy, normal and hard versions…",act:versionsDialog}):null,
+    srv?mine({label:"Make a campaign…",act:function(){campaignDialog({})}}):null
+  ];
+}
+function gameMenuItems(){
+  var srv=Store&&!Store.local;
+  return [
+    mine({label:"Check mission…",act:function(){showChecks(false)}}),
+    srv?mine({label:M&&M.slot?"Apply to game (mission "+M.slot+")…":"Apply to game…",act:function(){showChecks(true)}}):null,
+    srv&&M&&M.slot&&!READONLY?{label:"Remove from the game…",act:function(){uninstallDialog(M)}}:null,
+    srv?"-":null,
+    srv?{label:"Settings…",act:showConfig}:null
+  ];
+}
+function shareMenuItems(){
+  var srv=Store&&!Store.local;
+  return [
+    mine({label:"Export mission file (.json)",act:function(){exportMissionData(Object.assign({},M,{name:MISSION,plan:planOf()}))}}),
+    srv?{label:"Export all my missions in one file",act:exportAllMissions}:null,
+    {label:"Import mission file…",act:function(){$("importfile").click()}},
+    "-",
+    mine({label:"Copy plan to clipboard",act:function(){
+      navigator.clipboard.writeText(JSON.stringify(payload(),null,2))
+        .then(function(){toast("Plan copied")}).catch(function(){toast("Copy failed")});
+    }})
+  ];
+}
+var MENUBAR=[["mission","btnmenu","missionmenu",missionMenuItems],["edit","btnedit","editmenu",editMenuItems],
+  ["design","btndesign","designmenu",designMenuItems],["game","btngame","gamemenu",gameMenuItems],["share","btnshare","sharemenu",shareMenuItems]];
 function saveNow(){
   if(saveTimer)clearTimeout(saveTimer);
   if(!M||READONLY){toast("Nothing to save: built-in missions stay as they are");return}
@@ -14986,7 +15026,7 @@ var ctxEl=null;
 function closeMenus(){
   if(ctxEl){var oc=ctxEl._closed;ctxEl.remove();ctxEl=null;if(oc)oc()}
   var q=$("quickadd");if(q)q.remove();
-  var mm=$("missionmenu");if(mm&&!mm.hidden){mm.hidden=true;$("btnmenu").setAttribute("aria-expanded","false")}
+  MENUBAR.forEach(function(m){var mm=$(m[2]);if(mm&&!mm.hidden){mm.hidden=true;$(m[1]).setAttribute("aria-expanded","false")}});
   var hm=$("helpmenu");if(hm&&!hm.hidden){hm.hidden=true;$("btnhelp").setAttribute("aria-expanded","false")}
 }
 function placeAt(t,wx,wy){
@@ -15126,13 +15166,40 @@ function quickAdd(sx,sy,wx,wy){
   paint();input.focus();
 }
 function bindMenus(){
-  var btn=$("btnmenu"),mm=$("missionmenu");
-  btn.addEventListener("click",function(e){
-    e.stopPropagation();
-    var open=mm.hidden;closeMenus();
-    if(open){renderMenu(mm,missionMenuItems(),closeMenus);mm.hidden=false;btn.setAttribute("aria-expanded","true");
-      var f=mm.querySelector(".mi");if(f)f.focus()}
+  function openBar(k,focus){
+    var m=MENUBAR[k];closeMenus();
+    var mm=$(m[2]),btn=$(m[1]);
+    renderMenu(mm,m[3](),closeMenus);mm.hidden=false;btn.setAttribute("aria-expanded","true");
+    if(focus){var f=mm.querySelector(".mi:not([disabled])");if(f)f.focus()}
+  }
+  function openIndex(){for(var k=0;k<MENUBAR.length;k++)if(!$(MENUBAR[k][2]).hidden)return k;return -1}
+  MENUBAR.forEach(function(m,k){
+    var btn=$(m[1]),mm=$(m[2]);
+    btn.addEventListener("click",function(e){
+      e.stopPropagation();
+      if(!mm.hidden){closeMenus();return}
+      openBar(k,true);
+    });
+    // a menu open: pointing at another button opens that one, as a desktop menu bar does
+    btn.addEventListener("mouseenter",function(){var o=openIndex();if(o>=0&&o!==k)openBar(k,false)});
   });
+  // a menu open, the arrows are its: Left / Right the next menu, Up / Down its items
+  document.addEventListener("keydown",function(e){
+    var o=openIndex();if(o<0)return;
+    if(e.key==="ArrowRight"||e.key==="ArrowLeft"){
+      openBar((o+(e.key==="ArrowRight"?1:MENUBAR.length-1))%MENUBAR.length,true);
+    }else if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+      var mis=[].filter.call($(MENUBAR[o][2]).querySelectorAll(":scope > .mi, :scope > .has-sub > .mi"),function(x){return !x.disabled});
+      if(!mis.length)return;
+      var at=mis.indexOf(document.activeElement);
+      at=at<0?(e.key==="ArrowDown"?0:mis.length-1):(at+(e.key==="ArrowDown"?1:mis.length-1))%mis.length;
+      mis[at].focus();
+    }else return;
+    e.preventDefault();e.stopPropagation();
+  },true);
+  document.addEventListener("mousedown",function(e){
+    if(openIndex()>=0&&!$("menubar").contains(e.target))closeMenus();
+  },true);
   var hb=$("btnhelp"),hm=$("helpmenu");
   hb.addEventListener("click",function(e){
     e.stopPropagation();
@@ -15157,7 +15224,6 @@ function bindMenus(){
   document.addEventListener("mousedown",function(e){
     if(ctxEl&&!ctxEl.contains(e.target))closeMenus();
     var q=$("quickadd");if(q&&!q.contains(e.target))q.remove();
-    if(!mm.hidden&&!mm.contains(e.target)&&e.target!==btn&&!btn.contains(e.target)){mm.hidden=true;btn.setAttribute("aria-expanded","false")}
   },true);
   document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenus()});
   window.addEventListener("resize",closeMenus);

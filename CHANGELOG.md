@@ -63,6 +63,12 @@ section is also that release's notes on GitHub.
   to look around never moves a building again. Buildings and props now tilt
   on all three axes, and the game gets the same angles. (The game has no scale
   for an object.)
+- **A menu bar.** The one long Mission menu is now five beside the studio's
+  name: **Mission** (new, the library, save, duplicate, rename, delete),
+  **Edit** (undo, redo, tidy up, shortcuts), **Design** (time and weather,
+  music and picture, a draft, versions, campaigns), **Game** (check, apply,
+  remove from the game, settings) and **Share** (export, import). With one
+  open, point at another to open it, or go along with the arrow keys.
 - **Soldiers that move with the story.** Every soldier - yours, or the
   level's in a copy - has Orders: from the start his patrol, standing, or
   following you; then steps, each started by an event - he goes to a point

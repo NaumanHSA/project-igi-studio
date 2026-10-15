@@ -117,7 +117,7 @@ Mission 15 was recovered this way from its extracted data in git.
 
 A mission can have music of its own and a picture of its own, both optional:
 in the **New mission** dialog (*Music and picture*, folded under the list of
-missions to start from) or later from **Mission ▾ → Music and picture…**. Both
+missions to start from) or later from **Design → Music and picture…**. Both
 go into the game with the mission when it is applied, and a change to either
 is a change to apply.
 
@@ -1174,7 +1174,7 @@ Navigation nodes lie on the terrain to within 3 mm, but blending nearby nodes
 lifted objects off bare ground next to concrete aprons. That was the "slightly
 floating" problem.
 
-**Mission ▾ → Tidy up** asks the local server which of your objects hover over
+**Edit → Tidy up** asks the local server which of your objects hover over
 bare ground, and which you placed twice in the same spot. You pick which to fix,
 and the fixes go into the plan like any other change.
 
@@ -1264,7 +1264,7 @@ When the mission is applied, it is wired the way level 14 wires its own:
 - The mission fails on the base level's own failures, on the player's death,
   and on the alarm if **The mission fails if the alarm goes off** is ticked.
 
-**Time limit and weather** (under the objectives, or the Mission menu):
+**Time limit and weather** (under the objectives, or the Design menu):
 
 - **Time limit:** minutes and seconds, and whether the countdown shows on
   screen. The countdown is the game's own (`LevelFlow`'s *Max level play
@@ -1797,13 +1797,13 @@ the level's own objectives dropped for a new mission.
   route (points or places, round and round or stopping, speed, firing, from
   the start, on the alarm or on an event).
 - **Versions and campaigns:** `make_versions` makes easy, normal or hard copies
-  in the library (also *Mission menu, Easy, normal and hard versions*):
+  in the library (also *Design menu, Easy, normal and hard versions*):
   easy has a third fewer of your guards, everyone seeing 20% less, cameras
   25% less far, 50% more time, no failing on the alarm and a medipack by the
   start; hard one more guard for every two of yours on walkways near them,
   sight and cameras 25% further, 25% less time, failing on the alarm and half
   your medipacks gone. Guards the objectives and events name are kept.
-  `make_campaign` (and *Mission menu, Make a campaign*) puts missions in order
+  `make_campaign` (and *Design menu, Make a campaign*) puts missions in order
   under a name and a briefing (the AI can write it) and exports them as one
   pack; importing it adds them numbered in order and shows the briefing.
 
@@ -1904,7 +1904,7 @@ it out of what the game has, as a card in the chat with its 3D model turning:
 
 ## A draft from a description
 
-*A draft from a description…* (Mission menu): write the mission in plain
+*A draft from a description…* (Design menu): write the mission in plain
 words, for example *"Two snipers near the radar dome, four spetnaz guards at
 the barracks and two cameras by the control tower. Hack the terminal, grab
 the Dragunov at the watchtower, then escape by the north gate. Snow, a 15
@@ -2166,7 +2166,7 @@ what is wrong, and remove something only if nothing else can work (it removed
 the snipers a check complained about, 2026-09-25, rather than give them
 walkways). Everything it does is an ordinary change, undone like any other.
 
-**Apply** first saves the mission, then shows a check list. **Mission ▾ →
+**Apply** first saves the mission, then shows a check list. **Game →
 Check mission…** shows the same list at any time. It has three groups:
 
 - **Must fix** (Apply stays disabled): patrol stops that don't exist or can't be
@@ -2244,23 +2244,34 @@ everything they are made from, and reused when the ground has not changed.
 **Imported models bring their parts:** a model can be built from parts of
 other families (a watchtower carries its stairs, 314_01_1); Apply copies those
 too, and completes a slot that has the model without them.
-## Mission menu and right-click
+## The menu bar and right-click
 
-**Several missions in one file:** *Export all my missions in one file* (Mission
+**Several missions in one file:** *Export all my missions in one file* (Share
 menu) writes a pack (`igi-mission-studio-pack`): every mission of yours with
 its name, in-game description and whole plan. *Import mission file…* takes a
 pack as well as a single mission, and adds each as a mission of its own, in
 order, for handing a set (a campaign) on to someone.
 
-**Mission ▾** (next to the title) has:
+The menu bar (next to the studio's name; Help on the right), one menu a
+kind of thing (`MENUBAR`, each its own `*MenuItems()`):
 
-- new mission, the library, save (**Ctrl+S**), duplicate
-- rename (the in-game name and description)
-- export/import a mission file, copy the plan
-- apply to the game, remove from the game, tidy up, settings
-- delete
+- **Mission:** new mission, the library, save (**Ctrl+S**), duplicate, rename
+  (the in-game name and description), delete
+- **Edit:** undo, redo, tidy up, the keyboard shortcuts
+- **Design:** time limit and weather, music and picture, a draft from a
+  description, easy/normal/hard versions, make a campaign
+- **Game:** check the mission, apply to the game, remove from the game,
+  settings
+- **Share:** export/import a mission file, export all, copy the plan
 
-Looking at a built-in mission, it offers only **New mission from this one**.
+Looking at a built-in mission (or with none open), Mission offers only **New
+mission (from this one)** and the library; what needs a mission of yours
+(`mine()`) is greyed, saying why. With one menu open, pointing at another
+button opens that one, and the arrows go along the bar (Left / Right) and down
+the menu (Up / Down). The top bar is a flex row: the two sides share what is
+left round the Map / 3D switch, but the left never below what it holds, so the
+switch moves over rather than under it; under 1240 px the studio's name goes,
+its mark stays.
 
 Right-click anything on the map for its actions:
 
