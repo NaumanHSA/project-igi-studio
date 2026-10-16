@@ -5,7 +5,8 @@
 <h3>Build your own missions for <i>Project I.G.I.: I'm Going In</i>.</h3>
 
 <p>Place guards and draw their patrols on the map computer, set objectives and alarms,<br>
-shape the ground, or just ask the AI designer. Then apply it and play it in the game.</p>
+shape the ground, film the intro, or just ask the AI designer. Then apply it, play it,<br>
+and share it with the community.</p>
 
 <a href="https://naumanhsa.github.io/project-igi-studio-site/download"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-for_Windows-ffd24a?style=for-the-badge&labelColor=0e2a12&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZD0iTTEyIDN2MTJtMCAwLTUtNW01IDUgNS01TTQgMjBoMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZDI0YSIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg%3D%3D"></a>
 <a href="https://naumanhsa.github.io/project-igi-studio-site/manual/"><img alt="Read the manual" src="https://img.shields.io/badge/Read-the_manual-8dff9a?style=for-the-badge&labelColor=0e2a12&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZD0iTTQgNGg3YTMgMyAwIDAgMSAzIDN2MTNhMiAyIDAgMCAwLTItMkg0ek0yMCA0aC00YTIgMiAwIDAgMC0yIDJ2MTRhMiAyIDAgMCAxIDItMmg0eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGRmZjlhIiBzdHJva2Utd2lkdGg9IjIuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8%2BPC9zdmc%2B"></a>
@@ -34,26 +35,34 @@ shape the ground, or just ask the AI designer. Then apply it and play it in the 
 
 ## What's new
 
+**2.0** is the biggest update since the first release.
+
+- **The community** (2.0). Share your missions with other players and play theirs:
+  browse and search, look at a mission's map and 3D view without taking it, pull it
+  into your studio, and share it back as a remix that credits everyone before you.
+  Browsing needs no account; Google or an email signs you in.
+- **Cutscenes of your own** (2.0). An intro and an outro made from the mission - a
+  fly-over, a shot of each objective, the player taking over - adjusted shot by shot
+  in a cutscene editor that takes the whole window, and played in 3D. One mission
+  runs into the next.
+- **Vehicles that drive** (2.0). An APC, a tank or a truck on a route you click,
+  starting on the alarm or on an event; and any of the levels' recorded flights, in
+  any mission.
+- **Soldiers that move with the story** (2.0). Orders for any soldier: stand, patrol
+  or follow you, then go somewhere else when something happens.
+- **A 3D view that works like Unreal Engine's editor** (2.0). Fly with W A S D, move
+  and turn things with a gizmo, and tilt them on all three axes.
+- **A tidier studio** (2.0). A menu bar, the community a key away, your account and
+  the settings at the foot of the side panel, and one look for every control.
 - **Your items** (1.1). Keep a building, a guard or a whole area - from your missions
   or the original fourteen - and place it in any mission, on any level. An area
   brings its walkways, its guards' patrols, and its gates and doors working as they
   did.
 - **Music and a picture of your own** (1.1). Give a mission another mission's music,
   the main menu's or the outro's, and the picture the game's mission list shows.
-- **Soldiers on your side** (1.0.5). Any soldier, yours or the level's, can fight for
-  you, for the enemy, or on a side of its own.
-- **Buildings that work as the game's do** (1.0.4, 1.0.5). A building brings its doors,
-  its lift and the things inside it, and one with a cellar or a lift shaft stands on
-  the game's own ground grid, so the ground opens over it as it does in the game.
-- **A team of AI agents** (1.0.4). *Ideas*, a *Mission* builder that plans a whole
-  mission and builds it area by area, *Edit*, a *Workshop* for new things to place,
-  and *Review*. Save as many models as you like, local ones included.
-- **Ground of any height** (1.0.3). Mountains, valleys, a freehand brush, and the
-  level's light and shade redone over the new ground.
-- **The 3D view as the game draws it** (1.0.5). Open cellars and tunnels, the game's
-  own lifts, the real railway track, ready as soon as a mission opens.
-- **Your own textures** (1.0.4). Swap any model's picture for a PNG of yours.
 
+Before that: soldiers on your side, buildings that bring their doors and lifts, a
+team of AI agents, ground of any height, and your own textures (1.0.3 to 1.0.5).
 1.0 was the first public release: one Windows installer, with its own compiler and
 nothing else to install. Everything since is in the [changelog](CHANGELOG.md).
 
@@ -94,6 +103,18 @@ Mountains and valleys of any height, painted ground, and nearly 300 buildings, t
 <img src="docs/assets/icons/ai.svg" width="52" align="left" alt="">
 <b>A team of AI designers</b><br>
 Say what you want in plain words. One agent plans and builds a whole mission area by area; others edit it, design new things to place, and review it. Every change is yours to keep or undo.
+</td>
+</tr>
+<tr>
+<td valign="top">
+<img src="docs/assets/icons/cutscenes.svg" width="52" align="left" alt="">
+<b>Cutscenes and moving vehicles</b><br>
+An intro and an outro made from the mission, shot by shot, in an editor with a timeline. Vehicles that drive their routes, the levels' flights, and soldiers who move when the story says.
+</td>
+<td valign="top">
+<img src="docs/assets/icons/community.svg" width="52" align="left" alt="">
+<b>The community</b><br>
+Share your missions and play everyone else's. Look before you pull, vote and comment, and remix a mission with credit to everyone before you.
 </td>
 </tr>
 <tr>
@@ -147,7 +168,7 @@ your own computer, is optional, for the AI designer only.
 
 ## How it works
 
-<img src="docs/assets/how-it-works.jpg" width="100%" alt="How it works. On your PC: the studio window (Electron) talks to the studio server (Python, bundled) with a new token each launch. The server holds the QVM compiler, the mission builder, the game readers and protect.py, the one gate for writes. It reads the levels from your game and applies missions into slots 15 and up, never the originals, and keeps the reference copy, level data and missions in your studio folder. Only two things leave your PC, both optional: the AI service, when you use it with your own key, and GitHub releases, to ask whether there is a new version.">
+<img src="docs/assets/how-it-works.jpg" width="100%" alt="How it works. On your PC: the studio window (Electron) talks to the studio server (Python, bundled) with a new token each launch. The server holds the QVM compiler, the mission builder, the game readers and protect.py, the one gate for writes. It reads the levels from your game and applies missions into slots 15 and up, never the originals, and keeps the reference copy, level data and missions in your studio folder. Only three things leave your PC, all optional: the AI service, when you use it with your own key; the community, when you browse it, share or sign in; and GitHub releases, to ask whether there is a new version.">
 
 - **Nothing of the game is shipped.** The studio reads your own copy, keeps a checked reference copy of what a
   mission is built from, and builds everything the editor draws on your machine.
@@ -155,8 +176,8 @@ your own computer, is optional, for the AI designer only.
   tested byte for byte against every script the game ships.
 - **One gate for every write.** `studio/protect.py` refuses any write that is not one of your own mission slots,
   so the built-in missions and the reference copy cannot be damaged.
-- **Nothing leaves your PC** unless you use the AI designer, or the studio asks GitHub for a new version. There is
-  no telemetry. The [code signing policy](https://naumanhsa.github.io/project-igi-studio-site/signing) says exactly
+- **Nothing leaves your PC** unless you use the AI designer or the community, or the studio asks GitHub for a new
+  version. There is no telemetry. The [code signing policy](https://naumanhsa.github.io/project-igi-studio-site/signing) says exactly
   what goes where.
 
 ## The compiler

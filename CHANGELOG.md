@@ -3,7 +3,12 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
-## Unreleased
+## 2.0.0
+
+The biggest update since the first release: cutscenes of your own, vehicles
+that drive, soldiers that move with the story, a 3D view that works like
+Unreal Engine's editor, a menu bar, and the community, where players share
+their missions with each other.
 
 ### New
 
@@ -123,6 +128,17 @@ section is also that release's notes on GitHub.
 - The helicopter had no rotor blades in 3D, and glass (its windscreen, the
   windows of buildings) was missing: see-through textures were cut away
   instead of drawn see-through.
+
+- Saving a mission, or a sign-in, could now and then fail with "Access is
+  denied" when something else was reading the file at that moment (Windows).
+  The studio waits a moment and tries again.
+
+### Changed
+
+- The built-in missions are named with their number, as the game's list has
+  them: *Mission 4 – GOD*, *Empty map of Mission 3 – Military Airbase*.
+- **Settings** is the gear at the foot of the side panel (and still in the
+  Game menu), beside your community account.
 
 The level data is read again once when this version first starts (version 9).
 
