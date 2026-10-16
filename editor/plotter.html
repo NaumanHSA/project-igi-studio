@@ -5908,7 +5908,7 @@ function objectInspector(el){
     acts+='<button class="btn act danger" id="idel" title="Delete">'+IC.trash+(own?'Remove':'Remove from mission')+'</button>';
   if(acts)h+='<div class="ins-acts">'+acts+'</div>';
   if(READONLY)
-    h+='<p class="hint" style="margin:8px 0 0">'+(PREVIEW?"A community mission":"A built-in mission")+' is only looked at. View it in 3D, copy it (Ctrl+C), or keep it in Your items to place it in a mission of yours.</p>';
+    h+='<p class="hint" style="margin:8px 0 0">'+(CMVIEW?"A community mission":"A built-in mission")+' is only looked at. View it in 3D, copy it (Ctrl+C), or keep it in Your items to place it in a mission of yours.</p>';
   else if(!own&&o.ref)
     h+='<p class="hint" style="margin:8px 0 0">'+(move?'Drag it on the map once selected. ':'')+'Changes are made to this object itself when the mission is built. The original level is never touched.</p>';
   el.innerHTML=h;
@@ -9573,7 +9573,7 @@ function groupInspector(el){
     '<button class="btn ro-ok" data-g="copy" title="Ctrl+C">'+IC.copy+'Copy</button></div>'+
     (ro?'':'<button class="btn act danger" data-g="del" title="Delete">'+IC.trash+'Remove all</button>')+'</div>'+
     '<p class="hint" style="margin:8px 0 6px">'+(ro
-      ?(PREVIEW?'A community mission':'A built-in mission')+' is only looked at: keep them in Your items, or copy them (Ctrl+C), to use in a mission of yours. Shift+click adds or drops one. Esc clears.'
+      ?(CMVIEW?'A community mission':'A built-in mission')+' is only looked at: keep them in Your items, or copy them (Ctrl+C), to use in a mission of yours. Shift+click adds or drops one. Esc clears.'
       :'Drag any of them to move the group. Arrow keys nudge it. Shift+click adds or drops one. Esc clears.')+'</p>'+
     '<div class="placed-list">';
   list.forEach(function(o,i){
@@ -14318,7 +14318,7 @@ function openMission(id,after){
   Store.get(id).then(function(m){
     if(!m){toast("That mission is no longer there");showLibrary();return}
     if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
-    READONLY=false;PREVIEW=null;M=m;MISSION=m.name;MODE=m.base.kind==="empty"?"empty":"copy";
+    READONLY=false;CMVIEW=null;M=m;MISSION=m.name;MODE=m.base.kind==="empty"?"empty":"copy";
     loadPlanState(m.plan||{});
     rememberLast(id);
     $("start").hidden=true;$("banner").hidden=true;
@@ -14365,11 +14365,11 @@ function loadPlanState(p){
 // A mission from the community, only looked at: its plan over its base level,
 // as a built-in mission is looked at (READONLY), saying where it came from. The
 // map and the 3D view work as for any mission; nothing is saved or applied.
-var PREVIEW=null;      // {id, version, name, author, allow_remix} while one is looked at
+var CMVIEW=null;      // {id, version, name, author, allow_remix} while one is looked at
 function viewCommunity(doc,meta,in3d){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
   if(window.View3D&&View3D.isOpen())toggle3d(false);
-  M=null;READONLY=true;PREVIEW=meta;MODE=doc.base.kind==="empty"?"empty":"copy";MISSION=doc.name;
+  M=null;READONLY=true;CMVIEW=meta;MODE=doc.base.kind==="empty"?"empty":"copy";MISSION=doc.name;
   loadPlanState(JSON.parse(JSON.stringify(doc.plan||{})));
   rememberLast(null);
   $("start").hidden=true;
@@ -14380,14 +14380,14 @@ function viewCommunity(doc,meta,in3d){
   });
 }
 function previewBanner(warn){
-  var p=PREVIEW,by=p.author?" by @"+p.author.handle:"";
+  var p=CMVIEW,by=p.author?" by @"+p.author.handle:"";
   banner('<b>'+esc(p.name)+'</b>'+esc(by)+', from the community. '+(warn
       ?'It can’t be changed here: pull it into your studio to make it yours, then change it.'
       :'Look around and view it in 3D; to change it, pull it into your studio.')+
     ' <button class="btn primary" id="bn-pull">Pull to my studio</button> <button class="btn" id="bn-cm">Back to the community</button>',
     warn?"warn":"");
-  $("bn-pull").addEventListener("click",function(){Community.pull(PREVIEW)});
-  $("bn-cm").addEventListener("click",function(){Community.open({kind:"mission",id:PREVIEW.id})});
+  $("bn-pull").addEventListener("click",function(){Community.pull(CMVIEW)});
+  $("bn-cm").addEventListener("click",function(){Community.open({kind:"mission",id:CMVIEW.id})});
 }
 // Buildings placed before the grid mattered: moved onto it once, as the mission
 // opens, each an ordinary move (the change log shows it, undo takes it back),
@@ -14411,7 +14411,7 @@ function gridExisting(){
 function viewBuiltin(level){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
   var b=builtin(level);
-  M=null;READONLY=true;PREVIEW=null;MODE="copy";MISSION=b?b.name:"Level "+level;
+  M=null;READONLY=true;CMVIEW=null;MODE="copy";MISSION=b?b.name:"Level "+level;
   placements=[];removals=[];navNodes=[];nodeEdits={};edits={};removeRefs=[];nodeVer++;planVer++;
   objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];levelScenes={};levelVehicles={};cutscenes=[];CUTPICK=null;groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
   sel=null;tool=null;patrolMode=false;
@@ -14463,10 +14463,10 @@ function pendingChanges(){
   return total-AS.n+gone;
 }
 function paintStatus(){
-  $("lvchip").textContent=M?baseLabel(M.base):PREVIEW?"community · level "+LV:READONLY?"built-in · level "+LV:"";
+  $("lvchip").textContent=M?baseLabel(M.base):CMVIEW?"community · level "+LV:READONLY?"built-in · level "+LV:"";
   // the open mission knows what the game has: up to date when nothing differs from it
   if(M&&M.installed&&M.applied){var pend=pendingChanges();M.upToDate=pend===0}
-  var st=M?gameStatus(M):PREVIEW?"looking":READONLY?"read-only":"";
+  var st=M?gameStatus(M):CMVIEW?"looking":READONLY?"read-only":"";
   $("modechip").textContent=st;
   $("modechip").classList.toggle("ok",!!(M&&M.installed&&M.upToDate));
 }
@@ -14488,7 +14488,7 @@ function banner(html,kind){
 }
 // the banner a built-in mission opens with; warn: something tried to change it
 function builtinBanner(warn){
-  if(PREVIEW)return previewBanner(warn);
+  if(CMVIEW)return previewBanner(warn);
   banner(warn
     ?'<b>A built-in mission can’t be changed</b>'+esc(MISSION)+' stays exactly as the game ships it. To change it, make a mission of your own '+
       'from it: a full copy, or just its map. Here you can look around, view things in 3D, copy them, and keep them in Your items.'+
@@ -14831,14 +14831,14 @@ function renderMenu(host,items,close){
 // What needs a mission of yours open is greyed until one is, saying so.
 function mine(it){
   if(!it||it==="-")return it;
-  if(READONLY||!M)return Object.assign({},it,{disabled:true,title:PREVIEW?"A community mission is only looked at: pull it into your studio first":
+  if(READONLY||!M)return Object.assign({},it,{disabled:true,title:CMVIEW?"A community mission is only looked at: pull it into your studio first":
     READONLY?"A built-in mission is only looked at: make a mission from it first":"Open a mission of yours first",act:null});
   return it;
 }
 function missionMenuItems(){
-  if(PREVIEW)return [
-    {label:"Pull “"+PREVIEW.name+"” to my studio",act:function(){Community.pull(PREVIEW)}},
-    {label:"Back to the community",act:function(){Community.open({kind:"mission",id:PREVIEW.id})}},
+  if(CMVIEW)return [
+    {label:"Pull “"+CMVIEW.name+"” to my studio",act:function(){Community.pull(CMVIEW)}},
+    {label:"Back to the community",act:function(){Community.open({kind:"mission",id:CMVIEW.id})}},
     "-",
     {label:"New mission…",act:function(){newMissionDialog({})}},
     {label:"Mission library…",act:showLibrary}
@@ -14895,8 +14895,8 @@ function shareMenuItems(){
   var srv=Store&&!Store.local,C=window.Community,cs=C?C.state():{},pub=M&&M.community&&M.community.published;
   var cm=srv&&C&&cs.configured!==false;
   return [
-    cm&&PREVIEW?{label:"Pull “"+PREVIEW.name+"” to my studio",act:function(){C.pull(PREVIEW)}}:null,
-    cm&&!PREVIEW?mine({label:pub?"Share with the community (again or as new)…":"Share with the community…",act:function(){C.share()}}):null,
+    cm&&CMVIEW?{label:"Pull “"+CMVIEW.name+"” to my studio",act:function(){C.pull(CMVIEW)}}:null,
+    cm&&!CMVIEW?mine({label:pub?"Share with the community (again or as new)…":"Share with the community…",act:function(){C.share()}}):null,
     cm&&pub&&!READONLY?{label:"Publish an update…",act:function(){C.share("update")}}:null,
     cm?{label:"Community missions",act:function(){C.open()}}:null,
     cm?(cs.signed_in&&cs.profile?{label:"Your community profile (@"+cs.profile.handle+")",act:C.profile}:{label:"Sign in to the community…",act:C.signIn}):null,
@@ -18616,7 +18616,7 @@ window.StudioCommunity={
   closeSheet:function(){$("sheet").hidden=true},
   levelName:function(n){var b=builtin(n);return b?b.name:"Level "+n},
   current:function(){
-    if(PREVIEW)return {preview:true,readonly:true,name:MISSION};
+    if(CMVIEW)return {preview:true,readonly:true,name:MISSION};
     if(!M)return null;
     return {id:M.id,name:MISSION,description:M.description||"",base:M.base,readonly:READONLY,community:M.community||null};
   },

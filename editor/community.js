@@ -1032,7 +1032,9 @@ function showAuth(body) {
   stats().then(function (s) { var e = $("au-stats"); if (e) e.innerHTML = statTiles(s) });
   authStep(V);
 }
-var POLL = null;
+var POLL = null, GOOGLE_CHECK = null;
+// back to the studio's window from the browser: the Google sign-in is looked at at once
+window.addEventListener("focus", function () { if (GOOGLE_CHECK) GOOGLE_CHECK() });
 function authStep(V) {
   var card = $("au-card");
   if (!card) return;
@@ -1086,9 +1088,12 @@ function authStep(V) {
       '<button class="cmx-btn primary big block" id="rs-go">' + ic("check") + 'Set it and sign in</button>' +
       '<p class="cmx-foot"><button type="button" class="cmx-link" data-tab="forgot">Send a new code</button></p>';
   } else if (V.step === "google") {
-    h = '<div class="cmx-wait">' + radar() + '<h2>Waiting for Google</h2><p class="lead">Google opened in your browser. When it says you are signed in, come back here: the studio carries on by itself.</p>' +
-      (V.url ? '<p class="cmx-note" style="justify-content:center">' + ic("info") + '<span>Nothing opened? Copy this into your browser:</span></p><input class="cmx-url" readonly value="' + esc(V.url) + '">' : '') +
+    h = '<div class="cmx-wait">' + radar() + '<h2>Waiting for Google</h2><p class="lead">Google’s page is open in your browser - it may be behind this window. ' +
+      'Sign in there; when it says you are signed in, the studio carries on by itself.</p>' +
       '<div class="cmx-alert" id="au-err" hidden></div>' +
+      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:6px">' +
+        '<button class="cmx-btn" id="gg-again">' + ic("globe") + 'Open the page again</button>' +
+        '<button class="cmx-btn ghost" id="gg-copy">' + ic("link") + 'Copy the link</button></div>' +
       '<p class="cmx-foot"><button type="button" class="cmx-link" data-tab="signin">Cancel</button></p></div>';
   } else if (V.step === "name") {
     h = '<div class="cmx-big-ico">' + ic("person") + '</div><h2>One last thing</h2><p class="lead">Choose the name others see next to your missions and comments. Your email is never shown.</p><div id="au-pf"></div>';
@@ -1154,19 +1159,35 @@ function bindAuth(V) {
   var s = V.step;
   if ($("au-google")) $("au-google").addEventListener("click", function () {
     var b = this;
-    b.disabled = true;
+    busy(b, true, "Opening Google…");
     api("POST", "auth/google", {}).then(function (r) {
       V.step = "google"; V.url = r.url; authStep(V);
-      POLL = setInterval(function () {
-        if (!isOpen() || VIEW !== V || V.step !== "google") { clearInterval(POLL); return }
-        api("GET", "auth/google").then(function (g) {
-          if (VIEW !== V || V.step !== "google") { clearInterval(POLL); return }
-          if (g.state === "done") { clearInterval(POLL); authDone(V) }
-          else if (g.state === "failed" || g.state === "none") { clearInterval(POLL); V.step = "signin"; authStep(V); err(new Error(g.error || "Google sign-in did not finish.")) }
-        }).catch(function () {});
-      }, 1200);
-    }).catch(function (e) { b.disabled = false; err(e) });
+    }).catch(function (e) { busy(b, false); err(e) });
   });
+  if (s === "google") {
+    // asked every second and a bit, and at once when the studio's window is back in front:
+    // signed in, by this sign-in or an earlier one, is all that matters
+    GOOGLE_CHECK = function () {
+      if (!isOpen() || VIEW !== V || V.step !== "google") { clearInterval(POLL); GOOGLE_CHECK = null; return }
+      api("GET", "auth/google").then(function (g) {
+        if (VIEW !== V || V.step !== "google") return;
+        if (g.signed_in || g.state === "done") { clearInterval(POLL); GOOGLE_CHECK = null; authDone(V) }
+        else if (g.state === "failed") err(new Error(g.error || "Google sign-in did not finish. Open the page again, or cancel."));
+      }).catch(function () {});
+    };
+    POLL = setInterval(GOOGLE_CHECK, 1200);
+    GOOGLE_CHECK();
+    $("gg-again").addEventListener("click", function () {
+      clearErr();
+      api("POST", "auth/google-again", {}).then(function (r) { V.url = r.url; toast("Google’s page is open in your browser") })
+        .catch(function () { api("POST", "auth/google", {}).then(function (r) { V.url = r.url }).catch(err) });
+    });
+    $("gg-copy").addEventListener("click", function () {
+      if (!V.url) return;
+      (navigator.clipboard ? navigator.clipboard.writeText(V.url) : Promise.reject()).then(function () { toast("The link is copied: paste it into your browser") })
+        .catch(function () { toast("Copy it from here: " + V.url) });
+    });
+  }
   if (s === "signin") {
     var go = function () {
       clearErr();

@@ -43,11 +43,12 @@
 #   POST /api/community/auth/signup {email, password, name}, auth/verify {email, code},
 #        auth/resend {email, kind}, auth/signin {email, password}, auth/reset {email, code, password},
 #        auth/signout, account/delete
-#   POST /api/community/auth/google             {url}; GET it again: {state: waiting, done, failed}
+#   POST /api/community/auth/google             {url}; GET it: {state: waiting, done, failed; signed_in}
+#   POST /api/community/auth/google-again       the same Google page opened again (not a new sign-in)
 #   POST /api/community/avatar {data}           a picture of you: {id}
 #   POST /api/community/pull {id, version}      {mission}: a mission of yours now
 #   POST /api/community/publish {mission, form} {id, version}: shared, or a new version (form.mode "update")
-import base64, gzip, hashlib, html, json, os, pathlib, re, threading, time, urllib.error, urllib.parse
+import base64, gzip, hashlib, html, json, os, pathlib, re, sys, threading, time, urllib.error, urllib.parse
 import urllib.request, uuid, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -377,7 +378,17 @@ def delete_account():
 
 
 # ------------------------------------------------------------------ Google
-_G = {"state": "none", "error": None, "nonce": None, "servers": [], "port": None, "started": 0}
+# Any sign-in this studio started in the last ten minutes is taken when the
+# browser comes back: a second click must not throw the first away, since its
+# page may still be finishing in a browser tab behind the studio's window. The
+# listener stays up until one has come back, or the ten minutes are over.
+NONCE_LIFE = 600
+_G = {"nonces": {}, "servers": [], "port": None, "url": None, "error": None, "done": 0, "started": 0}
+SIGNED_IN_PAGE = "You are signed in to the IGI Studio community. You can close this tab and go back to the studio."
+
+
+def _log(msg):
+    sys.stderr.write("   community: %s\n" % msg)
 
 
 class _Callback(BaseHTTPRequestHandler):
@@ -387,8 +398,15 @@ class _Callback(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
-        if u.path != "/callback" or (q.get("s") or [""])[0] != _G["nonce"] or _G["state"] != "waiting":
-            return self._page(404, "This sign-in link is not waiting any more. Start again from the studio.")
+        if u.path != "/callback":
+            return self._page(404, "Nothing here.")
+        nonce = (q.get("s") or [""])[0]
+        t = _G["nonces"].get(nonce)
+        if not t or time.time() - t > NONCE_LIFE:
+            _log("google: a sign-in came back that this studio did not start, or too late")
+            if signed_in():
+                return self._page(200, SIGNED_IN_PAGE)
+            return self._page(404, "This sign-in is too old. Start it again from the studio.")
         v = (q.get("neon_auth_session_verifier") or [""])[0]
         err = (q.get("error") or [""])[0]
         try:
@@ -398,12 +416,17 @@ class _Callback(BaseHTTPRequestHandler):
                 st, _, j = _auth("GET", "/get-session", query={"neon_auth_session_verifier": v})
                 if st != 200 or not (isinstance(j, dict) and j.get("session")) or not signed_in():
                     raise CommunityError("Google sign-in did not finish.")
-            _G.update(state="done", error=None)
-            self._page(200, "You are signed in to the IGI Studio community. You can close this tab and go back to the studio.")
+            done = time.time()
+            _G.update(done=done, error=None)
+            _G["nonces"].pop(nonce, None)
+            _log("google: signed in")
+            self._page(200, SIGNED_IN_PAGE)
+            # the listener goes, unless another sign-in has started since
+            _later(2.0, lambda: _G["started"] <= done and _stop_listener())
         except CommunityError as e:
-            _G.update(state="failed", error=str(e))
+            _G["error"] = str(e)
+            _log("google: %s" % e)
             self._page(400, str(e))
-        _later(1.0, _stop_listener)
 
     def _page(self, code, text):
         body = ("<!doctype html><meta charset=utf-8><title>IGI Studio</title>"
@@ -455,36 +478,34 @@ def _listen(port):
 
 
 def google_start(open_browser=True):
-    """Starts a Google sign-in: the listener, and the URL of Google's page (opened in the browser)."""
-    _stop_listener()
-    servers = None
-    for port in LISTEN_PORTS:
-        servers = _listen(port)
-        if servers:
-            break
-    if not servers:
-        raise CommunityError("Google sign-in needs one of the ports %s free on this computer." %
-                             ", ".join(map(str, LISTEN_PORTS)), 503, "port")
+    """Starts a Google sign-in: the listener (kept if it is up), and Google's page (opened in the browser)."""
+    now = time.time()
+    _G["nonces"] = {k: t for k, t in _G["nonces"].items() if now - t < NONCE_LIFE}
+    if not _G["servers"]:
+        servers = None
+        for port in LISTEN_PORTS:
+            servers = _listen(port)
+            if servers:
+                break
+        if not servers:
+            raise CommunityError("Google sign-in needs one of the ports %s free on this computer." %
+                                 ", ".join(map(str, LISTEN_PORTS)), 503, "port")
+        _G.update(servers=servers, port=servers[0].server_address[1])
+        for srv in servers:
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
     nonce = uuid.uuid4().hex
-    _G.update(state="waiting", error=None, nonce=nonce, servers=servers, port=servers[0].server_address[1], started=time.time())
-    for srv in servers:
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-    _later(300, lambda: _G["nonce"] == nonce and _G["state"] == "waiting" and
-           (_G.update(state="failed", error="Google sign-in took too long."), _stop_listener()))
+    _G["nonces"][nonce] = now
+    _G.update(error=None, done=0, started=now)
+    _later(NONCE_LIFE + 5, lambda: time.time() - _G["started"] >= NONCE_LIFE and _stop_listener())
     back = "http://localhost:%d/callback?s=%s" % (_G["port"], nonce)
-    try:
-        st, _, j = _auth("POST", "/sign-in/social", {"provider": "google", "callbackURL": back,
-                                                     "errorCallbackURL": back, "disableRedirect": True})
-        j = _auth_ok(st, j, "Google sign-in")
-    except CommunityError:
-        _G.update(state="none")
-        _stop_listener()
-        raise
+    st, _, j = _auth("POST", "/sign-in/social", {"provider": "google", "callbackURL": back,
+                                                 "errorCallbackURL": back, "disableRedirect": True})
+    j = _auth_ok(st, j, "Google sign-in")
     url = (j or {}).get("url") if isinstance(j, dict) else None
     if not url:
-        _G.update(state="none")
-        _stop_listener()
         raise CommunityError("Google sign-in is not available right now.", 503, "google")
+    _G["url"] = url
+    _log("google: sign-in started (listening on localhost:%d)" % _G["port"])
     if open_browser:
         try:
             webbrowser.open(url)
@@ -493,14 +514,22 @@ def google_start(open_browser=True):
     return {"url": url, "state": "waiting"}
 
 
+def google_reopen():
+    """Google's page again, for the sign-in already started (not a new one)."""
+    if not _G["url"] or time.time() - _G["started"] > NONCE_LIFE:
+        raise CommunityError("Start the sign-in again.", 400, "google")
+    try:
+        webbrowser.open(_G["url"])
+    except Exception:
+        pass
+    return {"url": _G["url"]}
+
+
 def google_state():
-    out = {"state": _G["state"], "error": _G["error"]}
-    if _G["state"] == "done":
-        out.update(status())
-        _G["state"] = "none"
-    elif _G["state"] == "failed":
-        _G["state"] = "none"
-    return out
+    """waiting, done (signed in since it started), or failed (why); and whether this studio is signed in at all"""
+    signed = signed_in()
+    state = "done" if signed and _G["done"] else "failed" if _G["error"] else "waiting"
+    return {"state": state, "error": _G["error"], "signed_in": signed}
 
 
 # ------------------------------------------------------------------ pictures and plans
@@ -771,6 +800,7 @@ def handle(method, path, query, body):
             "auth/signin": lambda: sign_in(b.get("email"), b.get("password")),
             "auth/reset": lambda: reset_password(b.get("email"), b.get("code"), b.get("password")),
             "auth/google": lambda: google_start(b.get("open", True) is not False),
+            "auth/google-again": google_reopen,
             "auth/signout": sign_out,
             "account/delete": delete_account,
             "avatar": lambda: upload_avatar(b.get("data")),
