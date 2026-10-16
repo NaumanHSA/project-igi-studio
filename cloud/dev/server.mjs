@@ -179,7 +179,7 @@ async function auth(req, res, route, url) {
       return send(res, 200, s, headers)
     }
     case 'GET /token/anonymous': {
-      const t = jwt({ role: 'anonymous' })
+      const t = jwt({ role: 'anonymous', sub: 'anonymous' })        // as Neon's: a sub of "anonymous"
       return send(res, 200, { token: t, expires_at: readJwt(t).exp })
     }
     case 'POST /sign-in/social': {
@@ -251,7 +251,7 @@ async function rpc(req, res, fn) {
   if (claims.expired) return send(res, 401, { code: 'PGRST303', message: 'JWT expired' })
   const body = await readBody(req)
   try {
-    const out = await db.call(fn, body.p ?? {}, { user: claims.role === 'authenticated' ? claims.sub : null })
+    const out = await db.call(fn, body.p ?? {}, { user: claims.sub || null, role: claims.role })
     return send(res, 200, out)
   } catch (e) {
     return send(res, e.status || 500, e.body || { code: 'XX000', message: e.message })

@@ -66,12 +66,14 @@ export async function openDb({ dir } = {}) {
   const serial = fn => { const r = chain.then(fn, fn); chain = r.catch(() => {}); return r }
   return {
     pg,
-    /** Runs public.<fn>(p) as the Data API would: as anonymous, or authenticated as user. */
-    call(fn, p = {}, { user = null } = {}) {
+    /** Runs public.<fn>(p) as the Data API would: as the role, the token's sub as the person
+        (a guest: role anonymous, and on Neon sub "anonymous" too). */
+    call(fn, p = {}, { user = null, role = null } = {}) {
+      role = role || (user ? 'authenticated' : 'anonymous')
       if (!/^[a-z_]{1,40}$/.test(fn)) return Promise.reject(Object.assign(new Error('Not found'), { status: 404 }))
       return serial(async () => {
         await pg.query(`select set_config('request.user_id', $1, false)`, [user || ''])
-        await pg.exec(`set role ${user ? 'authenticated' : 'anonymous'}`)
+        await pg.exec(`set role ${role === 'authenticated' ? 'authenticated' : 'anonymous'}`)
         try {
           const r = await pg.query(`select public.${fn}($1::jsonb) as r`, [JSON.stringify(p ?? {})])
           return r.rows[0].r

@@ -183,8 +183,9 @@ begin
   raise exception using message = msg, errcode = 'P0001';
 end $$;
 
+-- the person asking; a guest's token says "anonymous" (Neon Auth's anonymous token): no one
 create function community.me() returns text language sql stable as $$
-  select nullif(auth.user_id(), '')
+  select nullif(nullif(auth.user_id(), ''), 'anonymous')
 $$;
 
 create function community.as_uuid(s text) returns uuid language plpgsql immutable as $$

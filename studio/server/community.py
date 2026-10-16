@@ -56,7 +56,8 @@ from studio.server import missions as MS
 
 # The real project's two public addresses (Neon console: the Data API, and
 # Neon Auth's URL). Nothing secret: what may be done is decided by the database.
-COMMUNITY = {"data": "", "auth": ""}
+COMMUNITY = {"data": "https://ep-withered-tooth-b47e9u86.apirest.c-6.us-east-2.aws.neon.tech/neondb/rest/v1",
+             "auth": "https://ep-withered-tooth-b47e9u86.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth"}
 
 # where Google sends the browser back to: the first of these that is free. Below
 # 49152: Windows (Hyper-V, WSL, Docker) reserves blocks of ports above it, which
@@ -402,7 +403,7 @@ class _Callback(BaseHTTPRequestHandler):
         except CommunityError as e:
             _G.update(state="failed", error=str(e))
             self._page(400, str(e))
-        threading.Timer(1.0, _stop_listener).start()
+        _later(1.0, _stop_listener)
 
     def _page(self, code, text):
         body = ("<!doctype html><meta charset=utf-8><title>IGI Studio</title>"
@@ -416,6 +417,13 @@ class _Callback(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+
+def _later(seconds, fn):
+    """fn in a while, on a thread that never keeps the studio from closing"""
+    t = threading.Timer(seconds, fn)
+    t.daemon = True
+    t.start()
 
 
 def _stop_listener():
@@ -461,8 +469,8 @@ def google_start(open_browser=True):
     _G.update(state="waiting", error=None, nonce=nonce, servers=servers, port=servers[0].server_address[1], started=time.time())
     for srv in servers:
         threading.Thread(target=srv.serve_forever, daemon=True).start()
-    threading.Timer(300, lambda: _G["nonce"] == nonce and _G["state"] == "waiting" and
-                    (_G.update(state="failed", error="Google sign-in took too long."), _stop_listener())).start()
+    _later(300, lambda: _G["nonce"] == nonce and _G["state"] == "waiting" and
+           (_G.update(state="failed", error="Google sign-in took too long."), _stop_listener()))
     back = "http://localhost:%d/callback?s=%s" % (_G["port"], nonce)
     try:
         st, _, j = _auth("POST", "/sign-in/social", {"provider": "google", "callbackURL": back,

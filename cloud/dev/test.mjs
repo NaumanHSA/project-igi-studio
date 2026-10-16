@@ -38,6 +38,8 @@ console.log('the community database')
 let M1, M2
 await t('a guest is no one, and sees an empty community', async () => {
   assert.deepEqual(await guest('me'), { signed_in: false, profile: null })
+  // Neon's anonymous token says sub "anonymous": still no one
+  assert.deepEqual(await db.call('me', {}, { user: 'anonymous', role: 'anonymous' }), { signed_in: false, profile: null })
   assert.deepEqual((await guest('list_missions', {})).items, [])
 })
 await t('a guest cannot write at all (no grant)', async () => {
