@@ -183,13 +183,20 @@ function objIcon(kind) {
     : /hack/.test(k) ? "terminal" : /destroy|blow/.test(k) ? "burst" : "flag";
 }
 
+// Signed in or not is what the studio's server says - and only it. It says "unsure" when the
+// session holds but the community just now did not see the account (Neon's Data API, now and
+// then), "offline" when it can't be reached: signed in still, asked again shortly.
+var KEEP_DAYS = 30, UNSURE = 0;
 function refreshState() {
   return api("GET", "status").then(function (s) {
     ST = s; paintAccount();
     if (H && H.communityChanged) H.communityChanged();
+    if (s.unsure || s.offline) { if (UNSURE < 3) { UNSURE++; setTimeout(refreshState, 2500 * UNSURE) } }
+    else UNSURE = 0;
     return s;
   }).catch(function (e) {
-    ST = { configured: ST.configured, signed_in: false, profile: null, error: e.message };
+    // the studio not answering is not a sign-out: what was known stays
+    ST = Object.assign({}, ST, { error: e.message });
     paintAccount();
     return ST;
   });
@@ -322,6 +329,8 @@ function paintAccount() {
       '<button role="menuitem" data-m="profile">' + ic("person") + 'Your profile</button>' +
       '<button role="menuitem" data-m="mine">' + ic("layers") + 'Your missions</button>' +
       '<button role="menuitem" data-m="edit">' + ic("edit") + 'Edit your profile</button>' +
+      '<button role="menuitemcheckbox" class="keep" data-m="keep" aria-checked="' + (ST.keep ? "true" : "false") + '"><span class="sw" aria-hidden="true"></span>' +
+        '<span>Keep me signed in<i>' + (ST.keep ? "On this PC, " + KEEP_DAYS + " days from your last visit" : "Until the studio closes") + '</i></span></button>' +
       '<button role="menuitem" data-m="out">' + ic("logout") + 'Sign out</button></div>';
     $("cm-me").addEventListener("click", function () {
       var m = $("cm-menu"); m.hidden = !m.hidden; this.setAttribute("aria-expanded", String(!m.hidden));
@@ -332,11 +341,17 @@ function paintAccount() {
         var w = b.getAttribute("data-m");
         if (w === "profile" || w === "mine") go({ kind: "profile", handle: p.handle });
         else if (w === "edit") go({ kind: "profile-edit" });
+        else if (w === "keep") {
+          api("POST", "auth/keep", { keep: !ST.keep }).then(refreshState).then(function (s) {
+            toast(s.keep ? "You stay signed in on this PC" : "You’ll be signed out when the studio closes");
+          }).catch(function (e) { toast(e.message) });
+        }
         else signOut();
       });
     });
   } else {
-    a.innerHTML = '<button class="cmx-btn ghost" id="cm-signin">' + ic("person") + (ST.signed_in ? "Choose your name" : "Sign in") + '</button>';
+    a.innerHTML = '<button class="cmx-btn ghost" id="cm-signin">' + ic("person") +
+      (!ST.signed_in ? "Sign in" : ST.unsure || ST.offline ? "Signed in" : "Choose your name") + '</button>';
     $("cm-signin").addEventListener("click", function () {
       if (VIEW && VIEW.kind === "auth") return;
       go({ kind: "auth", step: ST.signed_in ? "name" : "signin" });
@@ -1085,7 +1100,7 @@ function authStep(V) {
     var rm = ST.remembered;
     h = why + '<h2>Welcome back</h2><p class="lead">This studio remembers the account you signed out of.</p>' +
       '<div class="cmx-remember">' + avatar(rm, "lg") + '<div><b>' + esc(rm.name || rm.handle) + '</b><span>@' + esc(rm.handle) + '</span></div></div>' +
-      '<div class="cmx-alert" id="au-err" hidden></div>' +
+      keepBox(V) + '<div class="cmx-alert" id="au-err" hidden></div>' +
       '<button class="cmx-btn primary big block" id="au-continue">' + ic("arrow") + 'Continue as ' + esc(rm.name || "@" + rm.handle) + '</button>' +
       '<div class="cmx-or">or</div>' +
       '<button class="cmx-btn big block" id="au-another">' + ic("person") + 'Use another account</button>' +
@@ -1095,7 +1110,7 @@ function authStep(V) {
       field("au-email", "Email", V.email || "", { icon: "mail", type: "email", auto: "email", ph: "you@example.com", msg: false }) +
       field("au-pw", "Password", "", { icon: "lock", type: "password", auto: "current-password", eye: true, msg: false,
         side: '<button type="button" class="cmx-link" id="au-forgot">Forgot it?</button>' }) +
-      '<div class="cmx-alert" id="au-err" hidden></div>' +
+      keepBox(V) + '<div class="cmx-alert" id="au-err" hidden></div>' +
       '<button class="cmx-btn primary big block" id="au-go" style="margin-top:6px">' + ic("arrow") + 'Sign in</button>' +
       '<p class="cmx-foot">New here? <button type="button" class="cmx-link" data-tab="signup">Create an account</button></p>';
   } else if (V.step === "signup") {
@@ -1111,7 +1126,7 @@ function authStep(V) {
       '<div style="height:12px"></div>' +
       field("su-pw2", "Confirm the password", "", { icon: "lock", type: "password", auto: "new-password", eye: true, st: true }) +
       '<label class="cmx-check"><input type="checkbox" id="su-agree"><span>I agree to the <button type="button" class="cmx-link" id="su-rules-link">community rules</button>: my own work or credited, none of the game’s files, nothing hurtful.</span></label>' +
-      '<div class="cmx-alert" id="au-err" hidden></div>' +
+      keepBox(V) + '<div class="cmx-alert" id="au-err" hidden></div>' +
       '<button class="cmx-btn primary big block" id="su-go" disabled>' + ic("check") + 'Create account</button>' +
       '<p class="cmx-foot">Already have one? <button type="button" class="cmx-link" data-tab="signin">Sign in</button></p>';
   } else if (V.step === "verify") {
@@ -1145,9 +1160,16 @@ function authStep(V) {
     h = '<div class="cmx-big-ico">' + ic("person") + '</div><h2>One last thing</h2><p class="lead">Choose the name others see next to your missions and comments. Your email is never shown.</p><div id="au-pf"></div>';
   }
   card.innerHTML = h;
+  var kb = $("au-keep");
+  if (kb) kb.addEventListener("change", function () { V.keep = kb.checked });
   card.querySelectorAll("[data-tab]").forEach(function (b) { b.addEventListener("click", function () { V.step = b.getAttribute("data-tab"); authStep(V) }) });
   bindEyes(card);
   bindAuth(V);
+}
+// Staying signed in, chosen on every way in (Google's too); on unless unticked
+function keepBox(V) {
+  return '<label class="cmx-keep"><input type="checkbox" id="au-keep"' + (V.keep === false ? "" : " checked") + '><span class="sw" aria-hidden="true"></span>' +
+    '<span class="tx"><b>Keep me signed in</b><i>On this PC for ' + KEEP_DAYS + ' days, renewed each time you use the studio. Untick it on a shared computer.</i></span></label>';
 }
 function err(e) { var el = $("au-err"); if (el) { el.hidden = false; el.innerHTML = ic("warn") + '<span>' + esc(e.message || String(e)) + '</span>' } }
 function clearErr() { var el = $("au-err"); if (el) el.hidden = true }
@@ -1206,7 +1228,7 @@ function bindAuth(V) {
   if ($("au-google")) $("au-google").addEventListener("click", function () {
     var b = this;
     busy(b, true, "Opening Google…");
-    api("POST", "auth/google", {}).then(function (r) {
+    api("POST", "auth/google", { keep: V.keep !== false }).then(function (r) {
       V.step = "google"; V.url = r.url; authStep(V);
       googleWatch();
     }).catch(function (e) { busy(b, false); err(e) });
@@ -1216,7 +1238,7 @@ function bindAuth(V) {
     $("gg-again").addEventListener("click", function () {
       clearErr();
       api("POST", "auth/google-again", {}).then(function (r) { V.url = r.url; toast("Google’s page is open in your browser") })
-        .catch(function () { api("POST", "auth/google", {}).then(function (r) { V.url = r.url }).catch(err) });
+        .catch(function () { api("POST", "auth/google", { keep: V.keep !== false }).then(function (r) { V.url = r.url }).catch(err) });
     });
     $("gg-cancel").addEventListener("click", function () {
       googleStop();
@@ -1233,7 +1255,7 @@ function bindAuth(V) {
     $("au-continue").addEventListener("click", function () {
       var b = this;
       clearErr(); busy(b, true, "Signing in…");
-      api("POST", "auth/continue", {}).then(function () { authDone(V) }).catch(function (e) {
+      api("POST", "auth/continue", { keep: V.keep !== false }).then(function () { authDone(V) }).catch(function (e) {
         busy(b, false);
         // run out: the ordinary way in, saying why
         refreshState().then(function () { V.another = true; authStep(V); err(e) });
@@ -1253,7 +1275,7 @@ function bindAuth(V) {
       if (!emailOk(email)) { err(new Error("That doesn’t look like an email address.")); $("au-email").focus(); return }
       if (!$("au-pw").value) { $("au-pw").focus(); return }
       busy(b, true, "Signing in…");
-      api("POST", "auth/signin", { email: email, password: $("au-pw").value }).then(function () { authDone(V) }).catch(function (e) {
+      api("POST", "auth/signin", { email: email, password: $("au-pw").value, keep: V.keep !== false }).then(function () { authDone(V) }).catch(function (e) {
         busy(b, false);
         if (e.code === "verify") { V.step = "verify"; authStep(V) } else err(e);
       });
@@ -1307,7 +1329,7 @@ function bindAuth(V) {
       V.pending = { name: nameEl.value.trim(), handle: $("su-handle").value.trim().replace(/^@/, ""), email: $("su-email").value.trim() };
       V.email = V.pending.email;
       busy(b, true, "Creating your account…");
-      api("POST", "auth/signup", { email: V.email, password: $("su-pw").value, name: V.pending.name }).then(function (r) {
+      api("POST", "auth/signup", { email: V.email, password: $("su-pw").value, name: V.pending.name, keep: V.keep !== false }).then(function (r) {
         if (r.verify) { V.step = "verify"; authStep(V) } else authDone(V);
       }).catch(function (e) { busy(b, false); err(e) });
     }
@@ -1323,7 +1345,7 @@ function bindAuth(V) {
       v = v || code.value();
       if (v.length !== 6) { err(new Error("Type the 6 digits from the email.")); return }
       busy(b, true, "Checking…");
-      api("POST", "auth/verify", { email: V.email, code: v }).then(function () { authDone(V) }).catch(function (e) {
+      api("POST", "auth/verify", { email: V.email, code: v, keep: V.keep !== false }).then(function () { authDone(V) }).catch(function (e) {
         busy(b, false);
         if (e.code === "signin") { V.step = "signin"; authStep(V); err(e) } else { code.bad(); err(e) }
       });
@@ -1362,7 +1384,7 @@ function bindAuth(V) {
       if (!paintR()) { $("rs-pw").focus(); return }
       var b = this;
       busy(b, true, "Setting it…");
-      api("POST", "auth/reset", { email: V.email, code: rc.value(), password: $("rs-pw").value }).then(function () { authDone(V) })
+      api("POST", "auth/reset", { email: V.email, code: rc.value(), password: $("rs-pw").value, keep: V.keep !== false }).then(function () { authDone(V) })
         .catch(function (e) { busy(b, false); rc.bad(); err(e) });
     });
   } else if (s === "name") {

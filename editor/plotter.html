@@ -7658,7 +7658,7 @@ function nextMissionName(){
   var nx=sl.filter(function(s){return s.level===me.next})[0];
   if(nx)return nx.name||"mission "+nx.level;
   var b=(LIB.builtins||[]).filter(function(x){return x.level===me.next})[0];
-  return b?b.name:null;
+  return b?levelTitle(b.level):null;
 }
 function addCutscene(c,open){
   if(!canEdit())return;
@@ -13574,8 +13574,6 @@ function makeStore(serverOk){
     local:true,
     library:function(){
       return fetch("data/builtins.json?v="+DATAV).then(function(r){return r.json()}).then(function(b){
-        // the names the studio shows instead of the game's (studio/extract/library.py NAMES)
-        (b.missions||[]).forEach(function(x){if(+x.level===4)x.name="Defend the Troops"});
         return {builtins:b.missions,groups:b.groups,slots:[],trash:keys(T).length,
           missions:keys(K).map(read).filter(Boolean).map(summary).sort(function(a,c){return (c.updated||0)-(a.updated||0)})};
       });
@@ -13657,10 +13655,13 @@ function loadLevel(n,then){
 function slug(s){return (s||"mission").toLowerCase().replace(/[^a-z0-9]+/g,"-")
   .replace(/^-|-$/g,"").slice(0,40)||"mission"}
 function builtin(level){return ((LIB&&LIB.builtins)||[]).filter(function(b){return b.level===+level})[0]||null}
+// A built-in mission as the studio names it: its number with the game's name, "Mission 4 – GOD"
+// (some of the game's names say little on their own)
+function levelTitle(level){var b=builtin(level);return b?"Mission "+b.level+" – "+b.name:"Level "+level}
 function envText(b){return b?b.environment.label+" · "+b.environment.when:""}
 function baseLabel(base){
   var b=builtin(base.level);
-  return (base.kind==="empty"?"Empty map of ":"Copy of ")+(b?b.name:"level "+base.level);
+  return (base.kind==="empty"?"Empty map of ":"Copy of ")+(b?levelTitle(b.level):"level "+base.level);
 }
 function gameStatus(m){
   if(!m)return "";
@@ -13714,7 +13715,7 @@ function gameShelf(lib){
   h+='<ol class="gslots">';
   sl.forEach(function(s){
     var m=s.managed?byId[s.missionId]:null,i=ours.indexOf(s),b=builtin(s.base);
-    var on=b?b.name:"level "+s.base,meta,acts="";
+    var on=b?levelTitle(b.level):"level "+s.base,meta,acts="";
     if(m){
       meta=esc(baseLabel(m.base))+scenesText(m)+' · <span class="'+(m.installed&&m.upToDate?'ok':'')+'">'+
         (m.installed&&m.installed.test?"a test build":m.installed&&m.upToDate?"up to date":"changes to apply")+'</span>';
@@ -13812,10 +13813,10 @@ function renderLibrary(){
      '<span class="hint">As the game ships them. They can’t be changed or deleted.</span></div><div class="mgrid">';
   lib.builtins.forEach(function(b){
     h+='<div class="mcard builtin">'+
-      '<button class="mc-open" data-view="'+b.level+'" title="Look at '+esc(b.name)+' (read-only)">'+
+      '<button class="mc-open" data-view="'+b.level+'" title="Look at '+esc(levelTitle(b.level))+' (read-only)">'+
       '<span class="mc-img" style="background-image:url(\'data/'+esc(b.cover||"")+'\')"><span class="mc-num">'+b.level+'</span>'+
       '<span class="mc-lock" title="Built-in">'+LOCK+'</span></span>'+
-      '<span class="mc-txt"><b>'+esc(b.name)+'</b><span>'+esc(b.description)+'</span>'+
+      '<span class="mc-txt"><b>'+esc(levelTitle(b.level))+'</b><span>'+esc(b.description)+'</span>'+
       '<span class="mc-meta">'+esc(envText(b))+'</span></span></button>'+
       '<button class="btn mc-from" data-newfrom="'+b.level+'">New mission from this</button></div>';
   });
@@ -13929,8 +13930,8 @@ function newMissionDialog(preset){
     if(st.kind==="copy"&&st.from){var m=LIB.missions.filter(function(x){return x.id===st.from})[0];return m?"A copy of “"+m.name+"”, with all its changes.":""}
     var b=builtin(st.level);if(!b)return "";
     return st.kind==="copy"
-      ? "Level "+b.level+", "+b.name+", with every guard, building and objective as the game ships it."
-      : b.name+"’s terrain, sky, light and weather ("+envText(b)+") with nothing built on it: no buildings, guards, pickups or objectives. The player starts where "+b.name+" starts him.";
+      ? levelTitle(b.level)+", with every guard, building and objective as the game ships it."
+      : "The terrain, sky, light and weather of "+levelTitle(b.level)+" ("+envText(b)+") with nothing built on it: no buildings, guards, pickups or objectives. The player starts where that mission starts him.";
   }
   function paint(){
     var name=$("nm-name")?$("nm-name").value:"";
@@ -14468,7 +14469,7 @@ function gridExisting(){
 function viewBuiltin(level){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
   var b=builtin(level);
-  M=null;READONLY=true;leavePreviewUi();CMPREV=null;MODE="copy";MISSION=b?b.name:"Level "+level;
+  M=null;READONLY=true;leavePreviewUi();CMPREV=null;MODE="copy";MISSION=levelTitle(level);
   placements=[];removals=[];navNodes=[];nodeEdits={};edits={};removeRefs=[];nodeVer++;planVer++;
   objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];levelScenes={};levelVehicles={};cutscenes=[];CUTPICK=null;groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
   sel=null;tool=null;patrolMode=false;
@@ -17611,7 +17612,7 @@ var AIB=(function(){
     });
     placements.forEach(function(p){var k=p.type==="building"?"structures":p.type;mine[k]=(mine[k]||0)+1});
     return {ok:true,
-      mission:{name:MISSION,description:(M&&M.description)||"",editable:editable(),level:LV,level_name:bi.name||("Level "+LV),
+      mission:{name:MISSION,description:(M&&M.description)||"",editable:editable(),level:LV,level_name:levelTitle(LV),
         level_about:bi.description||"",setting:bi.environment?bi.environment.label+", "+bi.environment.when:"",made_from:MODE==="empty"?"the empty map":"the level as it ships"},
       map:{x_min:r1(b.minX),x_max:r1(b.maxX),y_min:r1(b.minY),y_max:r1(b.maxY),size_m:[Math.round(b.maxX-b.minX),Math.round(b.maxY-b.minY)]},
       player_start:pl?{id:idOf(pl),x:r1(pl.x),y:r1(pl.y),z:r1(pl.z),facing:bearing(pl)}:null,
@@ -18671,7 +18672,7 @@ window.StudioCommunity={
   toast:function(t){toast(t)},
   sheet:function(title,html,wide){sheet(title,html);if(wide)$("sheet").querySelector(".sheet-card").classList.add("wide")},
   closeSheet:function(){$("sheet").hidden=true},
-  levelName:function(n){var b=builtin(n);return b?b.name:"Level "+n},
+  levelName:function(n){return levelTitle(n)},
   current:function(){
     if(CMVIEW)return {preview:true,readonly:true,name:MISSION};
     if(!M)return null;
@@ -18706,7 +18707,7 @@ window.StudioAI={
   local:function(){return !Store||!!Store.local},
   context:function(){
     var bi=builtin(LV)||{};
-    return {mission:MISSION,level:LV,levelName:bi.name||("Level "+LV),editable:!!(M&&!READONLY),
+    return {mission:MISSION,level:LV,levelName:levelTitle(LV),editable:!!(M&&!READONLY),
       empty:MODE==="empty",hasEmpty:!!bi.emptyMap,
       // the level's own sky: the time of day and the land come with the level
       setting:bi.environment?{land:bi.environment.label,when:bi.environment.when}:null,

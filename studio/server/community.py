@@ -15,6 +15,19 @@
 # and is fetched again when it runs out. A guest - anyone not signed in - reads
 # with an anonymous JWT; writing needs an account.
 #
+# Staying signed in: "Keep me signed in" (on unless unticked) keeps the session
+# 30 days past its last use, and signing out is the only other way it ends. Neon
+# itself ends a session 7 days after its last use (Better Auth's default, not
+# settable on Neon), and renews it - at most once a day - whenever it is used:
+# the studio uses it each time it starts and opens the community. Unticked, it
+# lasts only until the studio closes (ended on Neon at the next start).
+#
+# Neon's Data API now and then runs a call without the caller's account (seen:
+# a few calls in a hundred, when several run at once) - the database then sees a
+# guest. So "signed out" is believed only from Neon Auth (the session itself);
+# the database saying so is asked again, and a write refused for want of an
+# account is tried again before it is reported.
+#
 # Google from a desktop app: Google's page opens in the browser; Neon Auth then
 # sends the browser to a small listener here - http://localhost on a fixed port,
 # because Neon trusts localhost (any port) by itself while the studio's own port
@@ -33,7 +46,7 @@
 # (cloud/dev/server.mjs).
 #
 # The routes (handle()); each answers {ok, ...} or {ok: false, error, code}:
-#   GET  /api/community/status                  {configured, signed_in, profile, suggest}
+#   GET  /api/community/status                  {configured, signed_in, profile, suggest, keep, until}
 #   POST /api/community/rpc/<fn>   {p}          a database function the editor may call as it is (PASS)
 #   GET  /api/community/media/<id>              a picture (kept)
 #   GET  /api/community/avatar?u=<url>          a Google profile picture (kept)
@@ -44,11 +57,12 @@
 #   POST /api/community/unlink {id}             that mission deleted there: no mission here is shared as it
 #   POST /api/community/auth/signup {email, password, name}, auth/verify {email, code},
 #        auth/resend {email, kind}, auth/signin {email, password}, auth/reset {email, code, password},
-#        auth/signout, account/delete
-#   POST /api/community/auth/google             {url}; GET it: {state: waiting, done, failed; signed_in}
+#        auth/signout, account/delete; each sign-in takes keep (default true): kept for 30 days
+#   POST /api/community/auth/keep {keep}        signed in: kept on this PC (30 days), or only until the studio closes
+#   POST /api/community/auth/google {keep}      {url}; GET it: {state: waiting, done, failed; signed_in}
 #   POST /api/community/auth/google-again       the same Google page opened again (not a new sign-in)
 #   POST /api/community/auth/google-cancel      given up: none of its pages signs in any more
-#   POST /api/community/auth/continue           back in as the account signed out of last ("Continue as"), no browser
+#   POST /api/community/auth/continue {keep}    back in as the account signed out of last ("Continue as"), no browser
 #   POST /api/community/auth/forget             that account forgotten, and its session ended on Neon
 #   POST /api/community/avatar {data}           a picture of you: {id}
 #   POST /api/community/pull {id, version}      {mission}: a mission of yours now
@@ -70,7 +84,10 @@ COMMUNITY = {"data": "https://ep-withered-tooth-b47e9u86.apirest.c-6.us-east-2.a
 # move from one boot to the next
 LISTEN_PORTS = (38461, 41923, 45127)
 FORMAT_VERSION = 2                         # the export format a shared plan is in
-KEY = "community-session"                  # the keystore's name for the session cookies
+# the keystore's name for the session: {cookies, keep, until, profile} - Neon Auth's
+# cookies; kept past this run?; kept until (30 days past its last use); the account as last seen
+KEY = "community-session"
+KEEP_DAYS = 30
 # the account signed out of last: its session kept (still valid on Neon) so it
 # can come back with "Continue as" and no browser; {cookies, who}
 REMEMBER = "community-remembered"
@@ -140,16 +157,61 @@ def _http(method, url, body=None, headers=None, timeout=20):
 
 # ------------------------------------------------------------------ the session
 _lock = threading.RLock()
-_S = {"cookies": None, "jwt": None, "exp": 0, "anon": None, "anon_exp": 0}
+_S = {"cookies": None, "jwt": None, "exp": 0, "anon": None, "anon_exp": 0, "keep": True, "until": 0, "profile": None}
+
+
+def _load():
+    """The session kept here, read once a run. One kept only for its own run, or not used for
+    KEEP_DAYS, ends now - on Neon too."""
+    try:
+        raw = json.loads(keystore.get(KEY) or "{}")
+    except Exception:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    if raw and "cookies" not in raw:
+        # kept by a studio from before "Keep me signed in": the cookies alone, kept from now
+        raw = {"cookies": raw, "keep": True, "until": time.time() + KEEP_DAYS * 86400}
+    cookies = raw.get("cookies") if isinstance(raw.get("cookies"), dict) else {}
+    keep = raw.get("keep") is not False
+    try:
+        until = float(raw.get("until") or 0)
+    except (TypeError, ValueError):
+        until = 0
+    if cookies and (not keep or until < time.time()):
+        _log("the session kept here ended: %s" % ("it was for one run of the studio" if not keep
+                                                    else "not used for %d days" % KEEP_DAYS))
+        _end_on_neon(cookies)
+        keystore.drop(KEY)
+        cookies = {}
+    profile = raw.get("profile") if cookies and isinstance(raw.get("profile"), dict) else None
+    _S.update(cookies=cookies, keep=keep if cookies else True, until=until if cookies else 0, profile=profile)
 
 
 def _cookies():
     if _S["cookies"] is None:
-        try:
-            _S["cookies"] = json.loads(keystore.get(KEY) or "{}")
-        except Exception:
-            _S["cookies"] = {}
+        with _lock:
+            if _S["cookies"] is None:
+                _load()
     return _S["cookies"]
+
+
+def _save():
+    """The session into the keystore as it is now (out of it when there is none)."""
+    jar = _S["cookies"] or {}
+    if any(k.endswith("session_token") for k in jar):
+        keystore.put(KEY, json.dumps({"cookies": jar, "keep": _S["keep"], "until": _S["until"], "profile": _S["profile"]}))
+    else:
+        keystore.drop(KEY)
+
+
+def _touch(profile):
+    """The session used, and working: kept another KEEP_DAYS from now, with the account as seen
+    (written down when that changes, or at most once an hour)."""
+    now = time.time()
+    if profile != _S["profile"] or _S["until"] < now + KEEP_DAYS * 86400 - 3600:
+        _S["profile"], _S["until"] = profile, now + KEEP_DAYS * 86400
+        _save()
 
 
 def _keep_cookies(hdrs):
@@ -172,13 +234,16 @@ def _keep_cookies(hdrs):
     _S["cookies"] = jar
     _S["jwt"], _S["exp"] = None, 0
     if any(k.endswith("session_token") for k in jar):
-        keystore.put(KEY, json.dumps(jar))
-    else:
-        keystore.drop(KEY)
+        _S["until"] = time.time() + KEEP_DAYS * 86400
+    _save()
 
 
-def _forget():
-    _S.update(cookies={}, jwt=None, exp=0)
+def _forget(why=None):
+    """No session here any more. why: written to the log when there was one (a sign-out should
+    always be explainable)."""
+    if why and signed_in():
+        _log("signed out: %s" % why)
+    _S.update(cookies={}, jwt=None, exp=0, profile=None, until=0, keep=True)
     keystore.drop(KEY)
 
 
@@ -249,19 +314,23 @@ def _user_jwt():
             return None
         if _S["jwt"] and _S["exp"] > time.time() + 30:
             return _S["jwt"]
-        status, hdrs, j = _auth("GET", "/get-session")
-        if status == 200 and isinstance(j, dict) and j.get("session"):
-            tok = hdrs.get("set-auth-jwt") if hdrs else None
-            if not tok:
-                s2, _, j2 = _auth("GET", "/token")
-                tok = (j2 or {}).get("token") if s2 == 200 and isinstance(j2, dict) else None
-            if tok:
-                _S["jwt"], _S["exp"] = tok, float(_claims(tok).get("exp") or time.time() + 600)
-                return tok
-        if status in (200, 401):
-            _forget()                       # the session ran out, was ended elsewhere, or gives no key
-            return None
-        raise CommunityError("The community's sign-in is not answering - try again in a moment.", 503, "offline")
+        for again in (False, True):
+            if again:
+                time.sleep(0.6)
+            status, hdrs, j = _auth("GET", "/get-session")
+            if status == 200 and isinstance(j, dict) and j.get("session"):
+                tok = hdrs.get("set-auth-jwt") if hdrs else None
+                if not tok:
+                    s2, _, j2 = _auth("GET", "/token")
+                    tok = (j2 or {}).get("token") if s2 == 200 and isinstance(j2, dict) else None
+                if tok:
+                    _S["jwt"], _S["exp"] = tok, float(_claims(tok).get("exp") or time.time() + 600)
+                    return tok
+            if status not in (200, 401):
+                raise CommunityError("The community's sign-in is not answering - try again in a moment.", 503, "offline")
+        # said twice: the session ran out, was ended elsewhere, or gives no key
+        _forget("Neon Auth no longer takes the session (%s)" % status)
+        return None
 
 
 def _anon_jwt():
@@ -275,13 +344,18 @@ def _anon_jwt():
         return _S["anon"]
 
 
+SIGN_IN_FIRST = "Sign in to the community first."      # community.member()'s own words
+
+
 def rpc(fn, p=None, need_user=False):
     """public.<fn>(p) on the Data API, as the account signed in here or as a guest."""
     d, _ = endpoints()
     if not d:
         raise CommunityError("The community is not open yet.", 503, "closed")
-    for attempt in (0, 1):
+    renewed, misses = False, 0
+    while True:
         tok = _user_jwt()
+        mine = bool(tok)
         if not tok:
             if need_user:
                 raise CommunityError("Sign in to the community first.", 401, "signin")
@@ -290,12 +364,19 @@ def rpc(fn, p=None, need_user=False):
         if status == 200:
             return j
         code = (j or {}).get("code") if isinstance(j, dict) else None
-        if status == 401 and code in ("PGRST301", "PGRST302", "PGRST303") and attempt == 0:
+        msg = (j or {}).get("message") if isinstance(j, dict) else None
+        if status == 401 and code in ("PGRST301", "PGRST302", "PGRST303") and not renewed:
+            renewed = True
             with _lock:
                 _S["jwt"] = _S["anon"] = None
                 _S["exp"] = _S["anon_exp"] = 0
             continue
-        msg = (j or {}).get("message") if isinstance(j, dict) else None
+        # sent as the account, refused as a guest: the Data API lost who asked (see the top)
+        if mine and misses < 2 and (code == "42501" or status in (401, 403) or (code == "P0001" and msg == SIGN_IN_FIRST)):
+            misses += 1
+            _log("%s: the database did not see the account; asking again" % fn)
+            time.sleep(0.3 * misses)
+            continue
         if code == "P0001" and msg:
             raise CommunityError(msg, 400, "rule")
         if code == "42501" or status in (401, 403):
@@ -305,10 +386,21 @@ def rpc(fn, p=None, need_user=False):
         if status == 413:
             raise CommunityError("That is too big to share.", 413, "big")
         raise CommunityError("The community had a problem - try again in a moment.", 502, code)
-    raise CommunityError("Sign in to the community again.", 401, "signin")
 
 
 # ------------------------------------------------------------------ accounts
+def _me():
+    """The database's own view of the account signed in here, or None when it does not see one -
+    asked again a few times first (see the top: now and then a call reaches it as a guest's)."""
+    for wait in (0, 0.25, 0.6, 1.2):
+        if wait:
+            time.sleep(wait)
+        me = rpc("me", need_user=True)
+        if isinstance(me, dict) and me.get("signed_in"):
+            return me
+    return None
+
+
 def status():
     out = {"configured": configured(), "signed_in": False, "profile": None}
     if not out["configured"]:
@@ -318,13 +410,22 @@ def status():
             # a session here that the community no longer takes is gone (_user_jwt forgets it):
             # signed in means a session that works, never "some cookies"
             if _user_jwt():
-                me = rpc("me", need_user=True)
-                out.update(signed_in=bool(me.get("signed_in")), profile=me.get("profile"), suggest=me.get("suggest"))
+                me = _me()
+                if me:
+                    _touch(me.get("profile"))
+                    out.update(signed_in=True, profile=me.get("profile"), suggest=me.get("suggest"))
+                else:
+                    # the session holds - Neon Auth says so - but the database kept missing it: still
+                    # signed in, as the account last seen; the editor asks again in a moment
+                    _log("status: the database did not see the account (asked 4 times); the session holds")
+                    out.update(signed_in=True, profile=_S["profile"], unsure=True)
         except CommunityError as e:
-            if e.code == "offline":
-                return dict(out, signed_in=True, offline=True)
-            raise
-    if not out["signed_in"]:
+            if e.code != "offline":
+                raise
+            out.update(signed_in=True, profile=_S["profile"], offline=True)
+    if out["signed_in"]:
+        out.update(keep=_S["keep"], until=int(_S["until"]) if _S["keep"] else None)
+    else:
         r = remembered()
         if r:
             out["remembered"] = r
@@ -371,26 +472,38 @@ def forget_remembered():
     return status()
 
 
-def continue_remembered():
+def continue_remembered(keep=True):
     """Back in as the account signed out of last, with no browser - if its session still holds."""
     r = _remembered_raw()
     if not r:
         raise CommunityError("Sign in again.", 400, "signin")
     with _lock:
-        _forget()
+        _forget("back in as the account remembered")
         _S["cookies"] = dict(r["cookies"])
         tok = _user_jwt()                      # forgets it when it no longer holds
         if not tok:
             _forget()
             keystore.drop(REMEMBER)
             raise CommunityError("That sign-in has run out - sign in again.", 401, "expired")
-        keystore.put(KEY, json.dumps(_S["cookies"]))
+        _S.update(keep=bool(keep), until=time.time() + KEEP_DAYS * 86400, profile=r.get("who"))
+        _save()
         keystore.drop(REMEMBER)
     _log("signed in again as the account remembered")
     return status()
 
 
-def sign_up(email, password, name):
+def set_keep(keep):
+    """Signed in: kept on this PC for KEEP_DAYS past its last use, or only until the studio closes."""
+    if not signed_in():
+        raise CommunityError("Sign in to the community first.", 401, "signin")
+    with _lock:
+        _S.update(keep=bool(keep), until=time.time() + KEEP_DAYS * 86400)
+        _save()
+    return status()
+
+
+def sign_up(email, password, name, keep=True):
+    _S["keep"] = bool(keep)
     st, _, j = _auth("POST", "/sign-up/email", {"email": (email or "").strip(), "password": password or "",
                                                 "name": (name or "").strip()[:60] or (email or "").split("@")[0]})
     _auth_ok(st, j, "Signing up")
@@ -399,7 +512,8 @@ def sign_up(email, password, name):
     return {"verify": True, "email": email}
 
 
-def verify(email, code):
+def verify(email, code, keep=True):
+    _S["keep"] = bool(keep)
     st, _, j = _auth("POST", "/email-otp/verify-email", {"email": (email or "").strip(), "otp": (code or "").strip()})
     _auth_ok(st, j, "Checking the code")
     if not signed_in():
@@ -420,19 +534,20 @@ def resend(email, kind="email-verification"):
     return {"sent": True}
 
 
-def sign_in(email, password):
-    _forget()
+def sign_in(email, password, keep=True):
+    _forget("signing in again")
+    _S["keep"] = bool(keep)
     st, _, j = _auth("POST", "/sign-in/email", {"email": (email or "").strip(), "password": password or ""})
     _auth_ok(st, j, "Signing in")
     _drop_remembered(end=True)
     return status()
 
 
-def reset_password(email, code, password):
+def reset_password(email, code, password, keep=True):
     st, _, j = _auth("POST", "/email-otp/reset-password", {"email": (email or "").strip(),
                                                            "otp": (code or "").strip(), "password": password or ""})
     _auth_ok(st, j, "Setting the password")
-    return sign_in(email, password)
+    return sign_in(email, password, keep)
 
 
 def sign_out(forget=False):
@@ -440,7 +555,8 @@ def sign_out(forget=False):
     unless forget: then it is ended on Neon too."""
     if signed_in():
         who = None
-        if not forget:
+        # an account kept only for this run is not remembered past it either
+        if not forget and _S["keep"]:
             try:
                 p = (rpc("me", need_user=True) or {}).get("profile")
                 if p:
@@ -452,7 +568,7 @@ def sign_out(forget=False):
             keystore.put(REMEMBER, json.dumps({"cookies": dict(_cookies()), "who": who}))
         else:
             _end_on_neon(dict(_cookies()))
-    _forget()
+    _forget("signed out in the studio")
     google_cancel()
     return status()
 
@@ -460,7 +576,7 @@ def sign_out(forget=False):
 def delete_account():
     rpc("delete_my_data", {}, need_user=True)
     st, _, j = _auth("POST", "/delete-user", {})
-    _forget()
+    _forget("the account was deleted")
     if not 200 <= st < 300:
         raise CommunityError("Your missions, votes and comments are gone, but the account itself was not deleted: "
                              "sign in once more and try again.", 400, "partial")
@@ -473,7 +589,7 @@ def delete_account():
 # page may still be finishing in a browser tab behind the studio's window. The
 # listener stays up until one has come back, or the ten minutes are over.
 NONCE_LIFE = 600
-_G = {"nonces": {}, "servers": [], "port": None, "url": None, "error": None, "done": 0, "started": 0}
+_G = {"nonces": {}, "servers": [], "port": None, "url": None, "error": None, "done": 0, "started": 0, "keep": True}
 
 
 def _log(msg):
@@ -501,6 +617,7 @@ class _Callback(BaseHTTPRequestHandler):
             if err or not v:
                 raise CommunityError("Google sign-in did not finish%s." % (" (%s)" % err if err else ""))
             with _lock:
+                _S["keep"] = _G["keep"]
                 st, _, j = _auth("GET", "/get-session", query={"neon_auth_session_verifier": v})
                 if st != 200 or not (isinstance(j, dict) and j.get("session")) or not signed_in():
                     raise CommunityError("Google sign-in did not finish.")
@@ -668,12 +785,13 @@ def google_cancel():
     return {"cancelled": True}
 
 
-def google_start(open_browser=True):
+def google_start(open_browser=True, keep=True):
     """Starts a Google sign-in: the listener (kept if it is up), and Google's page (opened in the browser).
     Nothing of an earlier account stays in the way: only this sign-in coming back signs in."""
     with _lock:
         if signed_in():
-            _forget()
+            _forget("signing in with Google again")
+    _G["keep"] = bool(keep)
     now = time.time()
     _G["nonces"] = {k: t for k, t in _G["nonces"].items() if now - t < NONCE_LIFE}
     if not _G["servers"]:
@@ -957,12 +1075,17 @@ def unlink(cid):
 
 
 def _gone(cid):
-    """Is that mission no longer in the community at all? (Asked as its author: a hidden one is still there.)"""
-    try:
-        rpc("get_mission", {"id": cid}, need_user=True)
-        return False
-    except CommunityError as e:
-        return e.code == "rule" and "not in the community" in str(e)
+    """Is that mission no longer in the community at all? (Asked as its author: a hidden one is still there.
+    Asked twice: a call the database takes for a guest's would not see a hidden one.)"""
+    for wait in (0, 0.8):
+        time.sleep(wait)
+        try:
+            rpc("get_mission", {"id": cid}, need_user=True)
+            return False
+        except CommunityError as e:
+            if not (e.code == "rule" and "not in the community" in str(e)):
+                return False
+    return True
 
 
 def precheck(mid):
@@ -1021,17 +1144,19 @@ def handle(method, path, query, body):
         if method != "POST":
             raise CommunityError("Not a community call.", 404)
         b = body or {}
+        keep = b.get("keep", True) is not False
         r = {
-            "auth/signup": lambda: sign_up(b.get("email"), b.get("password"), b.get("name")),
-            "auth/verify": lambda: verify(b.get("email"), b.get("code")),
+            "auth/signup": lambda: sign_up(b.get("email"), b.get("password"), b.get("name"), keep),
+            "auth/verify": lambda: verify(b.get("email"), b.get("code"), keep),
             "auth/resend": lambda: resend(b.get("email"), b.get("kind")),
-            "auth/signin": lambda: sign_in(b.get("email"), b.get("password")),
-            "auth/reset": lambda: reset_password(b.get("email"), b.get("code"), b.get("password")),
-            "auth/google": lambda: google_start(b.get("open", True) is not False),
+            "auth/signin": lambda: sign_in(b.get("email"), b.get("password"), keep),
+            "auth/reset": lambda: reset_password(b.get("email"), b.get("code"), b.get("password"), keep),
+            "auth/keep": lambda: set_keep(keep),
+            "auth/google": lambda: google_start(b.get("open", True) is not False, keep),
             "auth/google-again": google_reopen,
             "auth/google-cancel": google_cancel,
             "auth/signout": lambda: sign_out(bool(b.get("forget"))),
-            "auth/continue": continue_remembered,
+            "auth/continue": lambda: continue_remembered(keep),
             "auth/forget": forget_remembered,
             "account/delete": delete_account,
             "avatar": lambda: upload_avatar(b.get("data")),

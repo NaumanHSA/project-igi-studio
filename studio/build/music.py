@@ -240,8 +240,7 @@ def _mission_names():
     try:
         b = json.loads((paths.data() / "builtins.json").read_text(encoding="utf-8"))
         rows = b.get("missions") if isinstance(b, dict) else b
-        from studio.extract.library import shown_name
-        return {int(r["level"]): shown_name(r["level"], r.get("name") or "Mission %d" % r["level"]) for r in rows or []}
+        return {int(r["level"]): r.get("name") or "Mission %d" % r["level"] for r in rows or []}
     except (OSError, ValueError, KeyError, TypeError):
         return {}
 

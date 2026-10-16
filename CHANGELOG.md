@@ -73,7 +73,9 @@ section is also that release's notes on GitHub.
   its name, objectives and facts; you add a summary, a cover from the 3D view
   or the map, screenshots, and credits, and see it as others will before it
   goes. Browsing needs no account; sharing, pulling, voting and commenting
-  need one (Google, or email and password).
+  need one (Google, or email and password). Signed in, the studio stays
+  signed in until you sign out, as long as you use it (*Keep me signed in*:
+  30 days from your last visit; untick it on a shared computer).
 - **A menu bar.** The one long Mission menu is now five beside the studio's
   name: **Mission** (new, the library, save, duplicate, rename, delete),
   **Edit** (undo, redo, tidy up, shortcuts), **Design** (time and weather,

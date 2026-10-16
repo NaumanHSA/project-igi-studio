@@ -4,7 +4,7 @@ PGlite): accounts by email and by Google, sharing, browsing as a guest,
 pulling, a changed copy shared back with its line, a new version, deleting.
 
 Needs Node and `npm install` in cloud/; skipped without them."""
-import base64, json, os, pathlib, re, shutil, subprocess, tempfile, threading, unittest, urllib.parse
+import base64, json, os, pathlib, re, shutil, subprocess, tempfile, threading, time, unittest, urllib.parse
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -125,9 +125,45 @@ class CommunityTests(unittest.TestCase):
             CM.publish(self.local_mission("Copy", []), self.form("radar dome raid"))
         self.assertIn("already a mission called", str(e.exception))
 
-        # the session outlives the studio: it is in the keystore
+        # the session outlives the studio: it is in the keystore, kept 30 days past its last use
         CM._S.update(cookies=None, jwt=None, exp=0)
-        self.assertTrue(CM.status()["signed_in"])
+        st = CM.status()
+        self.assertTrue(st["signed_in"])
+        self.assertTrue(st["keep"])
+        self.assertGreater(st["until"], time.time() + 29 * 86400)
+
+        # the database now and then answers as if a guest asked (Neon's Data API): not a sign-out
+        real = CM._http
+
+        def blind(misses, fn, answer):
+            def call(method, url, body=None, headers=None, timeout=20):
+                if url.endswith("/rpc/" + fn) and call.n < misses:
+                    call.n += 1
+                    return answer
+                return real(method, url, body, headers, timeout)
+            call.n = 0
+            return call
+        CM._http = blind(2, "me", (200, None, {"signed_in": False, "profile": None}))
+        try:
+            st = CM.status()
+        finally:
+            CM._http = real
+        self.assertTrue(st["signed_in"])
+        self.assertEqual(st["profile"]["handle"], "ann")
+        self.assertNotIn("unsure", st)
+        CM._http = blind(99, "me", (200, None, {"signed_in": False, "profile": None}))
+        try:
+            st = CM.status()                    # never seen: signed in as last seen, and unsure
+        finally:
+            CM._http = real
+        self.assertTrue(st["signed_in"] and st["unsure"])
+        self.assertEqual(st["profile"]["handle"], "ann")
+        CM._http = blind(1, "save_profile", (400, None, {"code": "P0001", "message": "Sign in to the community first."}))
+        try:
+            self.assertEqual(CM.rpc("save_profile", {"handle": "ann", "name": "Ann"})["profile"]["handle"], "ann")
+        finally:
+            CM._http = real
+
         # signed out, the account is remembered: back in as Ann with no browser
         CM.sign_out()
         st = CM.status()
@@ -135,6 +171,34 @@ class CommunityTests(unittest.TestCase):
         self.assertEqual(st["remembered"]["handle"], "ann")
         self.assertEqual(CM.continue_remembered()["profile"]["handle"], "ann")
         self.assertNotIn("remembered", CM.status())
+
+        # not used for 30 days: signed out when the studio starts, and ended on Neon
+        jar = dict(CM._S["cookies"])
+        CM._S["until"] = time.time() - 1
+        CM._save()
+        CM._S.update(cookies=None, jwt=None, exp=0)
+        st = CM.status()
+        self.assertFalse(st["signed_in"])
+        self.assertNotIn("remembered", st)
+        CM._S["cookies"] = jar
+        self.assertIsNone(CM._user_jwt())
+
+        # "Keep me signed in" unticked: only until the studio closes, and not remembered after
+        st = CM.sign_in("ann@example.com", "secret-pass-1", keep=False)
+        self.assertTrue(st["signed_in"])
+        self.assertFalse(st["keep"])
+        jar = dict(CM._S["cookies"])
+        CM._S.update(cookies=None, jwt=None, exp=0)         # the studio started again
+        st = CM.status()
+        self.assertFalse(st["signed_in"])
+        self.assertNotIn("remembered", st)
+        CM._S["cookies"] = jar
+        self.assertIsNone(CM._user_jwt())
+        # ticked again later, from the account menu: kept
+        CM.sign_in("ann@example.com", "secret-pass-1", keep=False)
+        self.assertTrue(CM.set_keep(True)["keep"])
+        CM._S.update(cookies=None, jwt=None, exp=0)
+        self.assertTrue(CM.status()["signed_in"])
         CM.sign_out()
 
         # a Google sign-in carries on only when its own page comes back: started and

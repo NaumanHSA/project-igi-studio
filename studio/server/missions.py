@@ -93,7 +93,7 @@ def list_community():
             if d.name.startswith(".") or not f.exists():
                 continue
             try:
-                c = json.load(f.open(encoding="utf-8")).get("community")
+                c = json.loads(f.read_text(encoding="utf-8")).get("community")
             except (OSError, ValueError):
                 continue
             if isinstance(c, dict):

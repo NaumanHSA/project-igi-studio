@@ -77,16 +77,35 @@ The rules worth knowing:
 editor only talks to the studio's own server (`/api/community/...`, listed at
 the top of the module).
 
-- **Signed in** means a session that works: one the community no longer
-  takes is dropped at once, never shown as signed in. **Signing out
-  remembers** the account (its session kept in the keystore under
+- **Signed in** means a session that works: one Neon Auth no longer takes
+  (asked twice) is dropped, never shown as signed in. Only Neon Auth decides
+  that. Neon's Data API now and then runs a call as a guest's although the
+  account's JWT came with it (a few calls in a hundred, when several run at
+  once - seen on the real project, never on the stand-in): `me` then says
+  signed out. So `status` asks `me` up to four times and, if it still says
+  so, stays signed in as the account last seen (`unsure`; the editor asks
+  again in a moment), and a write refused for want of an account (`42501`, or
+  *Sign in to the community first.*) is tried twice more. The editor never
+  turns a failed status call into a sign-out either. Every sign-out is
+  written to the log with its reason (`community: signed out: ...`).
+- **Staying signed in.** *Keep me signed in* (on the sign-in page, on unless
+  unticked, and in the account menu) keeps the session for 30 days past its
+  last use; signing out is the only other end. Neon ends a session 7 days
+  after its last use (Better Auth's default; Neon Auth has no setting for it)
+  and renews it, at most once a day, whenever it is used - the studio uses it
+  each time it starts and opens the community, so it lasts while the studio
+  is used at least once a week. Unticked, the session lasts until the studio
+  closes: it is ended on Neon at the next start. In the keystore:
+  `community-session` = `{cookies, keep, until, profile}` (one from before,
+  the cookies alone, is read as kept).
+- **Signing out remembers** the account (its session kept in the keystore under
   `community-remembered`, still valid on Neon): the sign-in page then offers
   *Continue as <name>* with no browser, *Use another account*, or *Forget
   this account* (ended on Neon too). A new sign-in ends the remembered one.
 - **The session** is Neon Auth's cookie (an opaque token), kept in the
-  keystore (DPAPI). The JWT for the Data API comes in the `set-auth-jwt`
-  header of `GET <auth>/get-session`, lasts 15 minutes, and is fetched again
-  when it runs out. A guest uses `GET <auth>/token/anonymous`.
+  keystore (DPAPI, in the studio's own folder). The JWT for the Data API
+  comes in the `set-auth-jwt` header of `GET <auth>/get-session`, lasts 15
+  minutes, and is fetched again when it runs out. A guest uses `GET <auth>/token/anonymous`.
 - **Email**: sign-up, then a code by email (`/email-otp/verify-email`); a
   forgotten password is a code too (`/email-otp/reset-password`). Codes, not
   links: nothing has to come back to a desktop app.
