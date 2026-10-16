@@ -83,9 +83,10 @@ section is also that release's notes on GitHub.
   remove from the game, settings) and **Share** (export, import). With one
   open, point at another to open it, or go along with the arrow keys.
 - **Tidier corners.** The Community has a key of its own in the top bar,
-  beside Apply to game. At the foot of the left wall: your community account
-  (your picture; a menu with your profile, staying signed in, signing out)
-  and the settings' gear. Picking something on the map - an objective's
+  beside Apply to game. At the foot of the side panel: your community account
+  (your picture and name; a menu with your profile, staying signed in,
+  signing out) and the settings' gear. The mission's name shows as it is,
+  with a pencil to rename it. Picking something on the map - an objective's
   target, an event's, a place for the AI designer - turns the pointer into a
   reticle. Boxes, lists and sliders look the same everywhere, and none sticks
   out of its panel any more.

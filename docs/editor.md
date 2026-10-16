@@ -21,8 +21,8 @@ This opens `http://localhost:8765/plotter.html`.
    own slot.
 4. Launch the game (its `IGI-Debug.bat` shows the console) and pick the mission by its name.
 
-Everything saves as you go. **Settings** (the gear at the foot of the left
-wall, or the Game menu) holds the game folder.
+Everything saves as you go. **Settings** (the gear at the foot of the side
+panel, or the Game menu) holds the game folder.
 
 ## Missions
 
@@ -1808,7 +1808,7 @@ the level's own objectives dropped for a new mission.
   under a name and a briefing (the AI can write it) and exports them as one
   pack; importing it adds them numbered in order and shows the briefing.
 
-**Settings** (the gear at the foot of the left wall, *AI models*):
+**Settings** (the gear at the foot of the side panel, *AI models*):
 
 - **Saved models:** as many as you like, each with a name, a provider, its
   model, how much it thinks (off to high), whether it reads pictures, the
@@ -2276,11 +2276,17 @@ its mark stays. On the right: Help, **Community** (a key of its own, a globe;
 a gold count when missions of yours have a newer version there; its word goes
 under 1320 px) and **Apply to game**.
 
-The foot of the left wall holds **you and the settings**: your community
-account (your picture, or a dashed ring when signed out) opens a menu beside
-the wall - who you are, your profile, the community, *Keep me signed in*,
-Settings, Sign out (signed out: sign in, or *Continue as* the account
-remembered) - and the gear opens Settings.
+The **mission's name** is in the top bar as it is, with a pencil: the pencil
+(or a double-click on the name) makes it a box to type in; Enter or clicking
+away keeps it, Esc puts the old one back, and an empty name is not kept.
+
+The foot of the side panel (whichever is open; `showPanel()` moves it there)
+holds **you and the settings**: your community account - your picture, name
+and @handle, or a dashed ring and *Sign in* - opens a menu above it (your
+profile, the community, *Keep me signed in*, Settings, Sign out; signed out:
+sign in, or *Continue as* the account remembered), and the gear opens
+Settings. The right wall's two tabs, Selection and AI designer, sit in its
+middle, as the left wall's do.
 
 **Picking on the map** (an objective's or an event's target, a door's switch,
 a cutscene's subject, an area, a walkway point, a place for the AI designer)

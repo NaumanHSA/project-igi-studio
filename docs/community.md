@@ -147,8 +147,8 @@ the top of the module).
 
 - **Where**: the Community key in the top bar (beside Apply to game; a gold
   count when missions of yours have a newer version), the Share menu, the
-  library's Community button, and the account at the foot of the left wall
-  (your picture: profile, *Keep me signed in*, sign out).
+  library's Community button, and the account at the foot of the side panel
+  (your picture and name: profile, *Keep me signed in*, sign out).
 - **A page of its own** (`#community`, `editor/community.js` and
   `community.css`) over the whole window, with its own header: back to the
   studio, Discover, My missions (and Reports for moderators), search, Share a

@@ -150,6 +150,7 @@ function hasServer() { var A = api(); return !!(A && !A.local()); }
 // ------------------------------------------------------------------ look
 var CSS = [
 ".rtabs{border-right:none;border-left:1px solid var(--line)}",
+".rtabs::after{content:\"\";flex:1}",
 ".rtabs .tab{transform:none;border-right:1px solid var(--line);border-left:none;border-radius:5px 0 0 5px;margin-right:0;margin-left:-1px}",
 ".rtabs .tab svg{transform:none}",
 ".aipanel{flex:none;width:var(--aw,384px);background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;position:relative}",
