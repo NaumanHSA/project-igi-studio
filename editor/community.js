@@ -1887,7 +1887,11 @@ function showReports(body) {
 // ------------------------------------------------------------------ the library's "update available"
 function refreshUpdates() {
   if (!ST.configured) return Promise.resolve(UPDATES);
-  return api("GET", "updates").then(function (r) { UPDATES = r.updates || {}; return UPDATES }).catch(function () { return UPDATES });
+  return api("GET", "updates").then(function (r) {
+    UPDATES = r.updates || {};
+    if (H && H.communityChanged) H.communityChanged();
+    return UPDATES;
+  }).catch(function () { return UPDATES });
 }
 
 window.Community = {
@@ -1900,6 +1904,9 @@ window.Community = {
   hide: hide,
   isOpen: isOpen,
   state: function () { return ST },
+  // someone's picture or initial (the studio's own corners use it too)
+  avatar: function (p, size) { return avatar(p, size) },
+  setKeep: function (keep) { return api("POST", "auth/keep", { keep: !!keep }).then(refreshState) },
   updates: function () { return UPDATES },
   refresh: refreshState,
   signIn: function () { open({ kind: "discover" }); go({ kind: "auth", step: "signin" }) },

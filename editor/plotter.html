@@ -19,6 +19,8 @@
   --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.35);
 }
 *{box-sizing:border-box}
+/* hidden means hidden, whatever a class says about how a thing is laid out */
+[hidden]{display:none!important}
 /* scrollbars in the map computer's green, no arrow buttons */
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
@@ -129,6 +131,40 @@ input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offse
 input[type=checkbox]:disabled{opacity:.5;cursor:default}
 input[type=radio],input[type=range],progress{accent-color:var(--ok)}
 select option{background:var(--surface);color:var(--ink)}
+/* Text, numbers, lists: one look everywhere, the browser's own nowhere. :where() keeps these at no
+   weight at all - a panel's own rules for its boxes still decide sizes and spacing. */
+:where(input:not([type]),input[type=text],input[type=number],input[type=search],input[type=email],input[type=password],input[type=url],input[type=tel],textarea,select){
+  background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:5px 8px;font:inherit;font-size:13px;
+  min-width:0;max-width:100%;transition:border-color .15s,box-shadow .15s}
+:where(input:not([type]),input[type=text],input[type=number],input[type=search],input[type=email],input[type=password],input[type=url],input[type=tel],textarea,select):hover{border-color:#3b8a45}
+:where(input:not([type]),input[type=text],input[type=number],input[type=search],input[type=email],input[type=password],input[type=url],input[type=tel],textarea,select):focus{
+  outline:none;border-color:var(--player);box-shadow:0 0 0 2px rgba(141,255,154,.18)}
+:where(input,textarea,select):disabled{opacity:.6;cursor:default}
+::placeholder{color:var(--faint);opacity:1}
+:where(input[type=number]){font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+:where(select){appearance:none;-webkit-appearance:none;padding-right:26px;cursor:pointer;background-repeat:no-repeat;background-position:right 9px center;
+  background-size:10px 10px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.5 3.5 5 7l3.5-3.5' fill='none' stroke='%2384d98d' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+:where(textarea){resize:vertical;line-height:1.45}
+/* radio buttons: round checkboxes */
+input[type=radio]{appearance:none;-webkit-appearance:none;width:16px;height:16px;flex:none;margin:0;display:inline-grid;place-content:center;
+  border:1.5px solid var(--line);border-radius:50%;background:var(--sunken);cursor:pointer;vertical-align:-3px;transition:border-color .12s}
+input[type=radio]::before{content:"";width:8px;height:8px;border-radius:50%;transform:scale(0);transition:transform .12s;background:var(--ok)}
+input[type=radio]:hover,input[type=radio]:checked{border-color:var(--ok)}
+input[type=radio]:checked::before{transform:scale(1)}
+input[type=radio]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* sliders: a lit track up to the thumb (--p, kept by rangeFill()), a bright thumb */
+input[type=range]{-webkit-appearance:none;appearance:none;height:18px;background:transparent;cursor:pointer;margin:0;min-width:0}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--ok) var(--p,50%),#21492a var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;
+  background:#eaffec;border:2px solid var(--ok);box-shadow:0 0 8px rgba(141,255,154,.45);transition:transform .12s,box-shadow .12s}
+input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12);box-shadow:0 0 12px rgba(141,255,154,.7)}
+input[type=range]:focus{outline:none}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(255,210,74,.45)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:#21492a}
+input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--ok)}
+input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:#eaffec;border:2px solid var(--ok)}
+input[type=range]:disabled{opacity:.5;cursor:default}
 .group{display:flex;flex-direction:column;gap:6px}
 .chiprow{display:flex;flex-direction:column;gap:3px}
 .chip{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:1px solid transparent;
@@ -322,7 +358,7 @@ canvas{display:block}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:13px;align-items:baseline}
 .kv dt{color:var(--faint);font-size:12px}
 .kv dd{margin:0;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;word-break:break-word}
-.field{display:flex;flex-direction:column;gap:3px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
 .field input,.field select{background:var(--sunken);border:1px solid var(--line);color:var(--ink);
   border-radius:4px;padding:5px 7px;font:inherit;font-size:13px;width:100%}
 .field input{font-family:"IBM Plex Mono",monospace}
@@ -427,12 +463,63 @@ canvas{display:block}
 .mc-from{margin:0 10px 10px;padding:3px 8px;font-size:12px}
 .mc-cm{font-size:11.5px;color:var(--player)}.mc-cm.up{color:var(--accent)}
 
-/* the left wall: the community, apart from the mission's own tabs */
+/* the left wall: the mission's own tabs in the middle; at its foot, you (your community account) and the settings */
 .tabs::before{content:"";flex:1}
 .tabgap{flex:1}
-.tab.tab-cm{margin-bottom:12px;border-color:color-mix(in srgb,var(--player) 55%,var(--line));color:var(--player);
-  background:linear-gradient(90deg,color-mix(in srgb,var(--player) 10%,var(--surface)),var(--surface))}
-.tab.tab-cm:hover{color:var(--ink);border-color:var(--player)}
+.wall-dock{display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0 10px;margin-top:6px;border-top:1px solid var(--line)}
+.wd-btn{all:unset;box-sizing:border-box;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;cursor:pointer;color:var(--muted);
+  transition:color .15s,box-shadow .15s,transform .15s}
+.wd-btn[hidden]{display:none}
+.wd-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.wd-btn:hover{color:var(--player)}
+.wd-btn#btncfg:hover svg{transform:rotate(60deg);transition:transform .35s}
+.wd-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wd-me{border:1.5px dashed color-mix(in srgb,var(--player) 50%,var(--line));position:relative}
+.wd-me.in{border:0;box-shadow:0 0 0 1.5px var(--player),0 0 10px rgba(141,255,154,.45)}
+.wd-me.in:hover{box-shadow:0 0 0 2px var(--player),0 0 16px rgba(141,255,154,.65)}
+.wd-me .cmx-av{width:24px;height:24px;font-size:11px}
+.wd-me svg{width:14px;height:14px}
+.wd-me .dot{position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--ground)}
+.wd-me[aria-expanded="true"],.wd-btn.on{color:var(--player)}
+/* its menu, beside the wall */
+.menu.wd-menu{position:fixed;z-index:58;min-width:268px;max-width:300px;white-space:normal}
+.wd-menu .wd-who{display:flex;align-items:center;gap:11px;padding:10px 10px 12px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+.wd-menu .wd-who .cmx-av,.wd-menu .wd-who .gst{width:40px;height:40px;font-size:17px;flex:none}
+.wd-menu .wd-who .gst{display:grid;place-items:center;border-radius:50%;border:1.5px dashed var(--line);color:var(--muted)}
+.wd-menu .wd-who .gst svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5}
+.wd-menu .wd-who .nm{min-width:0}
+.wd-menu .wd-who b{display:block;font:600 17px "Barlow Condensed",sans-serif;letter-spacing:.03em;color:#eaffec;line-height:1.15}
+.wd-menu .wd-who .nm span{display:block;font:12px "IBM Plex Mono",monospace;color:var(--faint);white-space:normal;overflow-wrap:anywhere}
+.wd-menu .wd-who .nm span.lead{font:12.5px/1.4 "IBM Plex Sans",sans-serif;color:var(--muted)}
+.wd-menu .mi svg{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.wd-menu .mi.go{margin:2px 0 4px;justify-content:center;font-weight:600;color:#1d1600;background:linear-gradient(180deg,#ffe38e,#ffc933)}
+.wd-menu .mi.go:hover{color:#1d1600;background:linear-gradient(180deg,#ffeaa6,#ffd24a);box-shadow:0 0 14px rgba(255,210,74,.4)}
+.wd-menu .mi.go:hover::before{display:none}
+.wd-menu .mi.keep{align-items:flex-start;white-space:normal}
+.wd-menu .mi.keep i{display:block;font-style:normal;font-size:11.5px;line-height:1.35;color:var(--faint)}
+.wd-menu .mi.keep .sw{position:relative;flex:none;width:30px;height:17px;margin-top:1px;border-radius:17px;border:1px solid var(--line);background:rgba(141,255,154,.08)}
+.wd-menu .mi.keep .sw::after{content:"";position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;background:var(--faint);transition:transform .15s}
+.wd-menu .mi.keep[aria-checked="true"] .sw{background:rgba(141,255,154,.26);border-color:var(--player)}
+.wd-menu .mi.keep[aria-checked="true"] .sw::after{transform:translateX(13px);background:var(--player)}
+/* the community, in the top bar beside Apply: a key of its own, a globe that turns, how many of yours have news */
+.topbar .btn.tb-cm{display:inline-flex;align-items:center;gap:8px;padding:4px 14px 4px 5px;color:#eaffec;border-color:rgba(141,255,154,.6);
+  background:linear-gradient(180deg,rgba(141,255,154,.18),rgba(141,255,154,.04));box-shadow:0 0 14px rgba(141,255,154,.2),inset 0 0 12px rgba(141,255,154,.07)}
+.topbar .btn.tb-cm:hover{color:#fff;border-color:var(--player);box-shadow:0 0 22px rgba(141,255,154,.45),inset 0 0 14px rgba(141,255,154,.12)}
+.tb-cm .gl{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;flex:none;color:#06140a;
+  background:radial-gradient(circle at 35% 30%,#dcffe0,#6fe07f 55%,#2c7437);box-shadow:0 0 10px rgba(141,255,154,.55)}
+.tb-cm .gl svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6}
+.tb-cm:hover .gl svg{animation:tbcm-turn 2.4s linear infinite}
+@keyframes tbcm-turn{to{transform:rotate(360deg)}}
+.tb-cm .n{display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:-2px;border-radius:9px;
+  background:var(--accent);color:#1d1600;font:700 11px "IBM Plex Mono",monospace;letter-spacing:0;box-shadow:0 0 8px rgba(255,210,74,.6)}
+.tb-cm .n[hidden]{display:none}
+@media (max-width:1320px){.tb-cm .t{display:none}.topbar .btn.tb-cm{padding:4px 6px 4px 5px}}
+@media (prefers-reduced-motion:reduce){.tb-cm:hover .gl svg{animation:none}}
+/* picking something on the map (an objective's target, an event's, a door's, a place for the AI designer):
+   the pointer is a reticle - gold for a thing, solid green over one it can take, green crosshairs for a place */
+body.picking #plan{cursor:var(--cur-pick,crosshair)!important}
+body.picking #plan.over{cursor:var(--cur-lock,crosshair)!important}
+body.picking[data-pick="place"] #plan,body.picking[data-pick="place"] #plan.over{cursor:var(--cur-place,crosshair)!important}
 /* a short window: the wall's tabs get tighter, and at the shortest keep only
    their icons (the name in a tooltip) rather than run off the wall */
 @media (max-height:860px){.tabs .tab{padding:9px 4px;gap:5px;font-size:11px;letter-spacing:.08em}.tabs{gap:5px}}
@@ -1153,6 +1240,7 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .iconbtn:disabled{opacity:.35;cursor:default}
 .ob-acts{display:flex;gap:2px;flex:none}
 .ob input[type=text]{width:100%;margin-top:5px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:4px 6px;font:inherit;font-size:12px}
+.ob>input[type=text],.ob>input:not([type]),.ob>select,.ob>textarea,.ob>.sel{width:calc(100% - 14px)}
 .ob-t{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
 .ob-t span{flex:1;min-width:0;font-family:"IBM Plex Mono",monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ob-t span.bad,.ob-p{color:var(--danger)}
@@ -1228,7 +1316,7 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
   pointer-events:none;opacity:0;transform:translateY(-2px);transition:opacity .09s ease,transform .09s ease}
 .tip.on{opacity:1;transform:none}
 .tip b{display:block;font-weight:600;margin-bottom:2px}
-.sel{position:relative;display:block;width:100%}
+.sel{position:relative;display:block;width:100%;min-width:0;max-width:100%}
 .sel>select{position:absolute;inset:0;opacity:0;pointer-events:none}
 .sel-btn{display:flex;align-items:center;gap:7px;width:100%;padding:4px 7px;border:1px solid var(--line);border-radius:4px;
   background:var(--sunken);color:var(--ink);font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
@@ -1519,7 +1607,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
           <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>
         <div class="menu" id="helpmenu" role="menu" hidden style="right:0;top:calc(100% + 4px)"></div>
       </div>
-      <button id="btncfg" class="btn ghost" hidden>Settings</button>
+      <button id="btncommunity" class="btn tb-cm" type="button" hidden title="The community: missions others shared - browse them, look at them, pull them; share yours"><span class="gl"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg></span><span class="t">Community</span><span class="n" id="tb-cm-n" hidden></span></button>
       <button id="btnapply" class="btn primary" hidden>Apply to game</button>
     </div>
   </header>
@@ -1543,8 +1631,12 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
       <button class="tab" role="tab" id="tab-nav" aria-controls="panel-nav" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="4" cy="11.5" r="1.8"/><circle cx="12" cy="4.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="m5.4 10.3 5.2-4.6M5.8 11.7h4.4"/></svg>Navigation</button>
       <button class="tab" role="tab" id="tab-cut" aria-controls="panel-cut" aria-selected="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4" width="9.5" height="8" rx="1"/><path d="m11 7 3.5-2v6L11 9"/></svg>Cutscenes</button>
       <span class="tabgap" aria-hidden="true"></span>
-      <button class="tab tab-cm" id="tab-community" type="button" hidden title="Missions others shared: browse, look, pull"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg>Community</button>
+      <div class="wall-dock">
+        <button class="wd-btn wd-me" id="wd-me" type="button" hidden aria-haspopup="menu" aria-expanded="false" title="Your community account"></button>
+        <button class="wd-btn" id="btncfg" type="button" hidden title="Settings: the game, the AI models, about"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M6.9 1.6h2.2l.4 1.8 1.3.6 1.6-1 1.6 1.6-1 1.6.6 1.3 1.8.4v2.2l-1.8.4-.6 1.3 1 1.6-1.6 1.6-1.6-1-1.3.6-.4 1.8H6.9l-.4-1.8-1.3-.6-1.6 1-1.6-1.6 1-1.6-.6-1.3-1.8-.4V6.9l1.8-.4.6-1.3-1-1.6 1.6-1.6 1.6 1 1.3-.6z"/></svg></button>
+      </div>
     </nav>
+    <div class="menu wd-menu" id="wd-menu" role="menu" hidden></div>
     <aside class="panel" id="panel-inv" role="tabpanel" aria-labelledby="tab-inv">
       <div class="inv-search"><input id="invq" type="search" placeholder="Search characters, weapons, structures…" aria-label="Search inventory" autocomplete="off"></div>
       <div id="inv" class="inv-secs"></div>
@@ -3941,6 +4033,7 @@ function draw(){
   startAnim();
 }
 function present(){
+  syncPickUi();
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.drawImage(scene,0,0);
@@ -13655,6 +13748,118 @@ function loadLevel(n,then){
 function slug(s){return (s||"mission").toLowerCase().replace(/[^a-z0-9]+/g,"-")
   .replace(/^-|-$/g,"").slice(0,40)||"mission"}
 function builtin(level){return ((LIB&&LIB.builtins)||[]).filter(function(b){return b.level===+level})[0]||null}
+// ---------------------------------------------------------------- the wall's foot: you, and the settings
+// Your community account - its picture, or a guest's dashed ring - and the settings' gear, at the
+// foot of the left wall. The account opens a menu beside the wall: who you are, your profile and
+// missions, staying signed in, the settings, signing out (or in).
+var DOCK_IC={
+  person:'<svg viewBox="0 0 16 16"><circle cx="8" cy="5.4" r="2.8"/><path d="M2.6 14.2c.6-2.9 2.8-4.5 5.4-4.5s4.8 1.6 5.4 4.5"/></svg>',
+  layers:'<svg viewBox="0 0 16 16"><path d="M8 1.8 1.6 5.1 8 8.4l6.4-3.3z"/><path d="m1.6 8.1 6.4 3.3 6.4-3.3"/><path d="m1.6 11 6.4 3.3 6.4-3.3"/></svg>',
+  globe:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg>',
+  gear:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M6.9 1.6h2.2l.4 1.8 1.3.6 1.6-1 1.6 1.6-1 1.6.6 1.3 1.8.4v2.2l-1.8.4-.6 1.3 1 1.6-1.6 1.6-1.6-1-1.3.6-.4 1.8H6.9l-.4-1.8-1.3-.6-1.6 1-1.6-1.6 1-1.6-.6-1.3-1.8-.4V6.9l1.8-.4.6-1.3-1-1.6 1.6-1.6 1.6 1 1.3-.6z"/></svg>',
+  out:'<svg viewBox="0 0 16 16"><path d="M6.5 2.5h-3v11h3"/><path d="m10 5 3 3-3 3M13 8H6"/></svg>',
+  enter:'<svg viewBox="0 0 16 16"><path d="M9.5 2.5h3v11h-3"/><path d="m6 5 3 3-3 3M9 8H2"/></svg>'
+};
+function dockState(){
+  var C=window.Community,st=C?C.state():null;
+  if(!C||!st||!st.configured||!Store||Store.local)return null;
+  return st;
+}
+function paintDock(){
+  var me=$("wd-me");if(!me)return;
+  var st=dockState(),C=window.Community;
+  me.hidden=!st;
+  if(st){
+    var p=st.signed_in&&st.profile;
+    me.classList.toggle("in",!!p);
+    me.innerHTML=p?C.avatar(p,""):DOCK_IC.person+(st.signed_in?'<span class="dot" aria-hidden="true"></span>':'');
+    me.title=p?"@"+p.handle+" - your community account":st.signed_in?"Choose your community name":"Not signed in to the community";
+    me.setAttribute("aria-label",me.title);
+    if(!$("wd-menu").hidden)openDock();
+  }else closeDock();
+  // the community key in the top bar: how many of your missions have a newer version there
+  var n=C&&C.updates?Object.keys(C.updates()||{}).length:0,b=$("tb-cm-n");
+  if(b){b.hidden=!n;b.textContent=n;b.title=n?n+(n===1?" of your missions has":" of your missions have")+" a newer version in the community":""}
+}
+function openDock(){
+  var st=dockState(),C=window.Community,m=$("wd-menu");if(!st){closeDock();return}
+  var p=st.signed_in&&st.profile,h="";
+  if(p){
+    h='<div class="wd-who">'+C.avatar(p,"")+'<div class="nm"><b>'+esc(p.name||p.handle)+'</b><span>@'+esc(p.handle)+'</span></div></div>'+
+      '<button class="mi" role="menuitem" data-w="profile">'+DOCK_IC.person+'Your profile</button>'+
+      '<button class="mi" role="menuitem" data-w="community">'+DOCK_IC.globe+'The community</button>'+
+      '<button class="mi keep" role="menuitemcheckbox" aria-checked="'+(st.keep?"true":"false")+'" data-w="keep"><span class="sw" aria-hidden="true"></span>'+
+        '<span>Keep me signed in<i>'+(st.keep?"On this PC, 30 days from your last visit":"Until the studio closes")+'</i></span></button>';
+  }else{
+    var rm=st.remembered;
+    h='<div class="wd-who"><span class="gst">'+DOCK_IC.person+'</span><div class="nm"><b>'+(st.signed_in?"One last thing":"Not signed in")+'</b>'+
+      '<span class="lead">'+(st.signed_in?"Choose the name others see in the community.":"An account lets you share, pull, vote and comment. The studio works fully without one.")+'</span></div></div>'+
+      '<button class="mi go" role="menuitem" data-w="signin">'+DOCK_IC.enter+(st.signed_in?"Choose your name":rm?"Continue as "+esc(rm.name||"@"+rm.handle):"Sign in or create an account")+'</button>'+
+      '<button class="mi" role="menuitem" data-w="community">'+DOCK_IC.globe+'Browse the community</button>';
+  }
+  h+='<div class="sep"></div><button class="mi" role="menuitem" data-w="settings">'+DOCK_IC.gear+'Settings</button>';
+  if(p)h+='<button class="mi" role="menuitem" data-w="out">'+DOCK_IC.out+'Sign out</button>';
+  m.innerHTML=h;
+  m.querySelectorAll("[data-w]").forEach(function(b){b.addEventListener("click",function(){
+    var w=b.getAttribute("data-w");
+    if(w==="keep"){C.setKeep(!st.keep).then(function(s){toast(s.keep?"You stay signed in on this PC":"You’ll be signed out when the studio closes")}).catch(function(e){toast(e.message)});return}
+    closeDock();
+    if(w==="profile")C.profile();
+    else if(w==="community")C.open();
+    else if(w==="signin")C.signIn();
+    else if(w==="settings")showConfig();
+    else if(w==="out")C.signOut();
+  })});
+  m.hidden=false;$("wd-me").setAttribute("aria-expanded","true");
+  placeDock();
+}
+function placeDock(){
+  var m=$("wd-menu"),r=$("wd-me").getBoundingClientRect();
+  m.style.left=(r.right+12)+"px";
+  m.style.bottom=Math.max(8,window.innerHeight-r.bottom-6)+"px";m.style.top="auto";
+}
+function closeDock(){var m=$("wd-menu");if(m&&!m.hidden){m.hidden=true;$("wd-me").setAttribute("aria-expanded","false")}}
+// What a click on the map picks now, if not the usual: "thing" (an objective's or an event's target,
+// a door's switch, a cutscene's subject) or "place" (an area, a walkway point, the AI designer's tag).
+// The pointer says so (the reticles in pickCursors()).
+var PICKUI=null;
+function pickKind(){
+  if(AIPICK||ORDERPICK)return "place";
+  if(OBJPICK)return OBJPICK.kind==="reach"?"place":"thing";
+  if(EVPICK)return EVPICK.what==="target"&&EVPICK.ev&&EVPICK.ev.when&&EVPICK.ev.when.kind==="area"?"place":"thing";
+  if(DOORPICK||CUTPICK)return "thing";
+  return "";
+}
+function syncPickUi(){
+  var k=pickKind();
+  if(k===PICKUI)return;
+  PICKUI=k;
+  document.body.classList.toggle("picking",!!k);
+  if(k)document.body.setAttribute("data-pick",k);else document.body.removeAttribute("data-pick");
+}
+function pickCursors(){
+  function cur(body){return 'url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round">'+body+'</svg>')+'") 16 16, crosshair'}
+  // each line twice: a dark edge under the colour, to be seen on the bright map as on the dark
+  function two(d,col,w){return '<path d="'+d+'" stroke="#041007" stroke-width="'+(w+2.6)+'"/><path d="'+d+'" stroke="'+col+'" stroke-width="'+w+'"/>'}
+  var ring="M16 7.5a8.5 8.5 0 1 1 0 17a8.5 8.5 0 1 1 0-17",ticks="M16 1.5v5M16 25.5v5M1.5 16h5M25.5 16h5";
+  var dot=function(col,r){return '<circle cx="16" cy="16" r="'+r+'" fill="'+col+'" stroke="#041007" stroke-width="1.2"/>'};
+  var root=document.documentElement.style;
+  root.setProperty("--cur-pick",cur(two(ring,"#ffd24a",1.8)+two(ticks,"#ffd24a",1.8)+dot("#ffd24a",1.8)));
+  root.setProperty("--cur-lock",cur(two("M8.5 12.5v-4h4M19.5 8.5h4v4M23.5 19.5v4h-4M12.5 23.5h-4v-4","#8dff9a",2.2)+two(ring,"#8dff9a",1.4)+dot("#8dff9a",3.2)));
+  root.setProperty("--cur-place",cur(two("M16 1.5v11M16 19.5v11M1.5 16h11M19.5 16h11","#8dff9a",1.7)+two("M16 11.5a4.5 4.5 0 1 1 0 9a4.5 4.5 0 1 1 0-9","#8dff9a",1.5)));
+}
+// sliders show how far along they are: the track lit up to the thumb (--p), wherever one appears
+function rangeFill(el){
+  var mn=el.min===""?0:+el.min,mx=el.max===""?100:+el.max,v=+el.value;
+  el.style.setProperty("--p",(mx>mn?Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100)):0)+"%");
+}
+document.addEventListener("input",function(e){if(e.target&&e.target.type==="range")rangeFill(e.target)},true);
+document.addEventListener("change",function(e){if(e.target&&e.target.type==="range")rangeFill(e.target)},true);
+var RANGEF=0;
+new MutationObserver(function(){
+  if(RANGEF)return;
+  RANGEF=requestAnimationFrame(function(){RANGEF=0;document.querySelectorAll('input[type="range"]').forEach(rangeFill)});
+}).observe(document.body,{childList:true,subtree:true});
 // A built-in mission as the studio names it: its number with the game's name, "Mission 4 – GOD"
 // (some of the game's names say little on their own)
 function levelTitle(level){var b=builtin(level);return b?"Mission "+b.level+" – "+b.name:"Level "+level}
@@ -18691,7 +18896,7 @@ window.StudioCommunity={
   myMissions:function(){return Store.library().then(function(l){return (l.missions||[]).map(function(m){
     return {id:m.id,name:m.name,description:m.description,base:m.base,guards:m.guards,changes:m.changes,community:m.community,cover:Store.coverUrl(m)}})})},
   library:function(){showLibrary()},
-  communityChanged:function(){},
+  communityChanged:function(){paintDock()},
   // closed with nothing open behind it: the library, as at the start
   communityClosed:function(){if(!M&&!READONLY)showLibrary()},
   communityPublished:function(r){if(M)M.community=Object.assign({},M.community||{},{published:{id:r.id,version:r.version}})},
@@ -18823,12 +19028,17 @@ themeUI(document);
 bind();buildPalette();showPanel(PANEL);resize();renderSide();
 if(window.MeshSprites)MeshSprites.load("data/").then(function(ok){if(ok){THUMBS={};buildPalette();draw()}});
 $("btnapply").addEventListener("click",function(){showChecks(true)});
-$("btncfg").addEventListener("click",showConfig);
+$("btncfg").addEventListener("click",function(){closeDock();showConfig()});
 $("sheet-close").addEventListener("click",function(){$("sheet").hidden=true});
 $("sheet").addEventListener("click",function(e){if(e.target===$("sheet"))$("sheet").hidden=true});
 $("lib-new").addEventListener("click",function(){newMissionDialog({})});
 $("lib-community").addEventListener("click",function(){if(window.Community)Community.open()});
-$("tab-community").addEventListener("click",function(){if(window.Community)Community.open()});
+$("btncommunity").addEventListener("click",function(){if(window.Community)Community.open()});
+$("wd-me").addEventListener("click",function(e){e.stopPropagation();if($("wd-menu").hidden)openDock();else closeDock()});
+document.addEventListener("mousedown",function(e){if(!$("wd-menu").hidden&&!e.target.closest("#wd-menu,#wd-me"))closeDock()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!$("wd-menu").hidden){closeDock();$("wd-me").focus()}});
+window.addEventListener("resize",function(){if(!$("wd-menu").hidden)placeDock()});
+pickCursors();
 // the wall's tabs say their names when a short window leaves them only their icons
 document.querySelectorAll(".tabs .tab").forEach(function(t){if(!t.title)t.title=t.textContent.trim()});
 $("lib-back").addEventListener("click",function(){$("start").hidden=true});
@@ -18837,7 +19047,8 @@ loadLevel(1);                 // the map behind the library
 probeServer().then(function(ok){
   Store=makeStore(ok);
   // the community goes through the studio's server: none, no community
-  $("tab-community").hidden=$("lib-community").hidden=!!Store.local;
+  $("btncommunity").hidden=$("lib-community").hidden=!!Store.local;
+  paintDock();
   loadGroups();
   // not set up yet: the setup is the first and only thing on screen
   // (probeServer has opened it); the library would only have nothing to show

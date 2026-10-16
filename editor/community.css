@@ -625,7 +625,7 @@
    (plotter.html viewCommunity): only the map or the 3D view, the details of
    what is clicked and the mission's summary, under a header of its own */
 #app.cmprev .topbar,#app.cmprev .tabs,#app.cmprev .panel,#app.cmprev #panel-ai,#app.cmprev #toggles,#app.cmprev #gbar,
-#app.cmprev #placebar,#app.cmprev .rsec-log,#app.cmprev #banner{display:none!important}
+#app.cmprev #placebar,#app.cmprev .rsec-log,#app.cmprev #banner,#app.cmprev #wd-menu{display:none!important}
 .cmpbar{position:relative;z-index:10;flex:none;display:flex;align-items:center;gap:14px;height:62px;padding:0 16px;
   background:linear-gradient(180deg,#10301a,#0a2010);border-bottom:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .cmpbar[hidden]{display:none}

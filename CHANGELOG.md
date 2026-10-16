@@ -64,8 +64,8 @@ section is also that release's notes on GitHub.
   on all three axes, and the game gets the same angles. (The game has no scale
   for an object.)
 - **The community.** Share missions with other players and play theirs: a
-  Community page (the globe at the bottom of the left wall, the Share menu,
-  or the library) to browse and search them, each with its objectives,
+  Community page (the Community key in the top bar, the Share menu, or the
+  library) to browse and search them, each with its objectives,
   pictures, author, votes, comments and versions. Look at one's map and 3D
   view without taking it, or pull it into the studio to change it - shared
   again, it is a remix that credits everyone before it. *Share with the
@@ -82,6 +82,13 @@ section is also that release's notes on GitHub.
   music and picture, a draft, versions, campaigns), **Game** (check, apply,
   remove from the game, settings) and **Share** (export, import). With one
   open, point at another to open it, or go along with the arrow keys.
+- **Tidier corners.** The Community has a key of its own in the top bar,
+  beside Apply to game. At the foot of the left wall: your community account
+  (your picture; a menu with your profile, staying signed in, signing out)
+  and the settings' gear. Picking something on the map - an objective's
+  target, an event's, a place for the AI designer - turns the pointer into a
+  reticle. Boxes, lists and sliders look the same everywhere, and none sticks
+  out of its panel any more.
 - **Soldiers that move with the story.** Every soldier - yours, or the
   level's in a copy - has Orders: from the start his patrol, standing, or
   following you; then steps, each started by an event - he goes to a point

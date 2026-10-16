@@ -21,7 +21,8 @@ This opens `http://localhost:8765/plotter.html`.
    own slot.
 4. Launch the game (its `IGI-Debug.bat` shows the console) and pick the mission by its name.
 
-Everything saves as you go. **Settings** holds the game folder.
+Everything saves as you go. **Settings** (the gear at the foot of the left
+wall, or the Game menu) holds the game folder.
 
 ## Missions
 
@@ -1807,7 +1808,7 @@ the level's own objectives dropped for a new mission.
   under a name and a briefing (the AI can write it) and exports them as one
   pack; importing it adds them numbered in order and shows the briefing.
 
-**Settings** (the Settings button, *AI models*):
+**Settings** (the gear at the foot of the left wall, *AI models*):
 
 - **Saved models:** as many as you like, each with a name, a provider, its
   model, how much it thinks (off to high), whether it reads pictures, the
@@ -2271,7 +2272,28 @@ button opens that one, and the arrows go along the bar (Left / Right) and down
 the menu (Up / Down). The top bar is a flex row: the two sides share what is
 left round the Map / 3D switch, but the left never below what it holds, so the
 switch moves over rather than under it; under 1240 px the studio's name goes,
-its mark stays.
+its mark stays. On the right: Help, **Community** (a key of its own, a globe;
+a gold count when missions of yours have a newer version there; its word goes
+under 1320 px) and **Apply to game**.
+
+The foot of the left wall holds **you and the settings**: your community
+account (your picture, or a dashed ring when signed out) opens a menu beside
+the wall - who you are, your profile, the community, *Keep me signed in*,
+Settings, Sign out (signed out: sign in, or *Continue as* the account
+remembered) - and the gear opens Settings.
+
+**Picking on the map** (an objective's or an event's target, a door's switch,
+a cutscene's subject, an area, a walkway point, a place for the AI designer)
+changes the pointer: a gold reticle for a thing, solid green brackets over one
+it can take, green crosshairs for a place (`pickKind()`, the cursors drawn in
+`pickCursors()`).
+
+**Form controls** look the same everywhere: text, number and search boxes,
+lists, text areas, checkboxes, radio buttons and sliders get the studio's look
+from global rules at no weight (`:where()`), so a panel's own rules still set
+sizes; a slider's track is lit up to its thumb (`rangeFill()`, kept by a
+MutationObserver for sliders drawn later). `[hidden]` always hides, whatever a
+class says about layout.
 
 Right-click anything on the map for its actions:
 
