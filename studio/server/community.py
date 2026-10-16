@@ -45,6 +45,9 @@
 #        auth/signout, account/delete
 #   POST /api/community/auth/google             {url}; GET it: {state: waiting, done, failed; signed_in}
 #   POST /api/community/auth/google-again       the same Google page opened again (not a new sign-in)
+#   POST /api/community/auth/google-cancel      given up: none of its pages signs in any more
+#   POST /api/community/auth/continue           back in as the account signed out of last ("Continue as"), no browser
+#   POST /api/community/auth/forget             that account forgotten, and its session ended on Neon
 #   POST /api/community/avatar {data}           a picture of you: {id}
 #   POST /api/community/pull {id, version}      {mission}: a mission of yours now
 #   POST /api/community/publish {mission, form} {id, version}: shared, or a new version (form.mode "update")
@@ -66,6 +69,9 @@ COMMUNITY = {"data": "https://ep-withered-tooth-b47e9u86.apirest.c-6.us-east-2.a
 LISTEN_PORTS = (38461, 41923, 45127)
 FORMAT_VERSION = 2                         # the export format a shared plan is in
 KEY = "community-session"                  # the keystore's name for the session cookies
+# the account signed out of last: its session kept (still valid on Neon) so it
+# can come back with "Continue as" and no browser; {cookies, who}
+REMEMBER = "community-remembered"
 PLAN_MAX = 20 * 1024 * 1024                # a plan, unpacked
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 # what the editor may call as it is; the rest go through the routes below
@@ -251,8 +257,9 @@ def _user_jwt():
                 _S["jwt"], _S["exp"] = tok, float(_claims(tok).get("exp") or time.time() + 600)
                 return tok
         if status in (200, 401):
-            _forget()                       # the session ran out or was ended elsewhere
-        return None
+            _forget()                       # the session ran out, was ended elsewhere, or gives no key
+            return None
+        raise CommunityError("The community's sign-in is not answering - try again in a moment.", 503, "offline")
 
 
 def _anon_jwt():
@@ -306,13 +313,79 @@ def status():
         return out
     if signed_in():
         try:
-            me = rpc("me")
+            # a session here that the community no longer takes is gone (_user_jwt forgets it):
+            # signed in means a session that works, never "some cookies"
+            if _user_jwt():
+                me = rpc("me", need_user=True)
+                out.update(signed_in=bool(me.get("signed_in")), profile=me.get("profile"), suggest=me.get("suggest"))
         except CommunityError as e:
             if e.code == "offline":
                 return dict(out, signed_in=True, offline=True)
             raise
-        out.update(signed_in=bool(me.get("signed_in")), profile=me.get("profile"), suggest=me.get("suggest"))
+    if not out["signed_in"]:
+        r = remembered()
+        if r:
+            out["remembered"] = r
     return out
+
+
+# ------------------------------------------------------------------ the account signed out of last
+def _remembered_raw():
+    try:
+        r = json.loads(keystore.get(REMEMBER) or "null")
+    except Exception:
+        return None
+    return r if isinstance(r, dict) and isinstance(r.get("cookies"), dict) and r.get("who") else None
+
+
+def remembered():
+    """Who signed out last here, to offer "Continue as" (handle, name, picture), or None."""
+    r = _remembered_raw()
+    return r["who"] if r else None
+
+
+def _end_on_neon(cookies):
+    """A session ended on Neon too, not only forgotten here."""
+    _, a = endpoints()
+    if not a or not cookies:
+        return
+    h = {"Origin": _origin(),
+         "Cookie": "; ".join("%s=%s" % (k, urllib.parse.quote(v, safe="")) for k, v in cookies.items())}
+    try:
+        _http("POST", a + "/sign-out", {}, h)
+    except CommunityError:
+        pass
+
+
+def _drop_remembered(end=True):
+    r = _remembered_raw()
+    keystore.drop(REMEMBER)
+    if r and end:
+        _end_on_neon(r["cookies"])
+
+
+def forget_remembered():
+    _drop_remembered(end=True)
+    return status()
+
+
+def continue_remembered():
+    """Back in as the account signed out of last, with no browser - if its session still holds."""
+    r = _remembered_raw()
+    if not r:
+        raise CommunityError("Sign in again.", 400, "signin")
+    with _lock:
+        _forget()
+        _S["cookies"] = dict(r["cookies"])
+        tok = _user_jwt()                      # forgets it when it no longer holds
+        if not tok:
+            _forget()
+            keystore.drop(REMEMBER)
+            raise CommunityError("That sign-in has run out - sign in again.", 401, "expired")
+        keystore.put(KEY, json.dumps(_S["cookies"]))
+        keystore.drop(REMEMBER)
+    _log("signed in again as the account remembered")
+    return status()
 
 
 def sign_up(email, password, name):
@@ -329,6 +402,7 @@ def verify(email, code):
     _auth_ok(st, j, "Checking the code")
     if not signed_in():
         raise CommunityError("The code was right - now sign in with your password.", 400, "signin")
+    _drop_remembered(end=True)
     return status()
 
 
@@ -345,8 +419,10 @@ def resend(email, kind="email-verification"):
 
 
 def sign_in(email, password):
+    _forget()
     st, _, j = _auth("POST", "/sign-in/email", {"email": (email or "").strip(), "password": password or ""})
     _auth_ok(st, j, "Signing in")
+    _drop_remembered(end=True)
     return status()
 
 
@@ -357,13 +433,25 @@ def reset_password(email, code, password):
     return sign_in(email, password)
 
 
-def sign_out():
+def sign_out(forget=False):
+    """Signed out here. The account is remembered (its session kept, encrypted) for "Continue as",
+    unless forget: then it is ended on Neon too."""
     if signed_in():
-        try:
-            _auth("POST", "/sign-out", {})
-        except CommunityError:
-            pass
+        who = None
+        if not forget:
+            try:
+                p = (rpc("me", need_user=True) or {}).get("profile")
+                if p:
+                    who = {k: p.get(k) for k in ("handle", "name", "avatar", "avatar_url")}
+            except CommunityError:
+                pass
+        if who:
+            _drop_remembered(end=True)            # one remembered account: the last
+            keystore.put(REMEMBER, json.dumps({"cookies": dict(_cookies()), "who": who}))
+        else:
+            _end_on_neon(dict(_cookies()))
     _forget()
+    google_cancel()
     return status()
 
 
@@ -417,8 +505,9 @@ class _Callback(BaseHTTPRequestHandler):
                 if st != 200 or not (isinstance(j, dict) and j.get("session")) or not signed_in():
                     raise CommunityError("Google sign-in did not finish.")
             done = time.time()
-            _G.update(done=done, error=None)
-            _G["nonces"].pop(nonce, None)
+            # no other page of these can sign in later
+            _G.update(done=done, error=None, nonces={})
+            _drop_remembered(end=True)
             _log("google: signed in")
             self._page(200, SIGNED_IN_PAGE)
             # the listener goes, unless another sign-in has started since
@@ -459,14 +548,26 @@ def _stop_listener():
             pass
 
 
-class _Server6(ThreadingHTTPServer):
+class _Server4(ThreadingHTTPServer):
+    # the port is ours alone: HTTPServer asks for SO_REUSEADDR, which on Windows lets a second
+    # program listen on the same port - and the browser's return could reach the wrong one
+    allow_reuse_address = False
+
+    def server_bind(self):
+        so = getattr(__import__("socket"), "SO_EXCLUSIVEADDRUSE", None)
+        if so is not None:
+            self.socket.setsockopt(__import__("socket").SOL_SOCKET, so, 1)
+        ThreadingHTTPServer.server_bind(self)
+
+
+class _Server6(_Server4):
     address_family = __import__("socket").AF_INET6
 
 
 def _listen(port):
     """The listener on localhost's two addresses (a browser may try either), or None when the port is taken."""
     try:
-        four = ThreadingHTTPServer(("127.0.0.1", port), _Callback)
+        four = _Server4(("127.0.0.1", port), _Callback)
     except OSError:
         return None
     out = [four]
@@ -477,8 +578,19 @@ def _listen(port):
     return out
 
 
+def google_cancel():
+    """The sign-in given up: none of its pages can sign in any more."""
+    _G.update(nonces={}, error=None, done=0, url=None)
+    _stop_listener()
+    return {"cancelled": True}
+
+
 def google_start(open_browser=True):
-    """Starts a Google sign-in: the listener (kept if it is up), and Google's page (opened in the browser)."""
+    """Starts a Google sign-in: the listener (kept if it is up), and Google's page (opened in the browser).
+    Nothing of an earlier account stays in the way: only this sign-in coming back signs in."""
+    with _lock:
+        if signed_in():
+            _forget()
     now = time.time()
     _G["nonces"] = {k: t for k, t in _G["nonces"].items() if now - t < NONCE_LIFE}
     if not _G["servers"]:
@@ -526,10 +638,9 @@ def google_reopen():
 
 
 def google_state():
-    """waiting, done (signed in since it started), or failed (why); and whether this studio is signed in at all"""
-    signed = signed_in()
-    state = "done" if signed and _G["done"] else "failed" if _G["error"] else "waiting"
-    return {"state": state, "error": _G["error"], "signed_in": signed}
+    """waiting; done (a page of this sign-in came back, and the studio is signed in); or failed (why)"""
+    state = "done" if _G["done"] and signed_in() else "failed" if _G["error"] else "waiting"
+    return {"state": state, "error": _G["error"]}
 
 
 # ------------------------------------------------------------------ pictures and plans
@@ -801,7 +912,10 @@ def handle(method, path, query, body):
             "auth/reset": lambda: reset_password(b.get("email"), b.get("code"), b.get("password")),
             "auth/google": lambda: google_start(b.get("open", True) is not False),
             "auth/google-again": google_reopen,
-            "auth/signout": sign_out,
+            "auth/google-cancel": google_cancel,
+            "auth/signout": lambda: sign_out(bool(b.get("forget"))),
+            "auth/continue": continue_remembered,
+            "auth/forget": forget_remembered,
             "account/delete": delete_account,
             "avatar": lambda: upload_avatar(b.get("data")),
             "pull": lambda: {"mission": MS.summary(pull(b.get("id"), b.get("version")))},

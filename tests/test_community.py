@@ -84,9 +84,8 @@ class CommunityTests(unittest.TestCase):
         self.assertTrue(back.startswith("http://localhost:"))
         with urllib.request.urlopen(back) as r:
             self.assertIn(b"signed in", r.read())
-        st = CM.google_state()
-        self.assertEqual(st["state"], "done")
-        self.assertTrue(st["signed_in"])
+        self.assertEqual(CM.google_state()["state"], "done")
+        self.assertTrue(CM.status()["signed_in"])
         CM.rpc("save_profile", {"handle": handle, "name": handle.title()})
         return CM.status()
 
@@ -129,8 +128,31 @@ class CommunityTests(unittest.TestCase):
         # the session outlives the studio: it is in the keystore
         CM._S.update(cookies=None, jwt=None, exp=0)
         self.assertTrue(CM.status()["signed_in"])
+        # signed out, the account is remembered: back in as Ann with no browser
         CM.sign_out()
+        st = CM.status()
+        self.assertFalse(st["signed_in"])
+        self.assertEqual(st["remembered"]["handle"], "ann")
+        self.assertEqual(CM.continue_remembered()["profile"]["handle"], "ann")
+        self.assertNotIn("remembered", CM.status())
+        CM.sign_out()
+
+        # a Google sign-in carries on only when its own page comes back: started and
+        # given up, a page of it finished later signs no one in
+        url = CM.google_start(open_browser=False)["url"]
+        self.assertEqual(CM.google_state()["state"], "waiting")
+        state = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["state"][0]
+        CM.google_cancel()
+        req = urllib.request.Request(self.base + "/dev/google", method="POST",
+                                     data=urllib.parse.urlencode({"state": state, "email": "late@gmail.com"}).encode())
+        try:
+            urllib.request.build_opener(CM._NoRedirect).open(req)
+        except urllib.error.HTTPError as e:
+            late = e.headers["Location"]
+        with self.assertRaises(urllib.error.URLError):     # the listener is gone with the sign-in
+            urllib.request.urlopen(late, timeout=5).read()
         self.assertFalse(CM.status()["signed_in"])
+        self.assertEqual(CM.google_state()["state"], "waiting")
 
         # a guest browses and looks at it, pictures and plan, but cannot pull
         cards = CM.rpc("list_missions", {"q": "radar"})["items"]

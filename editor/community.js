@@ -1046,7 +1046,16 @@ function authStep(V) {
     '<button type="button" role="tab" data-tab="signup" class="' + (V.step === "signup" ? "on" : "") + '">Create account</button></div>';
   var googleBtn = function (t) { return '<button type="button" class="cmx-google" id="au-google">' + GOOGLE + t + '</button><div class="cmx-or">or with your email</div>' };
   var h = "";
-  if (V.step === "signin") {
+  if (V.step === "signin" && ST.remembered && !V.another) {
+    var rm = ST.remembered;
+    h = why + '<h2>Welcome back</h2><p class="lead">This studio remembers the account you signed out of.</p>' +
+      '<div class="cmx-remember">' + avatar(rm, "lg") + '<div><b>' + esc(rm.name || rm.handle) + '</b><span>@' + esc(rm.handle) + '</span></div></div>' +
+      '<div class="cmx-alert" id="au-err" hidden></div>' +
+      '<button class="cmx-btn primary big block" id="au-continue">' + ic("arrow") + 'Continue as ' + esc(rm.name || "@" + rm.handle) + '</button>' +
+      '<div class="cmx-or">or</div>' +
+      '<button class="cmx-btn big block" id="au-another">' + ic("person") + 'Use another account</button>' +
+      '<p class="cmx-foot"><button type="button" class="cmx-link" id="au-forget">Forget this account</button> on this computer</p>';
+  } else if (V.step === "signin") {
     h = tabs + why + '<h2>Welcome back</h2><p class="lead">Sign in to pull, share, vote and comment.</p>' + googleBtn("Sign in with Google") +
       field("au-email", "Email", V.email || "", { icon: "mail", type: "email", auto: "email", ph: "you@example.com", msg: false }) +
       field("au-pw", "Password", "", { icon: "lock", type: "password", auto: "current-password", eye: true, msg: false,
@@ -1096,7 +1105,7 @@ function authStep(V) {
       '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:6px">' +
         '<button class="cmx-btn" id="gg-again">' + ic("globe") + 'Open the page again</button>' +
         '<button class="cmx-btn ghost" id="gg-copy">' + ic("link") + 'Copy the link</button></div>' +
-      '<p class="cmx-foot"><button type="button" class="cmx-link" data-tab="signin">Cancel</button></p></div>';
+      '<p class="cmx-foot"><button type="button" class="cmx-link" id="gg-cancel">Cancel</button></p></div>';
   } else if (V.step === "name") {
     h = '<div class="cmx-big-ico">' + ic("person") + '</div><h2>One last thing</h2><p class="lead">Choose the name others see next to your missions and comments. Your email is never shown.</p><div id="au-pf"></div>';
   }
@@ -1173,7 +1182,7 @@ function bindAuth(V) {
       if (!isOpen() || VIEW !== V || V.step !== "google") { clearInterval(POLL); GOOGLE_CHECK = null; return }
       api("GET", "auth/google").then(function (g) {
         if (VIEW !== V || V.step !== "google") return;
-        if (g.signed_in || g.state === "done") { clearInterval(POLL); GOOGLE_CHECK = null; authDone(V) }
+        if (g.state === "done") { clearInterval(POLL); GOOGLE_CHECK = null; authDone(V) }
         else if (g.state === "failed") err(new Error(g.error || "Google sign-in did not finish. Open the page again, or cancel."));
       }).catch(function () {});
     };
@@ -1184,11 +1193,32 @@ function bindAuth(V) {
       api("POST", "auth/google-again", {}).then(function (r) { V.url = r.url; toast("Google’s page is open in your browser") })
         .catch(function () { api("POST", "auth/google", {}).then(function (r) { V.url = r.url }).catch(err) });
     });
+    $("gg-cancel").addEventListener("click", function () {
+      clearInterval(POLL); GOOGLE_CHECK = null;
+      api("POST", "auth/google-cancel", {}).catch(function () {});
+      V.step = "signin"; authStep(V);
+    });
     $("gg-copy").addEventListener("click", function () {
       if (!V.url) return;
       (navigator.clipboard ? navigator.clipboard.writeText(V.url) : Promise.reject()).then(function () { toast("The link is copied: paste it into your browser") })
         .catch(function () { toast("Copy it from here: " + V.url) });
     });
+  }
+  if (s === "signin" && $("au-continue")) {
+    $("au-continue").addEventListener("click", function () {
+      var b = this;
+      clearErr(); busy(b, true, "Signing in…");
+      api("POST", "auth/continue", {}).then(function () { authDone(V) }).catch(function (e) {
+        busy(b, false);
+        // run out: the ordinary way in, saying why
+        refreshState().then(function () { V.another = true; authStep(V); err(e) });
+      });
+    });
+    $("au-another").addEventListener("click", function () { V.another = true; authStep(V) });
+    $("au-forget").addEventListener("click", function () {
+      api("POST", "auth/forget", {}).then(refreshState).then(function () { toast("Forgotten on this computer"); authStep(V) }).catch(err);
+    });
+    return;
   }
   if (s === "signin") {
     var go = function () {

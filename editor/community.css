@@ -454,6 +454,12 @@
 .cmx-pickav{display:flex;align-items:center;gap:16px;margin:0 0 18px}
 .cmx-pickav .cmx-av{width:76px;height:76px;font-size:32px;border:2px solid var(--line)}
 .cmx-pickav .btns{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+/* the account signed out of last, to come back to */
+.cmx-remember{display:flex;align-items:center;gap:14px;padding:14px 16px;margin:0 0 18px;border:1px solid var(--line);border-radius:8px;
+  background:linear-gradient(90deg,rgba(141,255,154,.08),rgba(3,11,4,.4))}
+.cmx-remember .cmx-av{width:52px;height:52px;font-size:22px}
+.cmx-remember b{display:block;font:600 20px "Barlow Condensed",sans-serif;color:#eaffec}
+.cmx-remember span{font:13px "IBM Plex Mono",monospace;color:var(--faint)}
 .cmx-preview-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:4px 0 18px;border:1px dashed var(--line);border-radius:6px;font-size:13px;color:var(--muted)}
 
 /* ---------------------------------------------------------------- sharing: a page with its steps */

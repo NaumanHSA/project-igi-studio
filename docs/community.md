@@ -77,6 +77,12 @@ The rules worth knowing:
 editor only talks to the studio's own server (`/api/community/...`, listed at
 the top of the module).
 
+- **Signed in** means a session that works: one the community no longer
+  takes is dropped at once, never shown as signed in. **Signing out
+  remembers** the account (its session kept in the keystore under
+  `community-remembered`, still valid on Neon): the sign-in page then offers
+  *Continue as <name>* with no browser, *Use another account*, or *Forget
+  this account* (ended on Neon too). A new sign-in ends the remembered one.
 - **The session** is Neon Auth's cookie (an opaque token), kept in the
   keystore (DPAPI). The JWT for the Data API comes in the `set-auth-jwt`
   header of `GET <auth>/get-session`, lasts 15 minutes, and is fetched again
@@ -89,7 +95,12 @@ the top of the module).
   `http://localhost:<port>/callback?...&neon_auth_session_verifier=...`, a
   small listener (on 127.0.0.1 and ::1) that runs only while a sign-in waits,
   and the studio exchanges the verifier for the session
-  (`get-session?neon_auth_session_verifier=`). `localhost` because Neon Auth
+  (`get-session?neon_auth_session_verifier=`). The studio carries on only
+  when a page of *this* sign-in comes back (any of its attempts in the last ten
+  minutes - a second click does not throw the first away); starting one drops
+  whatever session was there, Cancel ends it so a late page signs no one in.
+  The listener holds its port alone (`SO_EXCLUSIVEADDRUSE`: Windows would
+  otherwise let a second program listen on it too). `localhost` because Neon Auth
   trusts any localhost port by itself ("Allow Localhost", on by default -
   leave it on: this is how a desktop app signs in). The port is fixed (38461,
   else 41923, else 45127) because the studio's own port changes every run; all
