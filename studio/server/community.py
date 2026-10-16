@@ -40,6 +40,8 @@
 #   GET  /api/community/plan/<id>?v=<version>   {mission: {name, description, base, plan, version}}
 #   GET  /api/community/updates                 {updates: {mission id here: newer version there}}
 #   GET  /api/community/precheck?mission=<id>   {unchanged, origin, lineage, published, picture}: before sharing
+#                                               (a link to a mission deleted there is dropped first)
+#   POST /api/community/unlink {id}             that mission deleted there: no mission here is shared as it
 #   POST /api/community/auth/signup {email, password, name}, auth/verify {email, code},
 #        auth/resend {email, kind}, auth/signin {email, password}, auth/reset {email, code, password},
 #        auth/signout, account/delete
@@ -472,7 +474,6 @@ def delete_account():
 # listener stays up until one has come back, or the ten minutes are over.
 NONCE_LIFE = 600
 _G = {"nonces": {}, "servers": [], "port": None, "url": None, "error": None, "done": 0, "started": 0}
-SIGNED_IN_PAGE = "You are signed in to the IGI Studio community. You can close this tab and go back to the studio."
 
 
 def _log(msg):
@@ -487,14 +488,13 @@ class _Callback(BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
         if u.path != "/callback":
-            return self._page(404, "Nothing here.")
+            return self._page(404, "old", "Nothing here", "This address only answers the studio's sign-in.")
         nonce = (q.get("s") or [""])[0]
         t = _G["nonces"].get(nonce)
         if not t or time.time() - t > NONCE_LIFE:
             _log("google: a sign-in came back that this studio did not start, or too late")
-            if signed_in():
-                return self._page(200, SIGNED_IN_PAGE)
-            return self._page(404, "This sign-in is too old. Start it again from the studio.")
+            return self._page(410, "old", "This sign-in has expired",
+                              "It was cancelled in the studio, or started too long ago. Go back to IGI Studio and sign in again.")
         v = (q.get("neon_auth_session_verifier") or [""])[0]
         err = (q.get("error") or [""])[0]
         try:
@@ -504,31 +504,114 @@ class _Callback(BaseHTTPRequestHandler):
                 st, _, j = _auth("GET", "/get-session", query={"neon_auth_session_verifier": v})
                 if st != 200 or not (isinstance(j, dict) and j.get("session")) or not signed_in():
                     raise CommunityError("Google sign-in did not finish.")
+            user = j.get("user") if isinstance(j.get("user"), dict) else {}
             done = time.time()
             # no other page of these can sign in later
             _G.update(done=done, error=None, nonces={})
             _drop_remembered(end=True)
             _log("google: signed in")
-            self._page(200, SIGNED_IN_PAGE)
+            self._page(200, "ok", "You\u2019re signed in", "Google confirmed it\u2019s you.", user)
             # the listener goes, unless another sign-in has started since
             _later(2.0, lambda: _G["started"] <= done and _stop_listener())
         except CommunityError as e:
             _G["error"] = str(e)
             _log("google: %s" % e)
-            self._page(400, str(e))
+            self._page(400, "bad", "Sign-in didn\u2019t finish", str(e) + " Go back to IGI Studio and try again.")
 
-    def _page(self, code, text):
-        body = ("<!doctype html><meta charset=utf-8><title>IGI Studio</title>"
-                "<body style=\"font:16px system-ui,sans-serif;background:#0a200e;color:#d8f5dc;display:grid;"
-                "place-items:center;height:90vh;margin:0\"><div style=\"max-width:460px;text-align:center\">"
-                "<div style=\"font:600 22px system-ui;letter-spacing:.1em;color:#8dff9a\">IGI STUDIO</div>"
-                "<p>%s</p></div>" % html.escape(text)).encode()
+    def _page(self, code, kind, title, text, user=None):
+        body = _browser_page(kind, title, text, user).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+
+# The page the browser shows when it comes back to the studio: the studio's
+# look, a mark (a check, a cross, a clock), who signed in, and what next. Only
+# what it holds itself: the logo inline, Windows' own condensed face.
+_LOGO = None
+
+
+def _logo():
+    global _LOGO
+    if _LOGO is None:
+        f = pathlib.Path(__file__).resolve().parents[2] / "editor" / "icon.png"
+        try:
+            _LOGO = "data:image/png;base64," + base64.b64encode(f.read_bytes()).decode()
+        except OSError:
+            _LOGO = ""
+    return _LOGO
+
+
+_MARKS = {
+    "ok": ('#8dff9a', '<path class="draw" d="M30 50l13 13 27-28"/>'),
+    "bad": ('#ff6b5a', '<path class="draw" d="M35 35l30 30M65 35L35 65"/>'),
+    "old": ('#ffd24a', '<path class="draw" d="M50 30v21l13 8"/>'),
+}
+
+
+def _browser_page(kind, title, text, user=None):
+    color, inner = _MARKS.get(kind, _MARKS["old"])
+    who = ""
+    if kind == "ok" and user:
+        img = user.get("image") or ""
+        pic = ('<img src="%s" alt="" referrerpolicy="no-referrer">' % html.escape(img)) if AVATAR_HOST.match(img) else \
+              '<span class="ini">%s</span>' % html.escape((user.get("name") or user.get("email") or "?")[:1].upper())
+        who = ('<div class="who">%s<div><b>%s</b><span>%s</span></div></div>' %
+               (pic, html.escape(user.get("name") or ""), html.escape(user.get("email") or "")))
+    nxt = ('Go back to <b>IGI Studio</b>: it has carried on by itself. You can close this tab.' if kind == "ok"
+           else 'Go back to <b>IGI Studio</b>. You can close this tab.')
+    logo = _logo()
+    return """<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>%(title)s \u00b7 IGI Studio</title>
+<style>
+:root{--g:#8dff9a;--gold:#ffd24a;--ink:#eaffec;--muted:#9fe0a7;--faint:#5fa868;--line:#2a6b33;--mark:%(color)s}
+*{box-sizing:border-box}
+html,body{height:100%%}
+body{margin:0;display:grid;place-items:center;padding:24px;color:var(--ink);font:15px/1.55 "Segoe UI",system-ui,sans-serif;
+  background:radial-gradient(900px 520px at 50%% -12%%,rgba(80,255,110,.17),transparent 70%%),
+    linear-gradient(rgba(141,255,154,.045) 1px,transparent 1px) 0 0/32px 32px,
+    linear-gradient(90deg,rgba(141,255,154,.045) 1px,transparent 1px) 0 0/32px 32px,#06150a}
+.card{position:relative;width:min(500px,100%%);padding:38px 38px 30px;text-align:center;border:1px solid var(--line);border-radius:14px;
+  background:linear-gradient(180deg,rgba(16,48,22,.96),rgba(7,25,10,.96));box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 46px rgba(141,255,154,.08);
+  animation:rise .5s cubic-bezier(.2,.9,.3,1) both}
+.card::before,.card::after{content:"";position:absolute;width:26px;height:26px;border:2px solid var(--g);filter:drop-shadow(0 0 6px rgba(141,255,154,.5))}
+.card::before{left:-7px;top:-7px;border-right:0;border-bottom:0}
+.card::after{right:-7px;bottom:-7px;border-left:0;border-top:0}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.brand{display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 28px;font:600 15px Bahnschrift,"Arial Narrow",sans-serif;
+  letter-spacing:.22em;text-transform:uppercase}
+.brand img{width:30px;height:30px;filter:drop-shadow(0 0 8px rgba(141,255,154,.55))}
+.brand i{font-style:normal;color:var(--g)}
+.mark{display:block;width:104px;height:104px;margin:0 auto 18px;filter:drop-shadow(0 0 18px var(--mark))}
+.mark circle{fill:none;stroke:var(--mark);stroke-width:3;opacity:.35}
+.mark .ring{opacity:1;stroke-dasharray:283;stroke-dashoffset:283;animation:draw .7s .1s ease-out forwards;transform:rotate(-90deg);transform-origin:50%% 50%%}
+.mark .draw{fill:none;stroke:var(--mark);stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:80;stroke-dashoffset:80;
+  animation:draw .45s .7s ease-out forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+h1{margin:0 0 6px;font:600 36px/1.1 Bahnschrift,"Arial Narrow",sans-serif;letter-spacing:.01em}
+p{margin:0;color:var(--muted)}
+.who{display:inline-flex;align-items:center;gap:12px;margin:20px auto 2px;padding:9px 18px 9px 9px;border:1px solid var(--line);border-radius:40px;
+  background:rgba(3,11,4,.55);text-align:left;max-width:100%%}
+.who img,.who .ini{width:42px;height:42px;border-radius:50%%;flex:none;border:2px solid var(--g)}
+.who .ini{display:grid;place-items:center;font:700 19px Bahnschrift,sans-serif;color:#06140a;background:linear-gradient(135deg,#b3ffbc,#4fd062)}
+.who b{display:block;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who span{display:block;font-size:12.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.next{margin-top:24px;padding-top:18px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+.next b{color:var(--gold);font-weight:600}
+@media (prefers-reduced-motion:reduce){.card,.mark .ring,.mark .draw{animation:none;stroke-dashoffset:0}}
+</style>
+<main class="card">
+  <div class="brand">%(logo)sIGI Studio <i>Community</i></div>
+  <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45"/><circle class="ring" cx="50" cy="50" r="45"/>%(inner)s</svg>
+  <h1>%(title)s</h1>
+  <p>%(text)s</p>
+  %(who)s
+  <div class="next">%(next)s</div>
+</main></html>""" % {"title": html.escape(title), "text": html.escape(text), "color": color, "inner": inner, "who": who,
+                     "next": nxt, "logo": ('<img src="%s" alt="">' % logo) if logo else ""}
 
 
 def _later(seconds, fn):
@@ -797,6 +880,11 @@ def updates():
     if not ids:
         return {}
     now = {x["id"]: x for x in rpc("mission_versions", {"ids": ids}).get("items") or []}
+    # shared from here and deleted there since: the link goes (signed in, as its author would know)
+    if signed_in():
+        for pub in {c["published"]["id"] for c in mine.values() if (c.get("published") or {}).get("id")} - set(now):
+            if _gone(pub):
+                unlink(pub)
     out = {}
     for mid, c in mine.items():
         o = (c.get("origin") or {})
@@ -856,10 +944,37 @@ def publish(mid, form):
     return r
 
 
+def unlink(cid):
+    """A mission of the community gone (deleted there): no mission here says it is shared as it any more."""
+    n = 0
+    for mid, c in MS.list_community().items():
+        if (c.get("published") or {}).get("id") == cid:
+            c = dict(c)
+            c.pop("published", None)
+            MS.set_community(mid, c)
+            n += 1
+    return {"unlinked": n}
+
+
+def _gone(cid):
+    """Is that mission no longer in the community at all? (Asked as its author: a hidden one is still there.)"""
+    try:
+        rpc("get_mission", {"id": cid}, need_user=True)
+        return False
+    except CommunityError as e:
+        return e.code == "rule" and "not in the community" in str(e)
+
+
 def precheck(mid):
     """What the share wizard needs to know about a mission here before it starts."""
     m = MS.load(mid)
     c = m.get("community") or {}
+    pub = (c.get("published") or {}).get("id")
+    if pub and _gone(pub):
+        # deleted from the community since: it can only be shared anew
+        unlink(pub)
+        m = MS.load(mid)
+        c = m.get("community") or {}
     o = c.get("origin") or {}
     return {"name": m["name"], "base": m["base"],
             "unchanged": bool(o.get("id")) and c.get("base_sha") == plan_sha(m["plan"]),
@@ -899,6 +1014,8 @@ def handle(method, path, query, body):
             return 200, dict(google_state(), ok=True)
         if method == "GET" and route == "updates":
             return 200, {"ok": True, "updates": updates()}
+        if method == "POST" and route == "unlink":
+            return 200, dict(unlink((body or {}).get("id")), ok=True)
         if method == "GET" and route == "precheck":
             return 200, dict(precheck((query.get("mission") or [""])[0]), ok=True)
         if method != "POST":

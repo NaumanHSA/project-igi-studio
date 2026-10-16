@@ -16,6 +16,20 @@ from studio import paths
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DATA = paths.data()
 
+# Names the studio shows instead of the game's own, where the game's says
+# nothing: mission 4 is "GOD" in the language pack ("Defend the friendly
+# troops" is its description). Applied when the list is made, and again where
+# a list made before is read (studio/server/app.py, studio/build/music.py).
+NAMES = {4: "Defend the Troops"}
+
+
+def shown_name(level, name):
+    """The name the studio shows for a built-in mission."""
+    try:
+        return NAMES.get(int(level), name)
+    except (TypeError, ValueError):
+        return name
+
 # What each map looks like - read off the covers and the level scripts (RainEffect,
 # FlatSky, GlobalLight). "group" is how the empty-map picker sorts them; an
 # underground level has no open map to start from.
@@ -110,7 +124,7 @@ def main(argv):
     for n in range(1, 15):
         label, when, group = ENVIRONMENT[n]
         name, desc = texts.get(n, ("Mission %d" % n, ""))
-        out.append({"level": n, "name": name, "description": desc,
+        out.append({"level": n, "name": shown_name(n, name), "description": desc,
                     "environment": {"label": label, "when": when, "group": group},
                     "cover": ("covers/mission%d.png" % n) if n in have_cover else None,
                     "emptyMap": group != "indoors",

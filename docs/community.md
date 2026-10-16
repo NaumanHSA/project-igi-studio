@@ -115,7 +115,10 @@ the top of the module).
   `mission.json` gets `community`: `origin` (what it came from), `lineage`,
   `base_sha` (its plan right after pulling: "nothing changed" is comparing to
   it) and, once shared from here, `published`. A duplicate keeps where it came
-  from but not `published`.
+  from but not `published`. A mission deleted from the community loses its
+  `published` link here (`unlink`: at once when deleted from its page, and
+  checked before sharing and when the library looks for updates), so it is
+  shared anew, never "updated".
 - **Sharing** (`publish`): the plan as the export file has it, gzipped; the
   cover and thumbnail (WebP, 1280x720 and 480x270, cut from the middle),
   screenshots, the mission's own picture; the objectives and facts the editor

@@ -13574,6 +13574,8 @@ function makeStore(serverOk){
     local:true,
     library:function(){
       return fetch("data/builtins.json?v="+DATAV).then(function(r){return r.json()}).then(function(b){
+        // the names the studio shows instead of the game's (studio/extract/library.py NAMES)
+        (b.missions||[]).forEach(function(x){if(+x.level===4)x.name="Defend the Troops"});
         return {builtins:b.missions,groups:b.groups,slots:[],trash:keys(T).length,
           missions:keys(K).map(read).filter(Boolean).map(summary).sort(function(a,c){return (c.updated||0)-(a.updated||0)})};
       });
@@ -18691,7 +18693,9 @@ window.StudioCommunity={
   communityChanged:function(){},
   // closed with nothing open behind it: the library, as at the start
   communityClosed:function(){if(!M&&!READONLY)showLibrary()},
-  communityPublished:function(r){if(M)M.community=Object.assign({},M.community||{},{published:{id:r.id,version:r.version}})}
+  communityPublished:function(r){if(M)M.community=Object.assign({},M.community||{},{published:{id:r.id,version:r.version}})},
+  // deleted from the community: the open mission, if it was that one, is not shared any more
+  communityUnlinked:function(id){if(M&&M.community&&M.community.published&&M.community.published.id===id){var c=Object.assign({},M.community);delete c.published;M.community=c}}
 };
 window.StudioAI={
   ready:function(){return !!(LEVEL&&CATALOG&&MODELS)},

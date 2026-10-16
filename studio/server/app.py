@@ -439,6 +439,10 @@ def library(cfg):
     data = paths.data()
     try:
         builtins = json.load((data / "builtins.json").open(encoding="utf-8"))
+        # names the studio shows instead of the game's (a list made before they were)
+        from studio.extract.library import shown_name
+        for b in builtins.get("missions") or []:
+            b["name"] = shown_name(b.get("level"), b.get("name"))
         needs_setup = False
     except (OSError, ValueError):
         # the built-in missions are read out of the game when it is connected;

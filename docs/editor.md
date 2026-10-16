@@ -2711,7 +2711,7 @@ with it (015_01_1 and 012_01_1), 1 for every other model. The team is 1
 **Which side a soldier shoots for** is that team, and the panel's **Side**
 names the three the game itself uses, rather than asking for the number: the
 enemy (1, and 678 of the game's soldiers are on it), fights on your side (0 -
-Harrison and his GIs in GOD, Priboi, Anya and her escort, the driver in
+Harrison and his GIs in Defend the Troops (mission 4), Priboi, Anya and her escort, the driver in
 Trainyard: 18 in all), and a side of its own (2, which only Ekk's fortress
 uses, for two guards). *Another side* takes any other number, for a mission
 that wants more sides than the game ever needed.

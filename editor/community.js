@@ -726,6 +726,8 @@ function deleteMission(m) {
   $("cmd-yes").addEventListener("click", function () {
     this.disabled = true;
     call("delete_mission", { id: m.id }).then(function () {
+      // a mission of yours here was it: it is not shared any more
+      api("POST", "unlink", { id: m.id }).then(function () { if (H.communityUnlinked) H.communityUnlinked(m.id) }).catch(function () {});
       H.closeSheet(); toast("“" + m.name + "” is gone from the community");
       LIST.items = LIST.items.filter(function (c) { return c.id !== m.id });
       STATS = null;
@@ -1034,9 +1036,42 @@ function showAuth(body) {
   stats().then(function (s) { var e = $("au-stats"); if (e) e.innerHTML = statTiles(s) });
   authStep(V);
 }
-var POLL = null, GOOGLE_CHECK = null;
-// back to the studio's window from the browser: the Google sign-in is looked at at once
-window.addEventListener("focus", function () { if (GOOGLE_CHECK) GOOGLE_CHECK() });
+var POLL = null;
+// A Google sign-in is waited for wherever the person goes meanwhile - another page of the
+// community, the studio, the community closed: when its page comes back, the studio is signed in
+// and says so. Looked at every second and a half, and at once when the window is back in front.
+var GPEND = null, GTIMER = null;
+function googleWatch() {
+  GPEND = { at: Date.now() };
+  clearInterval(GTIMER);
+  GTIMER = setInterval(googleCheck, 1500);
+  googleCheck();
+}
+function googleStop() { GPEND = null; clearInterval(GTIMER) }
+function googleCheck() {
+  if (!GPEND) { clearInterval(GTIMER); return }
+  if (Date.now() - GPEND.at > 11 * 60 * 1000) { googleStop(); return }      // the sign-in itself lasts ten minutes
+  api("GET", "auth/google").then(function (g) {
+    if (!GPEND) return;
+    var V = VIEW && VIEW.kind === "auth" && VIEW.step === "google" ? VIEW : null;
+    if (g.state === "done") { googleStop(); googleDone(V) }
+    else if (g.state === "failed" && V) { googleStop(); V.step = "signin"; authStep(V); err(new Error(g.error || "Google sign-in did not finish.")) }
+  }).catch(function () {});
+}
+function googleDone(V) {
+  if (V) { authDone(V); return }
+  // not on its page any more: the header catches up; a new account is asked its name
+  refreshState().then(function (s) {
+    if (!s.signed_in) { setTimeout(refreshState, 1500); return }
+    if (!s.profile) { if (!isOpen()) open({ kind: "discover" }); go({ kind: "auth", step: "name" }); return }
+    toast("Signed in as @" + s.profile.handle);
+    if (isOpen()) show();
+  });
+}
+window.addEventListener("focus", function () {
+  if (GPEND) googleCheck();
+  else if (isOpen()) refreshState();                  // signed in or out elsewhere: the header catches up
+});
 function authStep(V) {
   var card = $("au-card");
   if (!card) return;
@@ -1173,28 +1208,18 @@ function bindAuth(V) {
     busy(b, true, "Opening Google…");
     api("POST", "auth/google", {}).then(function (r) {
       V.step = "google"; V.url = r.url; authStep(V);
+      googleWatch();
     }).catch(function (e) { busy(b, false); err(e) });
   });
   if (s === "google") {
-    // asked every second and a bit, and at once when the studio's window is back in front:
-    // signed in, by this sign-in or an earlier one, is all that matters
-    GOOGLE_CHECK = function () {
-      if (!isOpen() || VIEW !== V || V.step !== "google") { clearInterval(POLL); GOOGLE_CHECK = null; return }
-      api("GET", "auth/google").then(function (g) {
-        if (VIEW !== V || V.step !== "google") return;
-        if (g.state === "done") { clearInterval(POLL); GOOGLE_CHECK = null; authDone(V) }
-        else if (g.state === "failed") err(new Error(g.error || "Google sign-in did not finish. Open the page again, or cancel."));
-      }).catch(function () {});
-    };
-    POLL = setInterval(GOOGLE_CHECK, 1200);
-    GOOGLE_CHECK();
+    if (!GPEND) googleWatch();
     $("gg-again").addEventListener("click", function () {
       clearErr();
       api("POST", "auth/google-again", {}).then(function (r) { V.url = r.url; toast("Google’s page is open in your browser") })
         .catch(function () { api("POST", "auth/google", {}).then(function (r) { V.url = r.url }).catch(err) });
     });
     $("gg-cancel").addEventListener("click", function () {
-      clearInterval(POLL); GOOGLE_CHECK = null;
+      googleStop();
       api("POST", "auth/google-cancel", {}).catch(function () {});
       V.step = "signin"; authStep(V);
     });
@@ -1360,8 +1385,9 @@ function resendTimer(b, fn) {
   });
 }
 // signed in: the name chosen at sign-up taken now, else asked for; then on with what was wanted
-function authDone(V) {
+function authDone(V, tries) {
   refreshState().then(function (s) {
+    if (!s.signed_in && (tries || 0) < 3) { setTimeout(function () { authDone(V, (tries || 0) + 1) }, 1200); return }
     if (s.signed_in && !s.profile) {
       var pd = V.pending;
       if (pd && pd.handle) {
