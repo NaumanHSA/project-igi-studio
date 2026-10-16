@@ -16,9 +16,10 @@
 # with an anonymous JWT; writing needs an account.
 #
 # Google from a desktop app: Google's page opens in the browser; Neon Auth then
-# sends the browser to a small listener here, on a fixed loopback port (Neon
-# trusts listed origins only, and the studio's own port changes every run),
-# with a one-time verifier this module exchanges for the session.
+# sends the browser to a small listener here - http://localhost on a fixed port,
+# because Neon trusts localhost (any port) by itself while the studio's own port
+# changes every run - with a one-time verifier this module exchanges for the
+# session.
 #
 # Pictures and plans come base64 in JSON (get_media, get_plan) and are kept in
 # cache/community/ by id: they never change, so each is fetched once.
@@ -180,7 +181,8 @@ def signed_in():
 
 
 def _origin():
-    return "http://127.0.0.1:%d" % LISTEN_PORTS[0]
+    # localhost, not 127.0.0.1: Neon Auth trusts any localhost port without being told
+    return "http://localhost:%d" % LISTEN_PORTS[0]
 
 
 def _claims(tok):
@@ -331,7 +333,11 @@ def verify(email, code):
 def resend(email, kind="email-verification"):
     if kind not in ("email-verification", "forget-password"):
         kind = "email-verification"
-    st, _, j = _auth("POST", "/email-otp/send-verification-otp", {"email": (email or "").strip(), "type": kind})
+    email = (email or "").strip()
+    st, _, j = _auth("POST", "/email-otp/send-verification-otp", {"email": email, "type": kind})
+    if st == 404 and kind == "email-verification":
+        # without the code plugin's own call: Better Auth's, which sends what the project is set to (a code)
+        st, _, j = _auth("POST", "/send-verification-email", {"email": email, "callbackURL": _origin()})
     _auth_ok(st, j, "Sending the code")
     return {"sent": True}
 
@@ -370,7 +376,7 @@ def delete_account():
 
 
 # ------------------------------------------------------------------ Google
-_G = {"state": "none", "error": None, "nonce": None, "server": None, "port": None, "started": 0}
+_G = {"state": "none", "error": None, "nonce": None, "servers": [], "port": None, "started": 0}
 
 
 class _Callback(BaseHTTPRequestHandler):
@@ -413,9 +419,8 @@ class _Callback(BaseHTTPRequestHandler):
 
 
 def _stop_listener():
-    srv = _G.get("server")
-    _G["server"] = None
-    if srv:
+    servers, _G["servers"] = _G.get("servers") or [], []
+    for srv in servers:
         try:
             srv.shutdown()
             srv.server_close()
@@ -423,25 +428,42 @@ def _stop_listener():
             pass
 
 
+class _Server6(ThreadingHTTPServer):
+    address_family = __import__("socket").AF_INET6
+
+
+def _listen(port):
+    """The listener on localhost's two addresses (a browser may try either), or None when the port is taken."""
+    try:
+        four = ThreadingHTTPServer(("127.0.0.1", port), _Callback)
+    except OSError:
+        return None
+    out = [four]
+    try:
+        out.append(_Server6(("::1", port), _Callback))
+    except OSError:
+        pass                                    # no IPv6 here: the browser falls back to 127.0.0.1
+    return out
+
+
 def google_start(open_browser=True):
     """Starts a Google sign-in: the listener, and the URL of Google's page (opened in the browser)."""
     _stop_listener()
-    srv = None
+    servers = None
     for port in LISTEN_PORTS:
-        try:
-            srv = ThreadingHTTPServer(("127.0.0.1", port), _Callback)
+        servers = _listen(port)
+        if servers:
             break
-        except OSError:
-            continue
-    if not srv:
+    if not servers:
         raise CommunityError("Google sign-in needs one of the ports %s free on this computer." %
                              ", ".join(map(str, LISTEN_PORTS)), 503, "port")
     nonce = uuid.uuid4().hex
-    _G.update(state="waiting", error=None, nonce=nonce, server=srv, port=srv.server_address[1], started=time.time())
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    _G.update(state="waiting", error=None, nonce=nonce, servers=servers, port=servers[0].server_address[1], started=time.time())
+    for srv in servers:
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
     threading.Timer(300, lambda: _G["nonce"] == nonce and _G["state"] == "waiting" and
                     (_G.update(state="failed", error="Google sign-in took too long."), _stop_listener())).start()
-    back = "http://127.0.0.1:%d/callback?s=%s" % (_G["port"], nonce)
+    back = "http://localhost:%d/callback?s=%s" % (_G["port"], nonce)
     try:
         st, _, j = _auth("POST", "/sign-in/social", {"provider": "google", "callbackURL": back,
                                                      "errorCallbackURL": back, "disableRedirect": True})

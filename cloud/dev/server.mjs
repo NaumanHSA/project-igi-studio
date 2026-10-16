@@ -27,9 +27,9 @@ const DIR = has('memory') ? null : path.resolve(arg('dir', path.join(HERE, '.dat
 const TOOLS = has('tools')
 const JWT_TTL = Number(process.env.COMMUNITY_DEV_JWT_TTL || 900)        // seconds, as Neon's 15 minutes
 const COOKIE = '__Secure-neonauth.session_token'
-// the origins Neon Auth would trust: the studio's sign-in listener
-const TRUSTED = (process.env.COMMUNITY_DEV_TRUSTED || 'http://127.0.0.1:38461,http://127.0.0.1:41923,http://127.0.0.1:45127')
-  .split(',').map(s => s.trim()).filter(Boolean)
+// the origins Neon Auth trusts: any localhost port (its "Allow Localhost", on by
+// default), and those listed
+const TRUSTED = (process.env.COMMUNITY_DEV_TRUSTED || '').split(',').map(s => s.trim()).filter(Boolean)
 
 const db = await openDb({ dir: DIR })
 const SECRET = (() => {
@@ -83,7 +83,7 @@ const cookieOf = req => {
   return null
 }
 const setCookie = tok => `${COOKIE}=${encodeURIComponent(tok)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${tok ? 2592000 : 0}`
-const trusted = o => !!o && TRUSTED.includes(String(o).replace(/\/$/, ''))
+const trusted = o => !!o && (/^http:\/\/localhost(:\d+)?$/.test(String(o)) || TRUSTED.includes(String(o).replace(/\/$/, '')))
 const trustedUrl = u => { try { return trusted(new URL(u).origin) } catch { return false } }
 const hashPw = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString('hex')
 const code6 = () => String(crypto.randomInt(0, 1e6)).padStart(6, '0')

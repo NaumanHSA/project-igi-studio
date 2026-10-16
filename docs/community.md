@@ -86,13 +86,15 @@ the top of the module).
   links: nothing has to come back to a desktop app.
 - **Google** from a desktop app: `POST <auth>/sign-in/social` gives Google's
   page, opened in the browser; Neon Auth then sends the browser to
-  `http://127.0.0.1:<port>/callback?...&neon_auth_session_verifier=...`, a
-  small listener that runs only while a sign-in waits, and the studio
-  exchanges the verifier for the session (`get-session?neon_auth_session_verifier=`).
-  The port is fixed (38461, else 41923, else 45127) because Neon trusts listed
-  origins only and the studio's own port changes every run; all three are
-  below 49152, where Windows (Hyper-V, WSL, Docker) reserves blocks of ports
-  that move from boot to boot.
+  `http://localhost:<port>/callback?...&neon_auth_session_verifier=...`, a
+  small listener (on 127.0.0.1 and ::1) that runs only while a sign-in waits,
+  and the studio exchanges the verifier for the session
+  (`get-session?neon_auth_session_verifier=`). `localhost` because Neon Auth
+  trusts any localhost port by itself ("Allow Localhost", on by default -
+  leave it on: this is how a desktop app signs in). The port is fixed (38461,
+  else 41923, else 45127) because the studio's own port changes every run; all
+  three are below 49152, where Windows (Hyper-V, WSL, Docker) reserves blocks
+  of ports that move from boot to boot.
 - **Pictures and plans** come base64 in JSON and are kept in
   `cache/community/` by id: they never change. A Google profile picture is
   the only thing fetched from elsewhere (`lh*.googleusercontent.com` only).
@@ -156,13 +158,22 @@ python -m unittest tests.test_community      the client against it (starts its o
 
 ### Setting up the Neon project
 
-1. **Neon Auth** on: email and password with verification **by code**,
-   Google (Neon's shared credentials to try it; our own Google OAuth client
-   for the release), anonymous tokens on, and the trusted origins
-   `http://127.0.0.1:38461`, `http://127.0.0.1:41923`, `http://127.0.0.1:45127`.
-2. **Data API** on, with Neon Auth as its provider, exposing `public`.
+1. **Neon Auth** on (the branch's Auth page). In **Settings → Better Auth**:
+   **Sign-up with Email** and **Verify at Sign-up**, verification **by code**
+   (links would need custom SMTP); **Application Name** "IGI Studio
+   Community"; **Allow Localhost** stays on. Google works at once with Neon's
+   shared credentials (its consent screen says Neon).
+2. **Data API** on (**Postgres database → Data API**): **Use Neon Auth**
+   checked; **Grant public schema access** unchecked (every table is in
+   `community`; the functions grant themselves). Its **API URL** is on the
+   **API** tab.
 3. `DATABASE_URL=<the owner's connection string> node migrate.mjs` (`--check`
    first shows what is there). The connection string stays out of the
    repository and the studio.
 4. The Data API's and Neon Auth's URLs into `COMMUNITY` in
    `studio/server/community.py`: they are public.
+
+Before release: our own Google OAuth client (Google Cloud Console, a **Web
+application**, redirect URI `<auth URL>/callback/google`, the consent screen
+published) added under **Settings → Auth → OAuth providers**; a custom SMTP
+sender (the shared one is rate-limited).

@@ -81,7 +81,7 @@ class CommunityTests(unittest.TestCase):
             self.fail("no redirect back to the studio")
         except urllib.error.HTTPError as e:
             back = e.headers["Location"]
-        self.assertTrue(back.startswith("http://127.0.0.1:"))
+        self.assertTrue(back.startswith("http://localhost:"))
         with urllib.request.urlopen(back) as r:
             self.assertIn(b"signed in", r.read())
         st = CM.google_state()
