@@ -185,7 +185,7 @@ def _write(m, snapshot=False):
     text = json.dumps(m, indent=1)
     tmp = f.with_suffix(".tmp")
     tmp.write_text(text, encoding="utf-8")
-    tmp.replace(f)
+    paths.replace(tmp, f)                  # a reader at that moment is waited for
     h = d / "history"
     h.mkdir(exist_ok=True)
     snaps = sorted(h.glob("*.json"))

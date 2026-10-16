@@ -2285,7 +2285,9 @@ holds **you and the settings**: your community account - your picture, name
 and @handle, or a dashed ring and *Sign in* - opens a menu above it (your
 profile, the community, *Keep me signed in*, Settings, Sign out; signed out:
 sign in, or *Continue as* the account remembered), and the gear opens
-Settings. The right wall's two tabs, Selection and AI designer, sit in its
+Settings. With every panel closed the two go to the foot of the left wall,
+just the picture and the gear (`.side-dock.on-wall`), and the menu opens
+beside the wall, saying who you are. The right wall's two tabs, Selection and AI designer, sit in its
 middle, as the left wall's do.
 
 **Picking on the map** (an objective's or an event's target, a door's switch,

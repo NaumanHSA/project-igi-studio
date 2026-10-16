@@ -622,7 +622,7 @@ function paintMission(body, m) {
         (m.status === "hidden" ? '<p class="cmx-note">' + ic("warn") + '<span>A moderator hid it.</span></p>' :
           '<button class="cmx-btn" id="cm-list">' + ic(m.status === "unlisted" ? "eye" : "eyeOff") + (m.status === "unlisted" ? "List it again" : "Unlist it") + '</button>') +
         '<button class="cmx-btn danger" id="cm-del">' + ic("trash") + 'Delete it</button>' +
-        '<p class="cmx-note">' + ic("info") + '<span>A new version comes from the studio: open the mission, then Share, Publish an update.</span></p></div></section>' : '') +
+        '<p class="cmx-note">' + ic("info") + '<span>A new version comes from the studio: open the mission, then Share, Share with the community, and Publish an update.</span></p></div></section>' : '') +
       (m.can_moderate ? '<section class="cmx-panel"><h2>' + ic("shieldCheck") + 'Moderator</h2><div class="cmx-own">' +
         '<button class="cmx-btn" id="cm-hide">' + ic(m.status === "hidden" ? "eye" : "eyeOff") + (m.status === "hidden" ? "Show it again" : "Hide it") + '</button>' +
         (m.mine ? '' : '<button class="cmx-btn danger" id="cm-mdel">' + ic("trash") + 'Delete it</button>') + '</div></section>' : '') +

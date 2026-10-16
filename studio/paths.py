@@ -9,7 +9,7 @@
 # nothing, the fall-backs below are used, and they are the last place in the
 # project that names a drive letter. An installed studio keeps config.json in
 # the user's folder instead (config_file() below).
-import json, os, pathlib
+import json, os, pathlib, time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -212,3 +212,17 @@ def corpus():
 def cache():
     """Things worth keeping between runs that can always be made again."""
     return writable() / "cache"
+
+
+def replace(src, dst):
+    """src over dst, in one step. On Windows that fails for a moment while anything else has dst
+    open - another request reading it, a virus scanner looking at it: so it is tried again, for up
+    to a few seconds, before the error stands."""
+    for i in range(25):
+        try:
+            os.replace(str(src), str(dst))
+            return
+        except PermissionError:
+            if i == 24:
+                raise
+            time.sleep(0.02 * (i + 1))

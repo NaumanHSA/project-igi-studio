@@ -491,6 +491,14 @@ canvas{display:block}
 .sd-cfg:hover{color:var(--player);border-color:var(--player);box-shadow:0 0 12px rgba(141,255,154,.2)}
 .sd-cfg:hover svg{transform:rotate(60deg)}
 .sd-cfg:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* every panel closed: the same two at the foot of the wall, just the picture and the gear */
+.side-dock.on-wall{flex-direction:column;gap:8px;padding:8px 0 10px;margin-top:6px;background:none;box-shadow:none}
+.side-dock.on-wall .sd-me{flex:none;padding:0;border:0;border-radius:50%}
+.side-dock.on-wall .sd-me .nm,.side-dock.on-wall .sd-me .chev{display:none}
+.side-dock.on-wall .sd-me .cmx-av,.side-dock.on-wall .sd-me .gst{width:24px;height:24px;font-size:11px}
+.side-dock.on-wall .sd-me .gst svg{width:13px;height:13px}
+.side-dock.on-wall .sd-cfg{width:26px;height:26px;margin:0;border:0}
+.side-dock.on-wall .sd-cfg svg{width:17px;height:17px}
 /* the mission's name in the top bar: as it is, with a pencil */
 .mname{display:flex;align-items:center;gap:2px;min-width:0;flex:0 1 auto;max-width:320px;padding-left:12px;margin-left:2px;border-left:1px solid var(--line);height:30px}
 .mname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 18px/1.2 "Barlow Condensed","IBM Plex Sans",sans-serif;
@@ -8633,8 +8641,11 @@ function showPanel(name){
    ["sec","panel-sec","tab-sec"],["ev","panel-ev","tab-ev"],["cut","panel-cut","tab-cut"]].forEach(function(p){
     $(p[1]).hidden=name!==p[0];
     $(p[2]).setAttribute("aria-selected",String(name===p[0]));
-    if(name===p[0])$(p[1]).appendChild($("side-dock"));      // you and the settings, at the foot of the open one
   });
+  // you and the settings: at the foot of the open panel, or - every panel closed - of the wall, smaller
+  var dock=$("side-dock"),open=name&&$("panel-"+name);
+  (open||document.querySelector(".tabs:not(.rtabs)")).appendChild(dock);
+  dock.classList.toggle("on-wall",!open);
   closeDock();
   if(name==="nav")renderNavSection();
   if(name==="obj")renderObjectives();
@@ -13844,7 +13855,9 @@ function openDock(){
   var st=dockState(),C=window.Community,m=$("wd-menu");if(!st){closeDock();return}
   var p=st.signed_in&&st.profile,h="";
   if(p){
-    h='<button class="mi" role="menuitem" data-w="profile">'+DOCK_IC.person+'Your profile</button>'+
+    // on the wall the row shows only your picture: the menu says who you are
+    h=($("side-dock").classList.contains("on-wall")?'<div class="wd-who">'+C.avatar(p,"")+'<div class="nm"><b>'+esc(p.name||p.handle)+'</b><span>@'+esc(p.handle)+'</span></div></div>':'')+
+      '<button class="mi" role="menuitem" data-w="profile">'+DOCK_IC.person+'Your profile</button>'+
       '<button class="mi" role="menuitem" data-w="community">'+DOCK_IC.globe+'The community</button>'+
       '<button class="mi keep" role="menuitemcheckbox" aria-checked="'+(st.keep?"true":"false")+'" data-w="keep"><span class="sw" aria-hidden="true"></span>'+
         '<span>Keep me signed in<i>'+(st.keep?"On this PC, 30 days from your last visit":"Until the studio closes")+'</i></span></button>';
@@ -13872,10 +13885,17 @@ function openDock(){
   placeDock();
 }
 function placeDock(){
-  // above the row, as wide as it
-  var m=$("wd-menu"),r=$("side-dock").getBoundingClientRect();
-  m.style.left=(r.left+6)+"px";m.style.width=Math.max(250,r.width-12)+"px";
-  m.style.bottom=Math.max(8,window.innerHeight-r.top+4)+"px";m.style.top="auto";
+  var m=$("wd-menu"),d=$("side-dock"),r=d.getBoundingClientRect();
+  if(d.classList.contains("on-wall")){
+    // beside the wall, level with its foot
+    m.style.left=(r.right+10)+"px";m.style.width="270px";
+    m.style.bottom=Math.max(8,window.innerHeight-r.bottom)+"px";
+  }else{
+    // above the row, as wide as it
+    m.style.left=(r.left+6)+"px";m.style.width=Math.max(250,r.width-12)+"px";
+    m.style.bottom=Math.max(8,window.innerHeight-r.top+4)+"px";
+  }
+  m.style.top="auto";
 }
 function closeDock(){var m=$("wd-menu");if(m&&!m.hidden){m.hidden=true;$("wd-me").setAttribute("aria-expanded","false")}}
 // What a click on the map picks now, if not the usual: "thing" (an objective's or an event's target,

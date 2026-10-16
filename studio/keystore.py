@@ -84,7 +84,7 @@ def _save(d):
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(d, indent=1), encoding="utf-8")
-    os.replace(str(tmp), str(f))
+    paths.replace(tmp, f)
 
 
 def put(name, value):
