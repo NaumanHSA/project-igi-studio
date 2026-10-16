@@ -112,18 +112,37 @@ the top of the module).
 
 - **Where**: the left wall's Community tab (apart from the mission's tabs; a
   globe), the Share menu, and the library's Community button.
-- **The page** (`#community`, over the workspace like the library): search,
-  sort (newest, top, this week, this month, most pulled, best match), filters
-  (base level, difficulty, style, originals or remixes); a mission's page;
-  profiles; the moderators' reports.
+- **A page of its own** (`#community`, `editor/community.js` and
+  `community.css`) over the whole window, with its own header: back to the
+  studio, Discover, My missions (and Reports for moderators), search, Share a
+  mission, the account. Its views:
+  - **Discover**: a hero (a featured mission - the week's best, else the best
+    of all - and the community in numbers, `community_stats`), filters down
+    the side (order, difficulty, style, originals or remixes; no base level:
+    it says nothing about the mission), cards that load as you scroll.
+  - **A mission**: its pictures over a blurred cover, its numbers, Pull, the
+    map, 3D, votes; then the briefing, objectives, intel (what the studio
+    counted), comments with replies; down the side its owner's and the
+    moderators' tools, where it came from, its remixes, its versions.
+  - **A person**, **editing your profile**, the **moderators' reports**.
+  - **Signing in**, a page of two halves: what the community is, and the
+    forms - Google, or email: create an account (name, username checked as
+    you type, email, a password with its strength and rules, the password
+    again, the rules agreed), the code in six boxes (pasted or typed), a
+    forgotten password, and, after Google, choosing a username. Anything that
+    needs an account opens it and carries on after.
+  - **Sharing**, a page with its steps down the side and the card as it will
+    look: Check (saved and checked, at least one objective, not unchanged
+    since it was pulled; an update or a new mission when it was shared
+    before), About, Pictures, Credits, Review, then the stamp. **Frame a
+    shot** hides the page and leaves a bar: set up the map or the 3D view
+    behind it, take the picture. With no mission of yours open, it asks
+    which one and opens it first (`openMission(id, after)`). What the wizard
+    was told is kept in this browser by mission until it is published.
 - **Looking without pulling** is the editor's read-only mode with a plan:
   `viewCommunity(doc, meta)` loads the plan (`loadPlanState`, shared with
   `openMission`) over its base level with `READONLY` and `PREVIEW` set. The
   banner offers Pull and Back to the community; nothing is saved or applied.
-- **The share wizard**: Check (the mission saved and checked, at least one
-  objective, not unchanged since it was pulled), About, Pictures, Credits,
-  Review. What it was told is kept in this browser by mission until it is
-  published.
 
 ## Running it
 

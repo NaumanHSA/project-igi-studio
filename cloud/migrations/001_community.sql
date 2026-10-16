@@ -824,6 +824,17 @@ begin
                                                         'cursor', p ->> 'cursor')));
 end $$;
 
+-- the community in four numbers, for its front page
+create function public.community_stats(p jsonb default '{}'::jsonb) returns jsonb
+language sql stable security definer set search_path = community, public, pg_temp as $$
+  select jsonb_build_object(
+    'missions', (select count(*) from community.missions where status = 'published'),
+    'people', (select count(*) from community.profiles where not banned),
+    'pulls', (select coalesce(sum(pulls), 0) from community.missions where status = 'published'),
+    'comments', (select count(*) from community.comments c join community.missions m on m.id = c.mission
+                  where not c.removed and m.status = 'published'))
+$$;
+
 -- ------------------------------------------------------------------ the API: writing (signed in)
 
 -- your profile: made the first time, changed after
@@ -1401,7 +1412,7 @@ revoke all on all functions in schema community from public;
 revoke all on function
   public.me(jsonb), public.handle_free(jsonb), public.name_free(jsonb), public.list_missions(jsonb),
   public.get_mission(jsonb), public.remixes(jsonb), public.get_plan(jsonb), public.get_media(jsonb),
-  public.mission_versions(jsonb), public.list_comments(jsonb), public.get_profile(jsonb),
+  public.mission_versions(jsonb), public.list_comments(jsonb), public.get_profile(jsonb), public.community_stats(jsonb),
   public.save_profile(jsonb), public.upload_media(jsonb), public.publish_mission(jsonb),
   public.publish_version(jsonb), public.update_details(jsonb), public.set_status(jsonb),
   public.delete_mission(jsonb), public.set_vote(jsonb), public.record_pull(jsonb), public.add_comment(jsonb),
@@ -1412,7 +1423,7 @@ from public;
 grant execute on function
   public.me(jsonb), public.handle_free(jsonb), public.name_free(jsonb), public.list_missions(jsonb),
   public.get_mission(jsonb), public.remixes(jsonb), public.get_plan(jsonb), public.get_media(jsonb),
-  public.mission_versions(jsonb), public.list_comments(jsonb), public.get_profile(jsonb)
+  public.mission_versions(jsonb), public.list_comments(jsonb), public.get_profile(jsonb), public.community_stats(jsonb)
 to anonymous, authenticated;
 
 grant execute on function

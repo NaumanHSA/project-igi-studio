@@ -92,6 +92,7 @@ await t('a guest browses, searches (words, objectives, typos) and opens it', asy
   assert.equal((await guest('list_missions', { q: 'helicopter' })).items.length, 0)
   assert.equal((await guest('list_missions', { level: 4 })).items.length, 0)
   assert.equal((await guest('list_missions', { tag: 'stealth', difficulty: 'hard' })).items.length, 1)
+  assert.deepEqual(await guest('community_stats', {}), { missions: 1, people: 3, pulls: 0, comments: 0 })
   const m = await guest('get_mission', { id: M1.id })
   assert.equal(m.objectives[1].text, 'Blow up the generator'); assert.equal(m.my_vote, null); assert.equal(m.mine, false)
   assert.equal(m.versions.length, 1)

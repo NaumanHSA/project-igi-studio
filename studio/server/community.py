@@ -66,7 +66,7 @@ KEY = "community-session"                  # the keystore's name for the session
 PLAN_MAX = 20 * 1024 * 1024                # a plan, unpacked
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 # what the editor may call as it is; the rest go through the routes below
-PASS = {"me", "list_missions", "get_mission", "remixes", "list_comments", "get_profile", "handle_free",
+PASS = {"me", "list_missions", "get_mission", "remixes", "list_comments", "get_profile", "handle_free", "community_stats",
         "name_free", "mission_versions", "set_vote", "add_comment", "edit_comment", "delete_comment",
         "report", "save_profile", "update_details", "set_status", "delete_mission", "mod_reports",
         "mod_act", "set_role"}
