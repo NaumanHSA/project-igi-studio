@@ -708,7 +708,9 @@ function preview(m, in3d) {
   if (b) b.disabled = true;
   api("GET", "plan/" + m.id + "?v=" + m.version).then(function (r) {
     hide();
-    H.preview(r.mission, { id: m.id, version: m.version, name: m.name, author: m.author, allow_remix: m.allow_remix }, in3d);
+    H.preview(r.mission, { id: m.id, version: m.version, name: m.name, author: m.author, allow_remix: m.allow_remix,
+      summary: m.summary, objectives: m.objectives, difficulty: m.difficulty, levelName: H.levelName(m.level),
+      thumb: media(m.thumb) }, in3d);
   }).catch(function (e) {
     toast(e.message);
     if (b) b.disabled = false;

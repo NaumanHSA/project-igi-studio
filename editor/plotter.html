@@ -1485,6 +1485,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
 </style>
 
 <div id="app">
+  <header class="cmpbar" id="cmpbar" hidden></header>
   <header class="topbar">
     <div class="tb-left">
       <button class="brand" id="brandbtn" title="Mission library"><img class="brand-logo" src="icon.png" alt="" width="30" height="30">
@@ -1599,6 +1600,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
     </div>
 
     <aside class="rail right">
+      <section class="rsec cmp-info" id="cmpinfo" aria-label="Community mission" hidden></section>
       <section class="rsec rsec-sel" aria-label="Selection"><div class="lbl rsec-t">Selection</div><div id="insp"></div></section>
       <section class="rsec rsec-log" id="logsec" data-open="true" aria-label="Change log">
         <button class="logh" id="logtoggle" type="button" aria-expanded="true" aria-controls="plist">
@@ -5285,7 +5287,7 @@ function renderSide(){
   renderObjectives();renderEvents();renderCutscenes();
   if(multi.length>1){groupInspector(el);renderList();return}
   if(!sel){
-    el.innerHTML='<p class="empty">Click anything on the plan to inspect it. Drag your own placements to move them.</p>';
+    el.innerHTML='<p class="empty">'+(READONLY?'Click anything on the plan to see what it is.':'Click anything on the plan to inspect it. Drag your own placements to move them.')+'</p>';
     patrolMode=false;
   }else if(sel.type==="graphnode"){
     var gid=sel.graph,ed=nodeEdits[editKey(gid,sel.id)],editable=graphEditable(gid);
@@ -11517,6 +11519,8 @@ function sync3dSwitch(){
   if(!a)return;
   a.classList.toggle("on",!on);b.classList.toggle("on",on);
   a.setAttribute("aria-pressed",String(!on));b.setAttribute("aria-pressed",String(on));
+  // a community mission's own header has the same switch
+  if($("cmp-map")){$("cmp-map").classList.toggle("on",!on);$("cmp-3d").classList.toggle("on",on)}
 }
 function toggle3d(on){
   if(!on){if(window.View3D&&View3D.isOpen())View3D.close();sync3dSwitch();return}
@@ -13676,6 +13680,7 @@ function ago(t){
 }
 var LOCK='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5"/></svg>';
 function showLibrary(){
+  if(CMVIEW){exitPreview();return}
   closeMenus();$("sheet").hidden=true;
   $("start").hidden=false;
   $("lib-back").hidden=!(M||READONLY);
@@ -14318,7 +14323,7 @@ function openMission(id,after){
   Store.get(id).then(function(m){
     if(!m){toast("That mission is no longer there");showLibrary();return}
     if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
-    READONLY=false;CMVIEW=null;M=m;MISSION=m.name;MODE=m.base.kind==="empty"?"empty":"copy";
+    READONLY=false;leavePreviewUi();CMPREV=null;M=m;MISSION=m.name;MODE=m.base.kind==="empty"?"empty":"copy";
     loadPlanState(m.plan||{});
     rememberLast(id);
     $("start").hidden=true;$("banner").hidden=true;
@@ -14362,32 +14367,82 @@ function loadPlanState(p){
     events=(p.events||[]).map(function(v){v=JSON.parse(JSON.stringify(v));if(!v.uid)v.uid=uid();v.do=v.do||[];v.when=v.when||{kind:"area"};return v});EVPICK=null;EVOPEN=null;
     nodeVer++;planVer++;sel=null;tool=null;patrolMode=false;coverAt=0;
 }
-// A mission from the community, only looked at: its plan over its base level,
-// as a built-in mission is looked at (READONLY), saying where it came from. The
-// map and the 3D view work as for any mission; nothing is saved or applied.
-var CMVIEW=null;      // {id, version, name, author, allow_remix} while one is looked at
+// A mission from the community, only looked at: a mode of its own. Its plan is
+// drawn over its base level, read only (READONLY), with nothing of the studio's
+// editing around it - only the map or the 3D view, the details of what is
+// clicked, a summary of the mission, and its own header: back to its page,
+// pull it, or close. Leaving puts back what the studio had open before (CMPREV):
+// a look never stays behind, nor takes the place of a mission of yours.
+var CMVIEW=null;      // {id, version, name, author, summary, objectives, level, difficulty, thumb} while one is looked at
+var CMPREV=null;      // what was open before: {id} a mission of yours, {level} a built-in one, or {} nothing
 function viewCommunity(doc,meta,in3d){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
+  if(!CMVIEW)CMPREV={id:M?M.id:null,level:!M&&READONLY?LV:null};
   if(window.View3D&&View3D.isOpen())toggle3d(false);
   M=null;READONLY=true;CMVIEW=meta;MODE=doc.base.kind==="empty"?"empty":"copy";MISSION=doc.name;
+  sel=null;multi=[];
   loadPlanState(JSON.parse(JSON.stringify(doc.plan||{})));
   rememberLast(null);
-  $("start").hidden=true;
+  $("start").hidden=true;$("banner").hidden=true;
+  $("app").classList.add("cmprev");
+  // the details panel, not the AI designer's
+  if($("tab-sel")&&$("tab-sel").getAttribute("aria-selected")!=="true")$("tab-sel").click();
+  paintPreviewBar(in3d);
   applyModeUi();
   loadLevel(doc.base.level,function(){
-    chip("");paintStatus();builtinBanner(false);renderSide();draw();
-    if(in3d)setTimeout(function(){toggle3d(true)},50);
+    chip("");paintStatus();renderSide();paintPreviewInfo();draw();
+    if(in3d)setTimeout(function(){toggle3d(true);paintPreviewBar(true)},50);
   });
 }
-function previewBanner(warn){
-  var p=CMVIEW,by=p.author?" by @"+p.author.handle:"";
-  banner('<b>'+esc(p.name)+'</b>'+esc(by)+', from the community. '+(warn
-      ?'It can’t be changed here: pull it into your studio to make it yours, then change it.'
-      :'Look around and view it in 3D; to change it, pull it into your studio.')+
-    ' <button class="btn primary" id="bn-pull">Pull to my studio</button> <button class="btn" id="bn-cm">Back to the community</button>',
-    warn?"warn":"");
-  $("bn-pull").addEventListener("click",function(){Community.pull(CMVIEW)});
-  $("bn-cm").addEventListener("click",function(){Community.open({kind:"mission",id:CMVIEW.id})});
+function paintPreviewBar(in3d){
+  var p=CMVIEW,b=$("cmpbar");if(!p)return;
+  var by=p.author?"@"+p.author.handle:"someone who left";
+  b.innerHTML='<button class="cmp-back" id="cmp-back" title="Back to its page in the community">'+
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Its page</span></button>'+
+    (p.thumb?'<span class="cmp-thumb" style="background-image:url('+esc(p.thumb)+')"></span>':'')+
+    '<div class="cmp-t"><span class="cmp-over">Community · looking, read only</span><b>'+esc(p.name)+'</b>'+
+      '<span class="cmp-by">by '+esc(by)+(p.levelName?' · '+esc(p.levelName):'')+(p.version?' · v'+p.version:'')+'</span></div>'+
+    '<div class="viewswitch cmp-switch" role="group" aria-label="View"><button type="button" id="cmp-map" class="'+(in3d?'':'on')+'">Map</button>'+
+      '<button type="button" id="cmp-3d" class="'+(in3d?'on':'')+'">3D</button></div>'+
+    '<span class="cmp-grow"></span>'+
+    '<button class="btn primary" id="cmp-pull"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14"/></svg>Pull to my studio</button>'+
+    '<button class="btn ghost cmp-x" id="cmp-close" title="Close: back to the studio as it was" aria-label="Close">&times;</button>';
+  b.hidden=false;
+  // its page at once; the studio is put back behind it
+  $("cmp-back").addEventListener("click",function(){var id=CMVIEW.id;Community.open({kind:"mission",id:id});exitPreview()});
+  $("cmp-pull").addEventListener("click",function(){Community.pull(CMVIEW)});
+  $("cmp-close").addEventListener("click",function(){exitPreview()});
+  $("cmp-map").addEventListener("click",function(){toggle3d(false);this.classList.add("on");$("cmp-3d").classList.remove("on")});
+  $("cmp-3d").addEventListener("click",function(){toggle3d(true);this.classList.add("on");$("cmp-map").classList.remove("on")});
+}
+// the mission itself, above the details of what is clicked
+function paintPreviewInfo(){
+  var p=CMVIEW,box=$("cmpinfo");
+  if(!p){box.hidden=true;return}
+  var objs=p.objectives&&p.objectives.length?p.objectives:communityObjectives();
+  box.innerHTML='<div class="lbl rsec-t">Community mission</div><div class="cmpi">'+
+    (p.summary?'<p class="cmpi-s">'+esc(p.summary)+'</p>':'')+
+    '<div class="cmpi-h">Objectives</div><ol class="cmpi-o">'+objs.map(function(o){return '<li>'+esc(o.text)+'</li>'}).join("")+'</ol>'+
+    '<p class="hint">Click anything on the map to see what it is. Nothing here can be changed: pull it into your studio for that.</p></div>';
+  box.hidden=false;
+}
+// the editing studio back: without the look's header, panel and flag
+function leavePreviewUi(){
+  CMVIEW=null;
+  $("app").classList.remove("cmprev");
+  $("cmpbar").hidden=true;$("cmpinfo").hidden=true;
+}
+// out of a look, back to what the studio had open
+function exitPreview(){
+  var p=CMPREV||{};CMPREV=null;
+  if(window.View3D&&View3D.isOpen())toggle3d(false);
+  leavePreviewUi();
+  if(p.id){openMission(p.id);return}
+  if(p.level){viewBuiltin(p.level);return}
+  // nothing was open: an empty studio, the library over it
+  M=null;READONLY=false;MISSION="";sel=null;multi=[];loadPlanState({});
+  applyModeUi();paintStatus();renderSide();draw();
+  showLibrary();
 }
 // Buildings placed before the grid mattered: moved onto it once, as the mission
 // opens, each an ordinary move (the change log shows it, undo takes it back),
@@ -14411,7 +14466,7 @@ function gridExisting(){
 function viewBuiltin(level){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(M)save()}
   var b=builtin(level);
-  M=null;READONLY=true;CMVIEW=null;MODE="copy";MISSION=b?b.name:"Level "+level;
+  M=null;READONLY=true;leavePreviewUi();CMPREV=null;MODE="copy";MISSION=b?b.name:"Level "+level;
   placements=[];removals=[];navNodes=[];nodeEdits={};edits={};removeRefs=[];nodeVer++;planVer++;
   objectives=[];failOnAlarm=false;OBJPICK=null;objBase=false;MSET={};events=[];EVPICK=null;EVOPEN=null;groundEdits=[];levelScenes={};levelVehicles={};cutscenes=[];CUTPICK=null;groundBrush={};GBRUSH_CV=null;groundSculpt={};GSCULPT_CV=null;TBUDGET=null;groundPaint={};GPAINT_CV=null;GSEL=null;
   sel=null;tool=null;patrolMode=false;
@@ -14488,7 +14543,7 @@ function banner(html,kind){
 }
 // the banner a built-in mission opens with; warn: something tried to change it
 function builtinBanner(warn){
-  if(CMVIEW)return previewBanner(warn);
+  if(CMVIEW){if(warn){var cb=$("cmpbar");cb.classList.remove("nudge");void cb.offsetWidth;cb.classList.add("nudge");toast("Only looked at: pull it into your studio to change it")}return}
   banner(warn
     ?'<b>A built-in mission can’t be changed</b>'+esc(MISSION)+' stays exactly as the game ships it. To change it, make a mission of your own '+
       'from it: a full copy, or just its map. Here you can look around, view things in 3D, copy them, and keep them in Your items.'+

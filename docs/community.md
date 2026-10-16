@@ -141,10 +141,16 @@ the top of the module).
     behind it, take the picture. With no mission of yours open, it asks
     which one and opens it first (`openMission(id, after)`). What the wizard
     was told is kept in this browser by mission until it is published.
-- **Looking without pulling** is the editor's read-only mode with a plan:
-  `viewCommunity(doc, meta)` loads the plan (`loadPlanState`, shared with
-  `openMission`) over its base level with `READONLY` and `PREVIEW` set. The
-  banner offers Pull and Back to the community; nothing is saved or applied.
+- **Looking without pulling** is a mode of its own (`viewCommunity`,
+  `#app.cmprev`): the plan drawn read-only over its base level (`READONLY`,
+  `CMVIEW`; `loadPlanState` is shared with `openMission`), with only the map or
+  the 3D view, the details of what is clicked and a summary of the mission
+  (`#cmpinfo`) - no menus, side panels, editing tools, change log or AI
+  designer - under a header of its own (`#cmpbar`): its page, Map / 3D, Pull to
+  my studio, close. Leaving puts back what was open before (`CMPREV`: a
+  mission of yours, a built-in one, or the library), so a look never stays
+  behind; opening or pulling a mission ends it too. Nothing is saved or
+  applied. (`CMVIEW`, not `PREVIEW`: that is the selection panel's 3D viewer.)
 
 ## Running it
 

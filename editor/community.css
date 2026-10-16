@@ -598,3 +598,39 @@
   .cmx-radar .blip{opacity:.6}
   .cmx-card,.cmx-spot-card .img{transition:none}
 }
+
+/* ---------------------------------------------------------------- looking at a community mission in the studio
+   (plotter.html viewCommunity): only the map or the 3D view, the details of
+   what is clicked and the mission's summary, under a header of its own */
+#app.cmprev .topbar,#app.cmprev .tabs,#app.cmprev .panel,#app.cmprev #panel-ai,#app.cmprev #toggles,#app.cmprev #gbar,
+#app.cmprev #placebar,#app.cmprev .rsec-log,#app.cmprev #banner{display:none!important}
+.cmpbar{position:relative;z-index:10;flex:none;display:flex;align-items:center;gap:14px;height:62px;padding:0 16px;
+  background:linear-gradient(180deg,#10301a,#0a2010);border-bottom:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.cmpbar[hidden]{display:none}
+.cmpbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;opacity:.8;
+  background:linear-gradient(90deg,transparent,rgba(255,210,74,.7),transparent)}
+.cmpbar.nudge{animation:cmpnudge .4s}
+@keyframes cmpnudge{20%,60%{transform:translateX(-5px)}40%,80%{transform:translateX(5px)}}
+.cmp-back{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;padding:7px 12px 7px 8px;border:1px solid var(--line);border-radius:4px;
+  font:600 13px "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.cmp-back svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.cmp-back:hover{color:var(--player);border-color:var(--player)}
+.cmp-back:focus-visible{outline:2px solid var(--accent)}
+.cmp-thumb{flex:none;width:72px;height:40px;border-radius:4px;border:1px solid var(--line);background:var(--sunken) center/cover no-repeat}
+.cmp-t{display:flex;flex-direction:column;min-width:0;line-height:1.15}
+.cmp-over{font:600 10px "IBM Plex Mono",monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.cmp-t b{font:600 21px "Barlow Condensed",sans-serif;letter-spacing:.02em;color:#eaffec;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmp-by{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmp-switch{margin-left:8px}
+.cmp-grow{flex:1}
+.cmpbar .btn{font:600 14px "Barlow Condensed","IBM Plex Sans",sans-serif;letter-spacing:.09em;text-transform:uppercase;padding:9px 16px;
+  display:inline-flex;align-items:center;gap:8px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.cmpbar .btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.cmpbar .btn.primary{background:linear-gradient(180deg,#ffe38e,#ffc933);border-color:#ffd24a;color:#1d1600;box-shadow:0 0 18px rgba(255,210,74,.25)}
+.cmpbar .cmp-x{clip-path:none;font-size:22px;line-height:1;padding:4px 12px}
+.cmp-info .cmpi{padding:0 14px 14px}
+.cmp-info .cmpi-s{margin:0 0 10px;color:var(--ink);font-size:13.5px;line-height:1.5}
+.cmp-info .cmpi-h{font:600 11px "IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 6px}
+.cmp-info .cmpi-o{margin:0 0 10px;padding-left:20px;font-size:13px;line-height:1.5;color:var(--ink)}
+.cmp-info .cmpi-o li{margin:3px 0}
+.cmp-info{border-bottom:1px solid var(--line)}
