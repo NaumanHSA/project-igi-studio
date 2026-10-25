@@ -3,7 +3,7 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
-## Unreleased
+## 2.0.1
 
 ### New
 
@@ -48,6 +48,7 @@ section is also that release's notes on GitHub.
   switches, pickups, fences and mines, helicopters - is a budget the mission is
   held to before it is built, with what to take out if it goes over. Nothing
   found wrong at any step of the build is let through.
+
 - A deleted mission could stay in the game: Delete took it out only when the
   box under it was ticked, and only from the slot its own record named, which
   was out of date once the game's missions had been moved. Every slot that
