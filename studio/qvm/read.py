@@ -89,8 +89,11 @@ def _split_strings(blob):
 
 def parse(src):
     """Parse bytes or a path into a QVM. Raises QVMError on anything unexpected."""
-    data = src if isinstance(src, (bytes, bytearray)) else open(str(src), "rb").read()
-    data = bytes(data)
+    if isinstance(src, (bytes, bytearray)):
+        data = bytes(src)
+    else:
+        with open(str(src), "rb") as f:
+            data = f.read()
     if len(data) < 60:
         raise QVMError("file is %d bytes, too small for a 60 byte header" % len(data))
     if data[:4] != MAGIC:

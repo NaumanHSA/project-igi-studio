@@ -22,6 +22,16 @@ section is also that release's notes on GitHub.
 
 ### Fixed
 
+- **"QTaskList is full" can't happen any more.** A copy of mission 8 that kept
+  its objectives stopped the game as it loaded: level 8's map computer is full
+  (32 markers, the most it holds) and the mission's five objective markers
+  needed two more. The studio counted, but its error came after the build's
+  last check and was let through. Now the level's own location labels make room
+  for the mission's markers, and every list the game keeps at a fixed size -
+  read out of the game itself: people, vehicles and cameras, doors and
+  switches, pickups, fences and mines, helicopters - is a budget the mission is
+  held to before it is built, with what to take out if it goes over. Nothing
+  found wrong at any step of the build is let through.
 - A deleted mission could stay in the game: Delete took it out only when the
   box under it was ticked, and only from the slot its own record named, which
   was out of date once the game's missions had been moved. Every slot that

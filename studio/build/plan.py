@@ -18,6 +18,7 @@ from studio import paths
 from studio.qvm import source as qvm_source
 from studio.build.objects import set_soldier_team
 from studio.build import taskargs as TASKARGS
+from studio.build import limits as LIMITS
 from studio.extract import motion as MOTION_X
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.build.plan), do not import it. The guard below
@@ -5258,9 +5259,19 @@ if LABEL_TASKS or MARK_TASKS:
     last = [m.start() for m in re.finditer(r'Task_New\(-?\d+, "ComputerHilight"', out_src)][-1]
     at = task_end(out_src, last)
     out_src = out_src[:at] + "".join(", " + EOL + t for t in MARK_TASKS + LABEL_TASKS) + out_src[at:]
-    n_hil = len(re.findall(r'Task_New\(-?\d+, "ComputerHilight"', out_src))
-    if n_hil > HILIGHT_MAX:
-        errors.append("the map computer would hold %d markers and labels; it holds %d" % (n_hil, HILIGHT_MAX))
+# The map computer holds 32 (studio/build/limits.py), and a 33rd is "QTaskList is full" as the level
+# loads. Whatever brought more - the mission's objective markers past the level's own numbered ones
+# (a copy of level 8, which ships 32, with its objectives), labels, an area from another level - the
+# level's own location labels give way, never an objective's marker.
+out_src, _labels_gone = LIMITS.fit_markers(out_src)
+if _labels_gone:
+    warnings.append("map computer: %d of the level's own labels left out to make room for the mission's markers "
+                    "(it holds %d): %s" % (len(_labels_gone), LIMITS.LISTS["markers"][1], ", ".join(_labels_gone)))
+# Every list the game keeps at a fixed size, held to it: none of them can fill up in the game.
+for _key, _what, _used, _room in LIMITS.problems(out_src):
+    errors.append("the game holds at most %d %s in a level, and this mission has %d: take out %d. "
+                  "Past that it stops with \"QTaskList is full\" as the mission loads"
+                  % (_room, _what, _used, _used - _room))
 
 if FLAT_PATCHES:
     _targets = [pd["target"] for pd in list(PADS.values()) + AREA_PADS if pd.get("target") is not None]
@@ -5343,6 +5354,14 @@ if _tex or (OUT / "textures" / TEX.STAGE_LIST).exists():
             report.append("the mission's own textures: %s" % ", ".join(_names))
     except ValueError as e:
         errors.append("textures: %s" % e)
+
+# The last word: a problem found after the checks above is not let through either (the map
+# computer's markers once were, and the game stopped with "QTaskList is full").
+if errors:
+    print("PLAN REJECTED - %d problem(s):" % len(errors))
+    for e in errors:
+        print("   x " + e)
+    sys.exit(1)
 
 # models the slot must receive from other levels before this script can show them
 _needed = OUT / "models_needed.json"

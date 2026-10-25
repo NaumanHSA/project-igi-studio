@@ -21,6 +21,7 @@ class CommunityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.home = tempfile.mkdtemp(prefix="igi-community-")
+        cls.was_home = os.environ.get("IGISTUDIO_HOME")       # put back afterwards: later tests read the real one
         os.environ["IGISTUDIO_HOME"] = cls.home
         cls.proc = subprocess.Popen(["node", "server.mjs", "--memory", "--port", "0"], cwd=str(DEV),
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8")
@@ -36,6 +37,7 @@ class CommunityTests(unittest.TestCase):
         os.environ["IGISTUDIO_COMMUNITY"] = cls.base
         from studio.server import community as CM, missions as MS
         cls.CM, cls.MS = CM, MS
+        cls.was_store = (MS.STORE, MS.TRASH)
         MS.STORE = pathlib.Path(cls.home) / "missions" / "custom"
         MS.TRASH = MS.STORE / ".trash"
         MS.STORE.mkdir(parents=True, exist_ok=True)
@@ -48,6 +50,11 @@ class CommunityTests(unittest.TestCase):
         finally:
             cls.proc.kill()
             os.environ.pop("IGISTUDIO_COMMUNITY", None)
+            if cls.was_home is None:
+                os.environ.pop("IGISTUDIO_HOME", None)
+            else:
+                os.environ["IGISTUDIO_HOME"] = cls.was_home
+            cls.MS.STORE, cls.MS.TRASH = cls.was_store
             shutil.rmtree(cls.home, ignore_errors=True)
 
     # -------------------------------------------------------------- helpers

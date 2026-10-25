@@ -1282,8 +1282,17 @@ When the mission is applied, it is wired the way level 14 wires its own:
   fatal `QTaskList is full` when the level loads. Level 8 ships exactly 32,
   level 3 ships 29. So a mission's markers are written **over** the level's own
   numbered ones first (they are the ones being replaced anyway), and only what
-  is left over is added. If the budget still runs out, map labels are dropped
-  first, with a warning; the check list says so before you apply.
+  is left over is added. Whatever still brings more (a copy of level 8 keeping
+  its five objectives needs two more than its three numbered markers), the
+  mission's own labels go first, then the level's own location labels, the
+  last in the list first (`limits.fit_markers`), with a warning; an objective's
+  marker is never dropped.
+- **Every list the game keeps at a fixed size is a budget** (people 128;
+  things that move, explode or watch 256; doors, switches and the like 512;
+  pickups 256; and more: docs/engine.md). A mission past any of them is refused
+  before it is built, saying what to take out (`limits.problems`), so "QTaskList
+  is full" can't happen in the game. The build's last step refuses anything
+  found wrong after its other checks, too: the marker count once got through.
 - The mission fails on the base level's own failures, on the player's death,
   and on the alarm if **The mission fails if the alarm goes off** is ticked.
 

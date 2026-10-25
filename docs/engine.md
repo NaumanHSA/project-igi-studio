@@ -30,6 +30,34 @@ by debugging a crash or a broken mission.
 | A cube's mesh stays small: **at most 35 vertices** in the game's own, nearly all within a 1600-byte render buffer | The renderer keeps drawn cubes in fixed pools (700 × 1600 B, 50 × 3200 B, 16 × 8000 B); past them a cube is drawn as a hole or a spike |
 | Where the ground **hangs over itself**, a grid point has two or three heights in cubes above each other | A cube built again from one height loses the overhang; the unchanged cube beside keeps its half, a side ending in the air |
 
+## Fixed-size task lists ("QTaskList is full")
+
+The game keeps tasks of some kinds in lists it makes once, each at a size of
+its own: `QTaskList_New` (0x4c1800) allocates a count, a capacity and that many
+slots, and `QTaskList_Add` (0x4c1790) stops the game with the fatal
+**"QTaskList is full"** when one more is added. Which kinds take a place in
+which list was read from the game's own type table: every task type is
+registered by name, with its parent type (0x401900), and a list takes the type
+whose handler adds to it and every type made from it. The list sizes, what
+fills them, and the most any of the fourteen levels uses:
+
+| List | Size | What takes a place | Levels at most |
+|---|---|---|---|
+| Map computer | **32** | ComputerHilight (objective markers and location labels) | 32 (level 8) |
+| People | **128** | Human: every HumanSoldier kind and HumanPlayer | 100 (level 14) |
+| Moving, exploding, watching | **256** | AlarmLight, Car, Heli, Human, ExplodeObject and its kinds (Terminal, Siren, Radio, Generator, GenericTBA, AlarmControl, Mine), SCamera, Glass | 160 (level 14) |
+| Interactive objects | **512** | Door, Switch, Terminal, Ladder, Cabinet, Fence, Wire, StationaryGun, GenericTBA | 101 (level 6) |
+| Pickups | **256** | GunPickup, AmmoPickup, GenericPickup | 47 (level 14) |
+| Fences and mines | **64** | Fence, Mine, MineField | 41 (level 6) |
+| Blasts | **128** | Mine, MineField, and Grenade and M203 as they fly | |
+| Helicopters | **16** | Heli | 4 (level 7) |
+| Security cameras | **64** | SCamera (its lens) | 9 (level 8) |
+
+A respawning guard (GuardGenerator) is the same soldier again, not a new one:
+level 14 would need 292 places otherwise, and it runs. The studio holds a
+mission to all of them before it builds (`studio/build/limits.py`), keeping 16
+places of the 256 and 32 of the 128 free for what the game adds as it plays.
+
 ## Terrain mesh (terrain.ctr, terrain.cmd)
 
 Decoded here (`studio/build/terrain_mesh.py`). Both files round-trip
