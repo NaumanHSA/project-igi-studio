@@ -13,7 +13,7 @@ python -m studio
 
 This opens `http://localhost:8765/plotter.html`.
 
-1. The **mission library** opens. Click **New mission**, name it, and start
+1. The **start page** opens. Click **New mission**, name it, and start
    from a **copy of a mission** or an **empty map**.
 2. Place things from the inventory (or right-click the map). To give a guard a
    route, select him, click **Edit patrol route**, and click nodes on the map.
@@ -26,7 +26,24 @@ panel, or the Game menu) holds the game folder.
 
 ## Missions
 
-The library has two shelves.
+The studio opens on the **start page** (`#start`), a page of its own over the
+whole window, never on the editor: every start begins there, and the brand
+in the top bar, **Mission, Start page** and **New mission** lead back to it
+(`showHome()`; a mission open stays open behind it, and *Back to "..."* in
+its header returns to it). Its header has Community, Settings and your
+community account; its welcome has **New mission**, **Import a mission
+file**, **Browse the community**, and the mission open now or opened last
+(*Continue*), or three first steps when there is none. **New mission** is a
+view of the page (`newMissionPage()`), not a dialog: *All missions* or Esc
+goes back. The community opened from here comes back here when it closes
+(`HOMECM`). The editor's keys are off while the page is up.
+
+**Opening a mission** (or looking at a built-in one) shows a loader over
+everything (`showLoader()`): the mission's name and picture, and its steps -
+the mission read, the level's data, its ground (`LEVEL_GROUND`, waited for
+up to 12 s) - then it fades into the editor, after 0.6 s at the least.
+
+Below the welcome, the shelves:
 
 - **Your missions:** a cover (your own picture, a picture of your map, or the base mission's),
   the base, the guard and change counts, and the game status: *not in the game
@@ -2261,7 +2278,7 @@ order, for handing a set (a campaign) on to someone.
 The menu bar (next to the studio's name; Help on the right), one menu a
 kind of thing (`MENUBAR`, each its own `*MenuItems()`):
 
-- **Mission:** new mission, the library, save (**Ctrl+S**), duplicate, rename
+- **Mission:** new mission, the start page, save (**Ctrl+S**), duplicate, rename
   (the in-game name and description), delete
 - **Edit:** undo, redo, tidy up, the keyboard shortcuts
 - **Design:** time limit and weather, music and picture, a draft from a

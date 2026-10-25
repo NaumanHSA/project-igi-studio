@@ -7,6 +7,14 @@ section is also that release's notes on GitHub.
 
 ### Changed
 
+- **A start page.** The studio opens on a page of its own, not on the editor:
+  New mission, Import a mission file, Browse the community, the mission you
+  had open last to continue, and your missions, the game's list and the
+  fourteen built-in missions below. New mission is a page of it too, not a
+  dialog over the map. Opening a mission shows a loading screen - the
+  mission, its level, its ground - until its map is ready. The logo in the
+  top bar takes you back to the start page, with the mission still open.
+
 - **One Delete.** Deleting a mission takes it out of your library and out of
   the game, for good: no trash, and no separate *Remove from the game*. A
   mission in the game that is not in your library has **Delete** on its row
