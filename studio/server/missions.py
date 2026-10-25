@@ -385,18 +385,16 @@ def mark_installed(mid, slot, applied=None, test=None):
     return _write(m, snapshot=True)
 
 
-def mark_uninstalled(mid):
-    m = load(mid)
-    m["slot"], m["installed"], m["applied"] = None, None, None
-    return _write(m)
-
-
 def delete(mid):
+    """A mission deleted for good: its folder, history, chats and all. (Its slots in the game go first,
+    in app.py; the trash below only holds what older versions put there.)"""
+    if not re.fullmatch(r"[a-z0-9-]+", mid or ""):
+        raise ValueError("bad mission id")
     d = _dir(mid)
-    TRASH.mkdir(parents=True, exist_ok=True)
-    dest = TRASH / ("%s--%d" % (mid, now()))
-    d.rename(dest)
-    return dest.name
+    if not d.is_dir():
+        raise FileNotFoundError(mid)
+    shutil.rmtree(d)
+    return True
 
 
 def list_trash():

@@ -3,6 +3,24 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## Unreleased
+
+### Changed
+
+- **One Delete.** Deleting a mission takes it out of your library and out of
+  the game, for good: no trash, and no separate *Remove from the game*. A
+  mission in the game that is not in your library has **Delete** on its row
+  of *In the game* too. The built-in missions can't be deleted.
+
+### Fixed
+
+- A deleted mission could stay in the game: Delete took it out only when the
+  box under it was ticked, and only from the slot its own record named, which
+  was out of date once the game's missions had been moved. Every slot that
+  holds the mission goes now.
+- Skipping to another track while one played logged an error: the studio
+  tried to answer a page that had stopped listening.
+
 ## 2.0.0
 
 The biggest update since the first release: cutscenes of your own, vehicles

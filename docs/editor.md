@@ -31,7 +31,7 @@ The library has two shelves.
 - **Your missions:** a cover (your own picture, a picture of your map, or the base mission's),
   the base, the guard and change counts, and the game status: *not in the game
   yet*, *mission 15 · up to date*, or *changes not applied*. The **⋯** menu
-  has open, rename, duplicate, export, remove from the game, and delete.
+  has open, rename, duplicate, export, and delete.
 - **Built-in missions:** the 14 missions with their in-game cover picture,
   name, description and map type. They can't be changed, renamed or deleted.
   Click one to look around its map (read-only), or **New mission from this**.
@@ -87,11 +87,16 @@ map. All 13 empty maps compile.
   the studio's missions to the next one in the game.
 - **What the slot holds:** `_mission_studio.json` records the mission and the
   build, so the game folder alone can bring a mission back.
-- **Removing:** **Remove from the game** moves the slot to
-  `backups/slots/removed/` and takes its objective texts and map labels
-  (`MS<slot>_*`) out of the language files.
-- **Deleting:** **Delete** moves the mission to the trash, where the library
-  can restore it, and optionally takes it out of the game.
+- **Deleting:** there is one **Delete** (a mission's **⋯** menu, or
+  **Mission, Delete mission**), and it is for good: the mission's folder
+  goes, and so does every slot of the game whose marker names it
+  (`slots.slots_of`, whatever the mission's own record says its slot is),
+  with the slot's restore points and its texts and map labels (`MS<slot>_*`)
+  in the language files (`slots.delete_slot`). Not while the game runs. A
+  mission in the game that the studio does not hold has **Delete** on its
+  row of *In the game* (`/api/slots/<n>/remove`, the same `delete_slot`).
+  The trash only holds what earlier versions put there; its button
+  shows while it has something.
 
 **Protection:** every write into the game goes through `studio/protect.py`.
 
@@ -2261,8 +2266,7 @@ kind of thing (`MENUBAR`, each its own `*MenuItems()`):
 - **Edit:** undo, redo, tidy up, the keyboard shortcuts
 - **Design:** time limit and weather, music and picture, a draft from a
   description, easy/normal/hard versions, make a campaign
-- **Game:** check the mission, apply to the game, remove from the game,
-  settings
+- **Game:** check the mission, apply to the game, settings
 - **Share:** export/import a mission file, export all, copy the plan
 
 Looking at a built-in mission (or with none open), Mission offers only **New

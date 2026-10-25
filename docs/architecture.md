@@ -63,7 +63,7 @@ project-igi-studio/
 │       ├── app.py          local server: editor, mission library API, Apply, Settings
 │       ├── ai.py           the AI designer's proxy: the API key, the models, streaming
 │       ├── community.py    the community's client: the account, the calls, pulling, sharing
-│       ├── missions.py     custom missions: base + plan, history, trash (missions/custom/)
+│       ├── missions.py     custom missions: base + plan, history (missions/custom/)
 │       └── live_pos.py     find and read the player's live position in a running game
 ├── cloud/                  the community's database on Neon: migrations, and a stand-in for the tests
 ├── app/                    the desktop app: the Electron window, the installer, the bundled server

@@ -698,6 +698,11 @@ details.aplog summary{cursor:pointer;font-size:12px;color:var(--muted);margin:0 
   color:#1d1600;box-shadow:0 0 18px rgba(255,210,74,.22)}
 .sheet .btn.primary:hover,.lib .btn.primary:hover{color:#1d1600;filter:none;box-shadow:0 0 26px rgba(255,210,74,.5)}
 .sheet .btn.primary::before,.lib .btn.primary::before{opacity:.5}
+/* what can't be undone (Delete): red, and redder under the pointer */
+.sheet .btn.danger,.lib .btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 55%,var(--line));
+  background:linear-gradient(180deg,rgba(255,107,90,.1),rgba(255,107,90,.02))}
+.sheet .btn.danger:hover,.lib .btn.danger:hover{color:#ffd9d4;border-color:var(--danger);background:rgba(255,107,90,.18);
+  box-shadow:0 0 14px rgba(255,107,90,.3),inset 0 0 14px rgba(255,107,90,.1)}
 .sheet .btn[disabled]{opacity:.45;cursor:default;box-shadow:none}
 .sheet .sheet-head .btn{font-family:inherit;letter-spacing:0;text-transform:none;padding:2px 9px;font-size:17px}
 .sheet .sheet-head .btn::before{display:none}
@@ -13668,14 +13673,13 @@ function makeStore(serverOk){
     create:function(b){return api("POST","api/missions",b).then(function(j){return j.mission})},
     save:function(id,b){return api("PUT","api/missions/"+id,b).then(function(j){return j.mission})},
     duplicate:function(id,name){return api("POST","api/missions/"+id+"/duplicate",{name:name}).then(function(j){return j.mission})},
-    remove:function(id,fromGame){return api("DELETE","api/missions/"+id,{removeFromGame:!!fromGame})},
+    remove:function(id){return api("DELETE","api/missions/"+id,{})},
     apply:function(id){return fetch("api/missions/"+id+"/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
       .then(function(r){return r.json()})},
     // the same build, in the background: a job to poll for its stage and log
     applyJob:function(id,body){return fetch("api/missions/"+id+"/applyjob",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})
       .then(function(r){return r.ok?r.json():null}).catch(function(){return null})},
     job:function(jid){return api("GET","api/jobs/"+jid)},
-    uninstall:function(id){return api("POST","api/missions/"+id+"/uninstall",{})},
     // the game's missions past its fourteen: their order, and the ones no mission here holds
     orderSlots:function(order){return api("POST","api/slots/order",{order:order})},
     removeSlot:function(n){return api("POST","api/slots/"+n+"/remove",{})},
@@ -13726,9 +13730,8 @@ function makeStore(serverOk){
       write(K+id,m);return Promise.resolve(summary(m));
     },
     duplicate:function(id,name){return this.create({name:name,from:id})},
-    remove:function(id){var m=read(K+id);if(m){write(T+id+"--"+Date.now(),m);ls().removeItem(K+id)}return Promise.resolve({ok:true})},
+    remove:function(id){ls().removeItem(K+id);return Promise.resolve({ok:true})},
     apply:function(){return Promise.resolve({ok:false,error:"Apply needs the local server (python tools\\serve.py)"})},
-    uninstall:function(){return Promise.reject(new Error("needs the local server"))},
     trash:function(){return Promise.resolve(keys(T).map(function(k){var m=read(k);return m&&{trashId:k.slice(T.length),id:m.id,name:m.name,base:m.base,deleted:+k.split("--").pop()}}).filter(Boolean))},
     restore:function(tid){var m=read(T+tid);if(!m)return Promise.reject(new Error("not in the trash"));write(K+m.id,m);ls().removeItem(T+tid);return Promise.resolve(m)},
     trashDelete:function(tid){ls().removeItem(T+tid);return Promise.resolve({ok:true})},
@@ -14006,11 +14009,12 @@ function gameShelf(lib){
       acts='<button class="btn" data-open="'+esc(m.id)+'">Open</button>';
     }else if(s.recoverable){
       meta='Built on '+esc(on)+'. Not in your missions here: the game holds all of it, so it can be added';
-      acts='<button class="btn" data-recover="'+esc(s.missionId)+'">Add to your missions</button>';
+      acts='<button class="btn" data-recover="'+esc(s.missionId)+'">Add to your missions</button>'+
+        '<button class="btn danger" data-rmslot="'+s.level+'" data-name="'+esc(s.name)+'">Delete…</button>';
     }else if(s.studio){
       meta=s.installed?'Built on '+esc(on)+' by an older version, which did not keep the mission in the game'
         :'A copy of '+esc(on)+' as it ships: an Apply that did not finish left it here';
-      acts='<button class="btn" data-rmslot="'+s.level+'" data-name="'+esc(s.name)+'">Remove from the game…</button>';
+      acts='<button class="btn danger" data-rmslot="'+s.level+'" data-name="'+esc(s.name)+'">Delete…</button>';
     }else{
       meta='Not made by the studio. It stays as it is';
     }
@@ -14043,16 +14047,17 @@ function moveGameSlot(level,dir){
     showLibrary();
   }).catch(function(e){toast("Could not move it: "+e.message)});
 }
+// a mission in the game that is not one of yours here: Delete takes it out of the game for good
 function removeSlotDialog(n,name){
-  sheet("Remove from the game",
-    '<p>Take <b>'+esc(name||"mission "+n)+'</b> (mission '+n+') out of the game’s mission list?</p>'+
-    '<p class="hint">None of your missions here holds it. The slot’s folder is kept in <span class="mono">backups/slots/removed</span>.</p>'+
-    '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="rs-no">Keep it in the game</button>'+
-    '<button class="btn" id="rs-yes" style="color:var(--danger);border-color:var(--danger)">Remove from the game</button></div>');
+  sheet("Delete mission",
+    '<p>Delete <b>'+esc(name||"mission "+n)+'</b> (mission '+n+') from the game, for good?</p>'+
+    '<p class="hint">It is not one of your missions here, so nothing of it is left after this. To keep it, press <b>Add to your missions</b> instead.</p>'+
+    '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="rs-no">Keep it</button>'+
+    '<button class="btn danger" id="rs-yes">Delete</button></div>');
   $("rs-no").addEventListener("click",function(){$("sheet").hidden=true});
   $("rs-yes").addEventListener("click",function(){
-    Store.removeSlot(n).then(function(){$("sheet").hidden=true;toast("Removed from the game");showLibrary()})
-      .catch(function(e){toast("Could not remove it: "+e.message)});
+    Store.removeSlot(n).then(function(){$("sheet").hidden=true;toast("“"+(name||"Mission "+n)+"” is deleted");showLibrary()})
+      .catch(function(e){toast("Could not delete it: "+e.message)});
   });
 }
 function renderLibrary(){
@@ -14148,8 +14153,6 @@ function missionCardItems(m){
     {label:"Rename…",act:function(){renameDialog(m)}},
     {label:"Duplicate…",act:function(){duplicateDialog(m)}},
     {label:"Export mission file",act:function(){Store.get(m.id).then(exportMissionData)}},
-    srv&&m.slot?"-":null,
-    srv&&m.slot?{label:"Remove from the game…",act:function(){uninstallDialog(m)}}:null,
     "-",
     {label:"Delete…",danger:true,act:function(){deleteDialog(m)}}
   ];
@@ -15235,7 +15238,6 @@ function gameMenuItems(){
   return [
     mine({label:"Check mission…",act:function(){showChecks(false)}}),
     srv?mine({label:M&&M.slot?"Apply to game (mission "+M.slot+")…":"Apply to game…",act:function(){showChecks(true)}}):null,
-    srv&&M&&M.slot&&!READONLY?{label:"Remove from the game…",act:function(){uninstallDialog(M)}}:null,
     srv?"-":null,
     srv?{label:"Settings…",act:showConfig}:null
   ];
@@ -15357,38 +15359,26 @@ function importPlan(file){
   };
   r.readAsText(file);
 }
-function uninstallDialog(m){
-  sheet("Remove from the game",
-    '<p>Take <b>'+esc(m.name)+'</b> out of the game’s mission list (mission '+m.slot+')?</p>'+
-    '<p class="hint">The mission stays here with all its changes. Apply it again to put it back. '+
-    'The slot’s folder is kept in <span class="mono">backups/slots/removed</span>.</p>'+
-    '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="un-no">Keep it in the game</button>'+
-    '<button class="btn" id="un-yes" style="color:var(--danger);border-color:var(--danger)">Remove from the game</button></div>');
-  $("un-no").addEventListener("click",function(){$("sheet").hidden=true});
-  $("un-yes").addEventListener("click",function(){
-    Store.uninstall(m.id).then(function(j){
-      $("sheet").hidden=true;refreshOpen(j.mission);toast("Removed from the game");
-      if(!$("start").hidden)showLibrary();
-    }).catch(function(e){toast("Could not remove it: "+e.message)});
-  });
-}
+// One Delete: the mission goes from your missions and from the game (every slot that holds it), for
+// good. The built-in missions have none.
 function deleteDialog(m){
   var srv=Store&&!Store.local;
   sheet("Delete mission",
-    '<p>Delete <b>'+esc(m.name)+'</b>? It goes to the trash, and you can restore it from the library.</p>'+
-    (srv&&m.slot?'<label style="display:flex;gap:7px;align-items:center;margin-top:8px"><input type="checkbox" id="del-game" checked> '+
-      'Also take it out of the game (mission '+m.slot+')</label>':'')+
+    '<p>Delete <b>'+esc(m.name)+'</b> for good?</p>'+
+    (srv?'<p>'+(m.slot?'It comes out of the game too: mission '+m.slot+' leaves the game’s list.':'If it is in the game, it comes out of the game too.')+'</p>':'')+
+    '<p class="hint">This can’t be undone. To keep a copy, export it first (its ⋯ menu, <b>Export mission file</b>).</p>'+
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="btn" id="del-no">Keep it</button>'+
-    '<button class="btn" id="del-yes" style="color:var(--danger);border-color:var(--danger)">Delete</button></div>');
+    '<button class="btn danger" id="del-yes">Delete</button></div>');
   $("del-no").addEventListener("click",function(){$("sheet").hidden=true});
   $("del-yes").addEventListener("click",function(){
-    var fromGame=$("del-game")?$("del-game").checked:false;
     if(M&&M.id===m.id&&saveTimer){clearTimeout(saveTimer);saveTimer=null}
-    Store.remove(m.id,fromGame).then(function(){
-      $("sheet").hidden=true;toast("“"+m.name+"” moved to the trash");
+    var b=this;b.disabled=true;
+    Store.remove(m.id).then(function(j){
+      var out=j&&j.slots&&j.slots.length;
+      $("sheet").hidden=true;toast("“"+m.name+"” is deleted"+(out?", and out of the game":""));
       if(M&&M.id===m.id){M=null;rememberLast(null)}
       showLibrary();
-    }).catch(function(e){toast("Could not delete: "+e.message)});
+    }).catch(function(e){b.disabled=false;toast("Could not delete it: "+e.message)});
   });
 }
 function showTrash(){

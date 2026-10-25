@@ -229,6 +229,46 @@ def create_slot(game, n, base_level, name, description, mission_id, log=print):
     return dest
 
 
+def slots_of(game, mission_id):
+    """Every slot of the game whose marker names this mission (by the marker's mission id, or the
+    id of the mission it carries)."""
+    out = []
+    try:
+        for sl in list_slots(game):
+            mk = sl.get("marker") or {}
+            if sl["custom"] and mission_id and (mk.get("missionId") == mission_id or
+                                                (mk.get("mission") or {}).get("id") == mission_id):
+                out.append(sl["level"])
+    except OSError:
+        pass
+    return out
+
+
+def delete_slot(game, n, log=print):
+    """Take a slot out of the game for good: its folder, its restore points, its strings in the
+    language files and its picture. Deleting a mission leaves nothing of it in the game (remove_slot,
+    for a slot the studio takes out on its own, keeps the folder in backups)."""
+    d = protect.assert_deletable_slot(slot_dir(game, n))
+    shutil.rmtree(d)
+    for kind in ("models", "graphs"):           # what an Apply kept to put the slot back as it was
+        shutil.rmtree(paths.backups() / kind / ("level%d" % n), ignore_errors=True)
+    try:
+        from studio.build import lang as lang_res
+        if lang_res.set_mission_strings(game, n, {}, log=lambda x: None):
+            log("removed mission %d's strings from the language files" % n)
+    except (OSError, ValueError) as e:
+        log("mission %d's strings stay in the language files: %s" % (n, e))
+    _drop_picture(game, n, log)
+    log("deleted mission %d from the game" % n)
+    relink(game, log)
+    # the game's mission list no longer reaches past the last mission left
+    try:
+        from studio.build import unlock
+        unlock.settle(game, log)
+    except Exception as e:
+        log("the game's mission list was left as it was: %s" % e)
+
+
 def discard_slot(game, n, log=print):
     """Take out a slot made a moment ago whose mission never got into it (its
     Apply failed). It holds nothing but a copy of its base level, so it is

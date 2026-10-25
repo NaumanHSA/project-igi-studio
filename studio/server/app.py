@@ -13,7 +13,7 @@
 #   POST   /api/missions                     create {name, description, base:{level, kind}, from}
 #   GET    /api/missions/<id>                the whole mission
 #   PUT    /api/missions/<id>                save {plan, name, description, cover (PNG data URL)}
-#   DELETE /api/missions/<id>                to the trash {removeFromGame}
+#   DELETE /api/missions/<id>                deleted for good, and out of the game: every slot it is in
 #   POST   /api/missions/<id>/duplicate      {name}
 #   POST   /api/missions/<id>/apply          build from the pristine base + plan, install in its slot
 #   POST   /api/missions/<id>/applyjob       the same as a job to poll; {test: {x, y, z, gamma, launch}}
@@ -21,17 +21,16 @@
 #   POST   /api/launch                       start IGI.exe (the working game)
 #   GET    /api/missions/<id>/runs[/<run>]   play-throughs the live view recorded; POST saves one,
 #                                            DELETE .../runs/<run> removes one
-#   POST   /api/missions/<id>/uninstall      take its slot out of the game (kept in backups)
 #   POST   /api/slots/order                  {order: [slot numbers]} the studio's missions in the game, renumbered
 #                                            in that order from 15 up
-#   POST   /api/slots/<n>/remove             take out a slot the studio made that no mission here holds
+#   POST   /api/slots/<n>/remove             delete a slot the studio made that no mission here holds, for good
 #   GET    /api/recoverable, POST /api/recover   missions in the game that this studio can take back in
 #   GET    /api/missions/<id>/cover.png
 #   GET    /api/missions/<id>/picture.png    the mission's own picture (PUT {picture: data URL or null})
 #   GET    /api/terrainfar?level=N           the ground everywhere the level's cutscenes go
 #   GET    /api/music                        the game's music a mission can have
 #   GET    /api/music/<id>.wav               one of them to listen to (byte ranges)
-#   GET    /api/trash, POST /api/trash/<tid>/restore,
+#   GET    /api/trash, POST /api/trash/<tid>/restore,      what older versions put in the trash
 #          DELETE /api/trash/<tid> (for good), DELETE /api/trash (empty it)
 # The AI designer (studio/server/ai.py):
 #   GET/POST /api/ai/settings    the saved models, which one each role uses, pace...
@@ -505,19 +504,34 @@ def slots_order(body):
     return {"ok": True, "moves": {str(a): b for a, b in moves.items()}, "log": log}
 
 
+def delete_mission(mid):
+    """DELETE /api/missions/<id>: one Delete - out of the studio and out of the game, for good. Every
+    slot whose marker names the mission goes, whatever its own record says its slot is."""
+    cfg = load_config()
+    game = str(cfg.get("gamePath") or "")
+    MS.load(mid)                                        # a mission that is not there is a 404
+    slots = SL.slots_of(game, mid) if game else []
+    if slots and game_running():
+        return {"ok": False, "error": "close the game first: it holds its missions open while it runs"}
+    log = []
+    for n in sorted(slots, reverse=True):
+        SL.delete_slot(game, n, log=log.append)
+    MS.delete(mid)
+    return {"ok": True, "slots": slots, "log": log}
+
+
 def slot_remove(n):
-    """POST /api/slots/<n>/remove: take a mission the studio made out of the game,
-    when this studio does not hold it (a mission this studio holds is removed
-    from its own card). Kept in backups, as every removal is."""
+    """POST /api/slots/<n>/remove: delete a mission the studio made from the game, for good, when
+    this studio does not hold it (a mission this studio holds is deleted from its own card)."""
     cfg = load_config()
     game = cfg["gamePath"]
     if game_running():
         return {"ok": False, "error": "close the game first: it holds its missions open while it runs"}
     mk = SL.read_marker(game, n) or {}
     if mk.get("missionId") and mk["missionId"] in {m["id"] for m in MS.list_missions()}:
-        return {"ok": False, "error": "mission %d is one of your missions: remove it from its card" % n}
+        return {"ok": False, "error": "mission %d is one of your missions: delete it from its card" % n}
     log = []
-    SL.remove_slot(game, n, log=log.append)
+    SL.delete_slot(game, n, log=log.append)
     return {"ok": True, "log": log}
 
 
@@ -1013,6 +1027,8 @@ class Handler(SimpleHTTPRequestHandler):
     def _guard(self, fn):
         try:
             return fn()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            return None                         # the page stopped listening: nobody to answer
         except protect.ProtectedPath as e:
             return self._json({"ok": False, "error": str(e), "protected": True}, 403)
         except FileNotFoundError as e:
@@ -1076,17 +1092,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_error(404)
 
         def go():
-            n = int(self.headers.get("Content-Length") or 0)
-            b = json.loads(self.rfile.read(n) or b"{}") if n else {}
-            cfg = load_config()
-            m = load_in_game(mid, cfg)
-            log = []
-            if m.get("slot") and b.get("removeFromGame", True):
-                mk = SL.read_marker(cfg["gamePath"], m["slot"]) or {}
-                if mk.get("missionId") == mid and SL.slot_dir(cfg["gamePath"], m["slot"]).exists():
-                    SL.remove_slot(cfg["gamePath"], m["slot"], log=log.append)
-            tid = MS.delete(mid)
-            return self._json({"ok": True, "trashId": tid, "log": log})
+            r = delete_mission(mid)
+            return self._json(r, 200 if r["ok"] else 409)
         return self._guard(go)
 
     # ---- the 3D close-up: textured models and their textures, read from the
@@ -1366,17 +1373,6 @@ class Handler(SimpleHTTPRequestHandler):
                     t = t if isinstance(t, dict) and all(k in t for k in ("x", "y", "z")) else None
                     return self._json({"ok": True, "job": run_job(apply_mission, mid, t)["id"]})
                 return self._guard(aj)
-            if mid and action == "uninstall":
-                def un():
-                    cfg = load_config()
-                    mm = load_in_game(mid, cfg)
-                    log = []
-                    mk = (SL.read_marker(cfg["gamePath"], mm["slot"]) or {}) if mm.get("slot") else {}
-                    if mk.get("missionId") == mid and SL.slot_dir(cfg["gamePath"], mm["slot"]).exists():
-                        SL.remove_slot(cfg["gamePath"], mm["slot"], log=log.append)
-                    return self._json({"ok": True, "mission": MS.summary(MS.mark_uninstalled(mid)), "log": log})
-                return self._guard(un)
-
             if re.match(r"^/api/groups/?$", self.path):
                 return self._guard(lambda: self._json({"ok": True, "group": group_save(self._body())}))
             rm, rid = self._run_route()
