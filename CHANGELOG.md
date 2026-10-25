@@ -31,6 +31,13 @@ section is also that release's notes on GitHub.
 
 ### Fixed
 
+- **Things you add to a copied level could be missing in the game.** On levels
+  4, 6, 7, 8, 9, 10, 13 and 14 they were written into a part of the level that
+  comes to life only later (on level 8, once you reach the SAM site with the
+  beacon) or into a guard spawner, so a watchtower or a road you placed was
+  not there when you played. They now go beside the level's own guards, in the
+  part that is there from the start. Apply again to fix a mission.
+
 - **"QTaskList is full" can't happen any more.** A copy of mission 8 that kept
   its objectives stopped the game as it loaded: level 8's map computer is full
   (32 markers, the most it holds) and the mission's five objective markers

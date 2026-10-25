@@ -12,7 +12,7 @@ by debugging a crash or a broken mission.
 | Coordinates are **game units × 4096** | Objects appear far from where you placed them |
 | Every `HumanAI` needs `ai/<id>.qvm` | `No AI script in HumanAI #…`. This includes shipped ids 3001–3333, so they are never deleted by id range |
 | Patrol stops must be **routable** in the graph's routing table | `Error in graph 4019 routenet, Node #9 to #34` |
-| Guards go in the **gameplay** container, not the intro cutscene's | They load hidden and never appear |
+| A mission's own tasks go in a container that is **there for the whole of play**: a plain one, one that holds the player, or one that only waits for the cutscenes to end (`studio/build/splice.py`) | In the intro's they never appear. In a `ConditionalContainer` that waits for something (level 8's `SAM guard 442` waits for the player at the SAM site with the beacon) they appear only then, and in a `GuardGenerator` they are spawned with its soldier |
 | Text a script shows is a **resource key** (language/*/objectives.res, messages.res) | The objective or label shows nothing |
 | The soldier's model must be **packed in the level's `models/levelN.res`** | Invisible guard with a floating rifle |
 | Win conditions go **object → StatusMessage → LevelFlow** | Untested path; no shipped level does it differently |

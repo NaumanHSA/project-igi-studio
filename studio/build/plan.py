@@ -19,6 +19,7 @@ from studio.qvm import source as qvm_source
 from studio.build.objects import set_soldier_team
 from studio.build import taskargs as TASKARGS
 from studio.build import limits as LIMITS
+from studio.build import splice as SPLICE
 from studio.extract import motion as MOTION_X
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.build.plan), do not import it. The guard below
@@ -4318,61 +4319,14 @@ for _c in [c for c in (plan.get("cutscenes") or []) if isinstance(c, dict)]:
 MARKER = "/*@@PLOTTER_INSERT@@*/"
 
 
-def container_chain(text, pos):
-    """Containers enclosing an offset, outermost first."""
-    stack, i, instr = [], 0, False
-    while i < pos:
-        c = text[i]
-        if c == '"':
-            instr = not instr
-        elif not instr:
-            if text.startswith("Task_New(", i):
-                mm = re.match(r'Task_New\((-?\d+), "([A-Za-z0-9_]+)", "([^"]*)"', text[i:])
-                if mm:
-                    stack.append(mm.groups())
-            elif c == ")" and stack:
-                stack.pop()
-        i += 1
-    return [s for s in stack if s[1] in ("Container", "ConditionalContainer")]
-
-
-def pick_anchor(text):
-    """Choose a HumanSoldier to insert beside.
-
-    Not just the first one: in level 1 that is id 1505, which sits inside
-    ConditionalContainer 'Intro cutscene' / 'Opening heli and train'. Anything
-    placed there exists only while the intro plays, so it never appears in
-    normal play. We want a soldier in the live gameplay branch - the container
-    the game's own patrolling guards live in.
-    """
-    best = None
-    for m in re.finditer(r'Task_New\(\d+, "HumanSoldier", "', text):
-        chain = container_chain(text, m.start())
-        # The OUTERMOST container is called "Cutscenes" for every soldier in
-        # level 1, gameplay ones included, so only the conditional branches tell
-        # the intro apart from the live level.
-        cond = " ".join((c[2] or "").lower() for c in chain if c[1] == "ConditionalContainer")
-        if re.search(r"cutscene|intro|outro|opening|ending", cond):
-            continue
-        names = " ".join((c[2] or "").lower() for c in chain)
-        score = len(chain)
-        if re.search(r"\bguard", names):
-            score += 10
-        if re.search(r"\bai\b", names):
-            score += 5
-        if best is None or score > best[0]:
-            best = (score, m.start(), chain)
-    return best
-
-
-picked = (None, src.index(MARKER), []) if MARKER in src else pick_anchor(src)
+# where: beside the game's own guards, in the part of the level that is there
+# for the whole of play - never in a branch that waits for something (splice.py)
+picked = (None, src.index(MARKER), []) if MARKER in src else SPLICE.pick(src)
 if not picked:
-    sys.exit("no HumanSoldier outside a cutscene container in level %d - "
-             "cannot find a safe insertion point" % LV)
+    sys.exit("no HumanSoldier in level %d - cannot find a safe insertion point" % LV)
 anchor_pos, anchor_chain = picked[1], picked[2]
 out_src = src if MARKER in src else src[:anchor_pos] + MARKER + src[anchor_pos:]
-anchor_desc = " > ".join(("%s(%s)%s" % (c[1], c[0], (" " + c[2]) if c[2] else ""))
-                         for c in anchor_chain[-3:]) or "(top level)"
+anchor_desc = SPLICE.describe(anchor_chain)
 
 
 def strip_soldier_blocks(text):
