@@ -9078,8 +9078,9 @@ function toggleInGroup(o){
   sel=multi.length?multi[multi.length-1]:null;
   if(multi.length<2)multi=[];
 }
-// the box takes your own things; with Alt held, the level's movable objects too
-function boxSelect(x0,y0,x1,y1,add,shipped){
+// Shift+drag: your own things (with Alt, the level's movable objects too). The right button's box
+// (rightBox) takes both. Shift adds to what is selected; otherwise the box is the selection.
+function boxSelect(x0,y0,x1,y1,add,shipped,right){
   var a=s2w(Math.min(x0,x1),Math.max(y0,y1)),b=s2w(Math.max(x0,x1),Math.min(y0,y1));
   function inside(o){return (o.own||shipped)&&o.x>=a[0]&&o.x<=b[0]&&o.y>=a[1]&&o.y<=b[1]}
   var got=allObjects().filter(function(o){return groupable(o)&&inside(o)})
@@ -9091,11 +9092,38 @@ function boxSelect(x0,y0,x1,y1,add,shipped){
   multi=list.length>1?list:[];
   sel=list.length?list[list.length-1]:null;
   renderSide();draw();
+  if(right&&!list.length){toast("Nothing in that box to select");return}
   if(list.length)toast(READONLY?list.length+" selected. Add to your items keeps them as one, in any mission"
+    :right?list.length+" selected. Right-click them for what to do with them all; drag one to move them all"
     :list.length+" selected. Drag one to move them all, Ctrl+C to copy"+(shipped?"":" (Shift+Alt+drag includes the level's own objects)"));
 }
+// the box the right button draws as it drags (it opens no menu: a click without a drag does)
+function rightBox(b){boxSelect(b.x0,b.y0,b.x1,b.y1,b.add,true,true)}
+// is (sx, sy) on what is selected: one of them, or within the area they cover (a little round it)?
+function onSelection(sx,sy,hit){
+  if(multi.length<2)return false;
+  if(hit&&multi.indexOf(hit)>=0)return true;
+  var w=s2w(sx,sy),pad=Math.max(2,10/view.k),x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  multi.forEach(function(o){x0=Math.min(x0,o.x);x1=Math.max(x1,o.x);y0=Math.min(y0,o.y);y1=Math.max(y1,o.y)});
+  return w[0]>=x0-pad&&w[0]<=x1+pad&&w[1]>=y0-pad&&w[1]<=y1+pad;
+}
+// what can be done with all of them at once, on a right click on them
+function groupMenuItems(){
+  var list=groupList(),n=list.length,lv=list.filter(function(o){return !o.own&&o.type!=="navnode"}).length,ed=canEditQuiet();
+  return [{head:n+" selected"+(lv?" · "+lv+" of the level's":"")},
+    ed?{label:"Rotate 90°",kbd:"T",act:function(){rotateGroup(90)}}:null,
+    ed?{label:"Rotate 180°",act:function(){rotateGroup(180)}}:null,
+    ed?{label:"Drop onto the ground",kbd:"G",act:dropGroup}:null,
+    ed?{label:"Duplicate",kbd:"Ctrl+D",act:duplicateGroup}:null,
+    {label:"Copy",kbd:"Ctrl+C",act:copyGroup},
+    {label:"Add to your items…",act:saveGroupDialog},
+    {label:"Zoom to them",kbd:"Z",act:zoomToSelection},
+    "-",
+    {label:"Deselect",act:function(){multi=[];sel=null;renderSide();draw()}},
+    ed?{label:"Remove all "+n,danger:true,kbd:"Del",act:deleteGroup}:null];
+}
 function drawBoxSelect(){
-  var b=mouse.box;if(!b)return;
+  var b=mouse.box||(mouse.rbox&&mouse.rbox.moved?mouse.rbox:null);if(!b)return;
   ctx.save();
   ctx.fillStyle="rgba(255,210,74,.08)";ctx.strokeStyle=css("--accent");ctx.lineWidth=1;ctx.setLineDash([5,4]);
   var x=Math.min(b.x0,b.x1),y=Math.min(b.y0,b.y1),w=Math.abs(b.x1-b.x0),h=Math.abs(b.y1-b.y0);
@@ -15094,6 +15122,11 @@ function bind(){
     var tz=terrainZ(w[0],w[1]),sl=tz!=null?terrainSlope(w[0],w[1]):null;
     $("ro-cur").textContent=num(w[0])+",  "+num(w[1])+(tz!=null?"   ground "+tz.toFixed(1)+(sl!=null?" · "+Math.round(sl)+"° slope":""):"");
     mouse.inside=true;mouse.alt=e.altKey;
+    if(mouse.rbox){
+      var rb=mouse.rbox;rb.x1=mouse.x;rb.y1=mouse.y;
+      if(rb.box&&!rb.moved&&Math.hypot(rb.x1-rb.x0,rb.y1-rb.y0)>5)rb.moved=true;
+      if(rb.moved){present();return}
+    }
     if(AIPICK){if(mouse.down&&AIPICK.d){AIPICK.d.x1=w[0];AIPICK.d.y1=w[1];mouse.panned=true;present()}cv.style.cursor="crosshair";return}
     if(SKETCH&&!mouse.mid){
       if(mouse.down&&SKETCH.cur){var lp=SKETCH.cur.pts[SKETCH.cur.pts.length-1];if(Math.hypot(w[0]-lp[0],w[1]-lp[1])*view.k>3){SKETCH.cur.pts.push([w[0],w[1]]);present()}mouse.panned=true}
@@ -15182,6 +15215,14 @@ function bind(){
   cv.addEventListener("mousedown",function(e){
     // the middle button pans, whatever tool is in hand
     if(e.button===1){e.preventDefault();mouse.down=true;mouse.mid=true;mouse.panned=false;mouse.drag=null;mapHover(null);return}
+    // the right button: dragged, a box that selects what is in it (Shift adds to it); clicked, the menu
+    if(e.button===2){
+      closeMenus();mapHover(null);
+      mouse.rbox={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y,add:e.shiftKey,moved:false,
+        // with something in hand or a pick going on, the right button only ever opens the menu
+        box:!tool&&!patrolMode&&!AIPICK&&!SKETCH&&!OBJPICK&&!EVPICK&&!DOORPICK&&!CUTPICK&&!ORDERPICK&&!VROUTE&&!FLIGHTPICK&&!GDRAW&&!measure.on};
+      return;
+    }
     if(e.button!==0)return;
     mouse.down=true;mouse.panned=false;mouse.drag=null;mapHover(null);
     lastChangeAt=0;         // a drag is one undo step, separate from what came before
@@ -15238,7 +15279,13 @@ function bind(){
     // stray drag across the map never moves part of the level
     mouse.drag=(h&&!patrolMode&&M&&!READONLY&&(h.own||(h===sel&&canMove(h))))?h:null;
   });
-  window.addEventListener("mouseup",function(){
+  window.addEventListener("mouseup",function(e){
+    if(e.button===2&&mouse.rbox){
+      var rb=mouse.rbox;mouse.rbox=null;mouse.rUpAt=Date.now();
+      if(rb.moved){rightBox(rb);present()}
+      else openContextMenu(rb.x0,rb.y0);
+      return;
+    }
     if(mouse.mid){mouse.mid=false;mouse.down=false;cv.classList.remove("panning");return}
     if(mouse.run){
       var rn=mouse.run;mouse.run=null;mouse.down=false;
@@ -15669,6 +15716,8 @@ function weaponSubmenu(wx,wy,filter,onPick){
 function mapMenuItems(sx,sy){
   var w=s2w(sx,sy),wx=w[0],wy=w[1];
   var pn=pickNavNode(sx,sy),gn=!pn&&pickGraphNode(sx,sy),o=!pn&&!gn&&pick(sx,sy);
+  // several selected, and the click is on them: what to do with all of them; anywhere else, the usual
+  if(onSelection(sx,sy,pn||o))return groupMenuItems();
   if(pn)return [{head:"New node N"+(navNodes.indexOf(pn)+1)},
     {label:"Select",act:function(){sel=pn;renderSide();draw()}},
     {label:"Remove node",danger:true,kbd:"Del",act:function(){sel=pn;removeSel()}}];
@@ -15835,14 +15884,20 @@ function bindMenus(){
   });
   cv.addEventListener("contextmenu",function(e){
     e.preventDefault();
+    if(mouse.rbox||Date.now()-(mouse.rUpAt||0)<600)return;     // the right button's release opens it (or its drag selects)
     var r=cv.getBoundingClientRect();
-    openContextMenu(e.clientX-r.left,e.clientY-r.top);
+    openContextMenu(e.button===2?e.clientX-r.left:mouse.x,e.button===2?e.clientY-r.top:mouse.y);
   });
   document.addEventListener("mousedown",function(e){
     if(ctxEl&&!ctxEl.contains(e.target))closeMenus();
     var q=$("quickadd");if(q&&!q.contains(e.target))q.remove();
   },true);
-  document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenus()});
+  // Esc closes a menu that is open, and does only that (it does not also drop what is selected)
+  document.addEventListener("keydown",function(e){
+    if(e.key!=="Escape")return;
+    if(ctxEl||document.querySelector(".menubar .menu:not([hidden]),#helpmenu:not([hidden])"))e.menuClosed=true;
+    closeMenus();
+  });
   window.addEventListener("resize",closeMenus);
 }
 
@@ -16015,6 +16070,7 @@ function onKey(e){
   switch(k){
     case "Delete":case "Backspace":if(!deleteGroup())removeSel();e.preventDefault();return;
     case "Escape":
+      if(e.menuClosed||ctxEl){closeMenus();return}
       if(!$("sheet").hidden){$("sheet").hidden=true;return}
       if(AIPICK){aiPickEnd(null);return}
       if(SKETCH){sketchEnd(false);return}

@@ -5,6 +5,15 @@ section is also that release's notes on GitHub.
 
 ## Unreleased
 
+### New
+
+- **Select with the right button.** Drag a box with the right mouse button to
+  select everything in it, yours and the level's, with no menu getting in the
+  way. Right-click the selection for what to do with all of it - rotate, drop
+  onto the ground, duplicate, copy, add to your items, zoom, deselect, remove
+  all; right-click anywhere else for the usual menu. Esc closes a menu without
+  losing the selection.
+
 ### Changed
 
 - **A start page.** The studio opens on a page of its own, not on the editor:

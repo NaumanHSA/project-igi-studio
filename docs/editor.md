@@ -1117,7 +1117,7 @@ their own with their pivot, axis and speed, and turn in a cutscene.
 | Ctrl+Arrows | Pan the map (arrows alone pan when nothing is selected) |
 | `[` / `]` | Selection down / up one floor |
 | Delete · Ctrl+D | Remove · duplicate (the whole group when several are selected) |
-| Shift+drag · Shift+click · Ctrl+A | Select a group · add/drop one · all your changes |
+| Right-drag · Shift+drag · Shift+click · Ctrl+A | Select a group (right: the level's things too, no menu) · your things · add/drop one · all your changes |
 | Ctrl+C · Ctrl+V | Copy the selection · paste it at the cursor, in any mission |
 | G | Drop the selection onto the ground |
 | P | Edit the selected guard's patrol |
@@ -2000,9 +2000,17 @@ change any piece. Models the level does not pack are brought in on Apply.
   and the message says why; the check list warns about any guard of yours
   that far from a walkway.
 
-- **Select a group:** Shift+drag a box around your objects (Shift+Alt+drag
-  also takes the level's own movable objects), or Shift+click to add or
-  drop one. **Ctrl+A** selects all your changes.
+- **Select a group:** drag a box with the **right** button: it takes
+  everything movable in it, yours and the level's, and opens no menu
+  (**Shift** adds to what is selected). Or Shift+drag a box around your
+  objects (Shift+Alt+drag also takes the level's own movable objects), or
+  Shift+click to add or drop one. **Ctrl+A** selects all your changes.
+- **Right-click on the group** (one of them, or the area they cover) for
+  what to do with all of them (`groupMenuItems`): rotate 90° or 180°, drop
+  onto the ground, duplicate, copy, add to your items, zoom to them,
+  deselect, remove all. A right-click anywhere else is the usual menu, and the
+  group stays selected. The right button opens its menu when it is let go
+  without a drag; Esc closes a menu without dropping the selection.
 - **Work on the group:** drag any member to move them all. The arrow keys
   nudge it, **R / T** turn it about its centre, **G** drops it onto the
   ground, **Ctrl+D** duplicates it and **Delete** removes it. Each of these
@@ -2333,7 +2341,8 @@ sizes; a slider's track is lit up to its thumb (`rangeFill()`, kept by a
 MutationObserver for sliders drawn later). `[hidden]` always hides, whatever a
 class says about layout.
 
-Right-click anything on the map for its actions:
+Right-click anything on the map for its actions (a right drag selects
+instead, below):
 
 - **Objects**: edit, duplicate, rotate, edit or clear a patrol, change a guard's
   type or weapon, change a pickup's item, undo, remove.
