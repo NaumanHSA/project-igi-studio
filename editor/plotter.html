@@ -2929,6 +2929,8 @@ function syncHeights(){
       if(j.build)BUILDV={ver:ver,id:id,ok:j.build.ok,errors:j.build.errors||[],warnings:j.build.warnings||[],notes:j.build.notes||[]};
       if(j.walkways!==undefined)takeWalkInfo(j.walkways);
       applyHeights(j);
+      // taking the build's own heights is no change of the plan: its verdict still stands
+      if(BUILDV&&BUILDV.ver===ver&&j.build)BUILDV.ver=planVer;
       if(HSYNC.again){HSYNC.again=false;heightsSoon()}
     }).catch(function(){HSYNC.busy=false});
 }
@@ -9082,12 +9084,16 @@ function toggleInGroup(o){
 }
 // Shift+drag: your own things (with Alt, the level's movable objects too). The right button's box
 // (rightBox) takes both. Shift adds to what is selected; otherwise the box is the selection.
-function boxSelect(x0,y0,x1,y1,add,shipped,right){
-  var a=s2w(Math.min(x0,x1),Math.max(y0,y1)),b=s2w(Math.max(x0,x1),Math.min(y0,y1));
-  function inside(o){return (o.own||shipped)&&o.x>=a[0]&&o.x<=b[0]&&o.y>=a[1]&&o.y<=b[1]}
-  var got=allObjects().filter(function(o){return groupable(o)&&inside(o)})
+// what can be selected in a part of the map, world coordinates
+function thingsIn(wx0,wy0,wx1,wy1,shipped){
+  function inside(o){return (o.own||shipped)&&o.x>=wx0&&o.x<=wx1&&o.y>=wy0&&o.y<=wy1}
+  return allObjects().filter(function(o){return groupable(o)&&inside(o)})
     .concat(walls().filter(wallShown).map(function(s){return s.o}).filter(function(o){return groupable(o)&&inside(o)}))
     .concat(navNodes.filter(inside));
+}
+function boxSelect(x0,y0,x1,y1,add,shipped,right){
+  var a=s2w(Math.min(x0,x1),Math.max(y0,y1)),b=s2w(Math.max(x0,x1),Math.min(y0,y1));
+  var got=thingsIn(a[0],a[1],b[0],b[1],shipped);
   var list=add?multi.slice():[];
   if(add&&!list.length&&sel&&groupable(sel))list.push(sel);
   got.forEach(function(o){if(list.indexOf(o)<0)list.push(o)});
@@ -11268,6 +11274,9 @@ function scene3d(at,q){
 function explore3d(x,y,z,ground){
   var at={type:"spot",x:x,y:y,z:z},q=V3D.key?byKey3d(V3D.key):null;
   V3D.at=at;
+  // a picture from far off (screenshot_3d): as far as it looks, and the fog goes back with it
+  if(V3D.wide&&!FILMING)return {objects:sceneAround(at,V3D.wide,true),nav:null,splines:splines3d(at,V3D.wide),
+    terrain:ground?terrain3d(at,V3D.radius,V3D.wide,200000):undefined};
   var out={objects:scene3d(at,q),nav:nav3d(at,reach3d(V3D.radius),q),splines:splines3d(at,reach3d(V3D.radius))};
   if(FILMING){
     // a cutscene shows the whole level, once: every thing on it, all of the
@@ -18140,7 +18149,7 @@ var AIB=(function(){
   function design(id){
     id=String(id||"");
     if(DESIGNS[id])return DESIGNS[id];
-    var g=GROUPS.filter(function(x){return (x.id===id||"grp:"+x.id===id)&&(x.kind==="blueprint"||x.kind==="character")})[0];
+    var g=GROUPS.filter(function(x){return x.id===id||"grp:"+x.id===id})[0];      // anything in Your items
     return g?{id:"grp:"+g.id,kind:g.kind,name:g.name,description:g.description||"",data:g.data,summary:g.summary,kept:true}:null;
   }
   function newDesign(kind,name,desc,items){
@@ -18234,8 +18243,8 @@ var AIB=(function(){
     else if(k==="alarm_parts")out=ALARM_KINDS.map(function(x){return {kind:{ALARM_BUTTON:"button",ALARM_SIREN:"siren",ALARM_LIGHT:"light",ALARM_CTL:"system"}[x.id],label:x.label,does:x.meta}});
     else if(k==="cameras")out=CAM_KINDS.map(function(c){return {sweep:c.cam.speed>0,label:c.label,range_m:c.cam.range,fov_deg:c.cam.fov}});
     else if(k==="categories")out=((CATALOG&&CATALOG.categories)||[]).map(function(c){return {category:c.key,title:c.title}});
-    else if(k==="designs")out=GROUPS.filter(function(g){return (g.kind==="blueprint"||g.kind==="character")&&hit(g.name+" "+g.summary)})
-      .map(function(g){return {id:"grp:"+g.id,kind:g.kind==="blueprint"?"structure":"character",name:g.name,summary:g.summary}})
+    else if(k==="designs")out=GROUPS.filter(function(g){return hit(g.name+" "+g.summary)})
+      .map(function(g){return {id:"grp:"+g.id,kind:g.kind==="blueprint"?"structure":g.kind==="character"?"character":"area",name:g.name,summary:g.summary}})
       .concat(Object.keys(DESIGNS).map(function(id){var d=DESIGNS[id];return {id:id,kind:d.kind==="blueprint"?"structure":"character",name:d.name,summary:d.summary,not_kept:true}}));
     else return fail("kind is one of guards, weapons, structures, alarm_parts, cameras, categories, designs");
     return {ok:true,kind:k,count:out.length,items:out.slice(0,lim)};
@@ -18257,15 +18266,27 @@ var AIB=(function(){
     r.events=events.map(function(v,i){var et=eventTarget(v);return et===o||o.arriveOn===v.uid?i+1:0}).filter(Boolean);
     return {ok:true,item:r};
   };
+  var CHECKED=[];
+  H.fix_check=function(a){
+    if(!editable())return fail(RO);
+    var r=CHECKED[(parseInt(a.fix,10)||0)-1];
+    if(!r||!r.fix)return fail("There is no fix "+a.fix+". check_mission lists them, each with its number as fix.");
+    return Promise.resolve(r.fix.fn()).then(function(){
+      changed();CHECKED=[];
+      var o=r.o;
+      return {ok:true,did:r.fix.label,for:r.text,ids:o?[idOf(o)]:undefined,at:o&&o.x!=null?{x:r1(o.x),y:r1(o.y)}:undefined,next:"check_mission again: the fixes are numbered afresh."};
+    });
+  };
   H.check_mission=function(){
     // with the build's own verdict: a dry run of Apply on the plan as it is now
     var bv=null;
-    return checkLinks(navNodes).then(function(){return freshVerdict()}).then(function(v){bv=v;return serverCheckRes()}).then(function(res){
+    return checkLinks(navNodes).then(function(){return freshVerdict(40000)}).then(function(v){bv=v;return serverCheckRes()}).then(function(res){
       var rows=allChecks(res),bad=function(r){return r.level==="bad"||r.level==="error"};
       rows.sort(function(a,b){return (bad(b)?1:0)-(bad(a)?1:0)});
+      CHECKED=rows;
       var out={ok:true,problems:rows.filter(bad).length,warnings:rows.filter(function(r){return r.level==="warn"}).length,
-        build:bv?(bv.ok?"a dry run of Apply goes through":"Apply would refuse this plan: fix the Build problems first"):"the dry run of Apply could not be had just now",
-        list:rows.slice(0,40).map(function(r){var x={level:bad(r)?"problem":r.level,group:r.group,text:r.text};if(r.o)x.id=idOf(r.o);if(r.fix)x.list_fix=r.fix.label;return x})};
+        build:bv?(bv.ok?"a dry run of Apply goes through":"Apply would refuse this plan: fix the Build problems first"):"the dry run of Apply is still running, which takes a minute or two after a big change: this list is without it, so check_mission again soon",
+        list:rows.slice(0,40).map(function(r){var x={level:bad(r)?"problem":r.level,group:r.group,text:r.text};if(r.o)x.id=idOf(r.o);if(r.fix){x.list_fix=r.fix.label;x.fix=rows.indexOf(r)+1}return x})};
       return out;
     });
   };
@@ -18342,6 +18363,8 @@ var AIB=(function(){
     if(a.view_deg!=null)f.fov=a.view_deg?Math.max(20,Math.min(360,Math.round(+a.view_deg))):null;
     if(a.name&&o.own)f.name=String(a.name).slice(0,60);
     if(a.facing_deg!=null||a.face_toward)f.gamma=facingArg(a,o.x,o.y,o.gamma||0);
+    if(a.side!=null){var sd={enemy:1,friend:0,own_side:2}[a.side];if(sd==null)return fail("side is enemy, friend or own_side.");f.team=sd}
+    if(a.model){if(!MODELS[a.model])return fail("No model "+a.model+". list_catalog with kind guards gives them.");f.model=a.model}
     setProp(o,f);
     if(f.sees===null)delete o.sees;if(f.fov===null)delete o.fov;
     changed();
@@ -19140,9 +19163,21 @@ var AIB=(function(){
       return sleep(150).then(wait);
     });
   }
+  // a mission just opened: its models come a moment after its map
+  function modelsReady(){
+    var t0=Date.now();
+    return new Promise(function(done){
+      (function wait(){
+        if(window.View3D&&window.MeshSprites&&MeshSprites.ready())return done(true);
+        if(Date.now()-t0>30000)return done(false);
+        setTimeout(wait,150);
+      })();
+    });
+  }
   H.screenshot_3d=function(a){
-    if(!window.View3D)return fail("The 3D view is still loading. Try again in a moment.");
-    if(!window.MeshSprites||!MeshSprites.ready())return fail("The models are still loading. Try again in a moment.");
+    return modelsReady().then(function(ok){return ok?shot3d(a):fail("The 3D view's models did not load.")});
+  };
+  function shot3d(a){
     var hasFrom=Array.isArray(a.from)&&a.from.length===3&&a.from.every(isFinite);
     var w=(a.x!=null||a.place||a.near_id)?where(a):hasFrom?{x:+a.from[0],y:+a.from[1]}:where(a);
     var item=a.near_id?byId(a.near_id):null;
@@ -19150,11 +19185,12 @@ var AIB=(function(){
     var z=a.z!=null?+a.z:item&&item.z!=null?+item.z+(a.look_up_m!=null?+a.look_up_m:1.5):g;
     if(z==null)return fail("There is no ground there: it is off the map.");
     var d=clamp(+a.distance||40,2,1500),up=a.height!=null?+a.height:d*0.45;
-    var R=clamp(hasFrom?Math.hypot(+a.from[0]-w.x,+a.from[1]-w.y)*2.2:d*2.2,60,800);
+    var R=60;                     // the most the view is made for: it gathers more as the camera goes
     var turns=hasFrom?[null]:a.orbit?[0,90,180,270]:[a.from_bearing!=null?+a.from_bearing:135];
-    var was=View3D.isOpen(),pics=[];
+    var was=View3D.isOpen(),pics=[],far=hasFrom?Math.hypot(+a.from[0]-w.x,+a.from[1]-w.y):d;
+    V3D.wide=far>55?Math.min(1400,far*1.6+160):0;
     if(!was||!a.keep_open)open3dAt(w.x,w.y,R,false);
-    if(!View3D.isOpen())return fail("The 3D view could not open there.");
+    if(!View3D.isOpen()){V3D.wide=0;return fail("The 3D view could not open there.")}
     function shot(i){
       if(i>=turns.length)return Promise.resolve();
       var b=turns[i],c=hasFrom?[+a.from[0],+a.from[1],+a.from[2]]:
@@ -19172,10 +19208,11 @@ var AIB=(function(){
       });
     }
     return shot(0).then(function(){
+      V3D.wide=0;
       if(!was&&!a.keep_open)View3D.close();
       return pics.length===1?{ok:true,image:pics[0]}:{ok:true,images:pics};
-    },function(e){if(!was&&!a.keep_open&&View3D.isOpen())View3D.close();throw e});
-  };
+    },function(e){V3D.wide=0;if(!was&&!a.keep_open&&View3D.isOpen())View3D.close();throw e});
+  }
 
   // ---------------------------------------------------------------- the missions themselves
   function saveOpen(){
@@ -19282,6 +19319,261 @@ var AIB=(function(){
       var g=(j.guides||[]).filter(function(x){return x.name===a.topic})[0];
       if(!g)return {ok:!a.topic,topics:(j.guides||[]).map(function(x){return {topic:x.name,title:x.title}}),error:a.topic?"No guide "+a.topic+".":undefined};
       return {ok:true,topic:g.name,text:g.text};
+    });
+  };
+
+  // ---------------------------------------------------------------- what is selected, and acting on all of it
+  function selected(){return multi.length>1?multi.slice():sel&&sel.x!=null?[sel]:[]}
+  H.get_selection=function(){
+    var l=selected();
+    return {ok:true,count:l.length,things:l.slice(0,80).map(function(o){return brief(o)}),
+      note:l.length?"What the user has selected on the map, or you did: they may mean these when they say this or here.":"Nothing is selected."};
+  };
+  H.select_things=function(a){
+    var got;
+    if(Array.isArray(a.ids)&&a.ids.length){
+      got=a.ids.map(byId).filter(Boolean);
+      if(got.length!==a.ids.length)return fail("Some of those ids are not there: "+a.ids.filter(function(i){return !byId(i)}).join(", ")+".");
+    }else if(Array.isArray(a.box)&&a.box.length===4){
+      got=thingsIn(Math.min(a.box[0],a.box[2]),Math.min(a.box[1],a.box[3]),Math.max(a.box[0],a.box[2]),Math.max(a.box[1],a.box[3]),a.mine_only!==true);
+    }else{
+      var w=where(a),R=Math.max(1,Math.min(1500,+a.radius||30));
+      got=thingsIn(w.x-R,w.y-R,w.x+R,w.y+R,a.mine_only!==true).filter(function(o){return Math.hypot(o.x-w.x,o.y-w.y)<=R});
+    }
+    if(a.add)selected().forEach(function(o){if(got.indexOf(o)<0)got.push(o)});
+    multi=got.length>1?got:[];sel=got.length?got[got.length-1]:null;
+    renderSide();draw();
+    return {ok:true,count:got.length,things:got.slice(0,60).map(function(o){return brief(o)}),
+      next:got.length?"change_selection acts on all of them, save_to_items keeps them as one.":"Nothing that can be moved is there."};
+  };
+  H.change_selection=function(a){
+    if(a.action==="copy"){
+      if(!selected().length)return fail("Nothing is selected: select_things first.");
+      return copyGroup()?{ok:true,copied:selected().length,next:"paste_copied puts them down, in this mission or another."}:fail("They could not be copied.");
+    }
+    if(!editable())return fail(RO);
+    var l=groupList(),n=l.length;
+    if(!n)return fail("Nothing that can be moved is selected: select_things first.");
+    var c=groupCentre(l),ok=true;
+    if(a.action==="move"){
+      var dx=+a.dx||0,dy=+a.dy||0;
+      if(a.x!=null&&a.y!=null){dx=+a.x-c.x;dy=+a.y-c.y}
+      moveGroup(dx,dy,l);settleGroup(l);renderSide();renderNavSection();draw();
+    }else if(a.action==="rotate"){
+      if(n<2)return fail("One thing turns with move_item, facing_deg.");
+      ok=rotateGroup(+a.degrees||90);
+    }else if(a.action==="drop")ok=dropGroup();
+    else if(a.action==="duplicate"){
+      if(n<2)return fail("Select more than one, or use paste_copied for one.");
+      ok=duplicateGroup();
+    }else if(a.action==="remove"){
+      if(n<2)return fail("One thing goes with remove_item.");
+      ok=deleteGroup();
+    }else return fail("action is move, rotate, drop, duplicate, copy or remove.");
+    if(ok===false)return fail("That could not be done to them.");
+    var now=selected();
+    return {ok:true,action:a.action,things:now.length,ids:now.slice(0,80).map(idOf).filter(Boolean),at:now.length?{x:r1(groupCentre(now).x),y:r1(groupCentre(now).y)}:{x:r1(c.x),y:r1(c.y)}};
+  };
+  H.paste_copied=function(a){
+    if(!editable())return fail(RO);
+    var d=null;try{d=JSON.parse(localStorage.getItem(CLIP_KEY)||"null")}catch(e){}
+    if(!d||!d.items)return fail("Nothing has been copied: select_things, then change_selection with copy.");
+    var w=where(a),out=pasteData(d,w.x,w.y,(+a.turn_deg||0)*Math.PI/180);
+    if(!out.length)return fail("Nothing could be put down there.");
+    return {ok:true,pasted:out.length,ids:out.map(idOf).filter(Boolean),summary:groupSummary(d),at:{x:r1(w.x),y:r1(w.y)}};
+  };
+  H.save_to_items=function(a){
+    var name=String(a.name||"").trim().slice(0,60);if(!name)return fail("Give it a name.");
+    var d=groupData();if(!d)return fail("Nothing is selected: select_things first.");
+    return GroupStore.save({name:name,cat:a.category||guessItemCat(d),description:String(a.description||"").slice(0,300),data:d,summary:groupSummary(d)})
+      .then(function(g){return loadGroups().then(function(){return {ok:true,saved:name,id:g&&g.id,summary:groupSummary(d),next:"list_catalog with kind designs lists it; place_design puts it down, in any mission."}})});
+  };
+
+  // ---------------------------------------------------------------- what the ground is made of
+  H.list_ground_materials=function(){
+    var m=materials();
+    if(!m.length)return fail("This level's ground materials are not loaded yet: screenshot_map with show ground_paint, then ask again.");
+    return {ok:true,materials:m.map(function(x){return {name:x.name,index:x.m}}),next:"paint_ground paints with them."};
+  };
+  H.paint_ground=function(a){
+    if(!editable())return fail(RO);
+    var ms=materials();
+    if(!ms.length)return fail("This level's ground materials are not loaded yet: screenshot_map with show ground_paint, then try again.");
+    var mat=-1;
+    if(!a.erase){
+      var q=String(a.material==null?"":a.material).toLowerCase(),f=ms.filter(function(x){return String(x.m)===q||x.name.toLowerCase()===q})[0];
+      if(!f)return fail("No material "+a.material+". list_ground_materials gives them: "+ms.map(function(x){return x.name}).join(", ")+".");
+      mat=f.m;
+    }
+    var keep=GMODE.paint,R=clamp(+a.radius||6,0.5,60),n=0;
+    GMODE.paint={mat:mat,size:R};
+    try{
+      var pts=Array.isArray(a.along)&&a.along.length>1?a.along:[[where(a).x,where(a).y]];
+      pts.forEach(function(p,i){
+        if(!i){paintMatAt(+p[0],+p[1]);n++;return}
+        var l=pts[i-1],d=Math.hypot(p[0]-l[0],p[1]-l[1]),st=Math.max(1,Math.ceil(d/Math.max(0.4,R/3)));
+        for(var k=1;k<=st;k++){paintMatAt(l[0]+(p[0]-l[0])*k/st,l[1]+(p[1]-l[1])*k/st);n++}
+      });
+    }finally{GMODE.paint=keep}
+    changed();
+    var e=pts[pts.length-1];
+    return {ok:true,painted:a.erase?"back to the level's own":ms.filter(function(x){return x.m===mat})[0].name,dabs:n,at:{x:r1(+e[0]),y:r1(+e[1])},note:"Paint changes what the ground looks like, not its height."};
+  };
+
+  // ---------------------------------------------------------------- changing and taking out what is there
+  H.edit_thing=function(a){
+    if(!editable())return fail(RO);
+    var o=byId(a.id);if(!o)return fail("Nothing has the id "+a.id+".");
+    var f={};
+    if(a.name!=null){if(!o.own)return fail("The level's own things keep their names.");f.name=String(a.name).slice(0,60)}
+    if(a.count!=null){if(o.type!=="pickup")return fail("count is for pickups.");f.count=Math.max(1,Math.min(999,+a.count))}
+    if(a.closes_by_itself!=null||a.close_after_s!=null){
+      if(!o.door)return fail("That is not a door.");
+      var nd=Object.assign({},o.door);
+      if(a.closes_by_itself===false){nd.autoClose=false;delete nd.closeAfter}
+      else{nd.autoClose=true;nd.closeAfter=Math.max(1,Math.min(600,Math.round(+a.close_after_s||nd.closeAfter||6)))}
+      f.door=nd;
+    }
+    if(a.range_m!=null||a.raises_alarm!=null){
+      if(o.type!=="camera")return fail("range_m and raises_alarm are for cameras.");
+      if(a.range_m!=null){var cm=clone(o.cam)||{};cm.range=Math.max(5,Math.min(80,+a.range_m));f.cam=cm}
+      if(a.raises_alarm!=null){f.alarm=!!a.raises_alarm;if(f.alarm){var sy=nearestAlarm(o.x,o.y);if(sy)f.alarmId=sy.key}}
+    }
+    if(a.stays_pressed!=null){if(o.type!=="switch")return fail("stays_pressed is for switches.");f.stays=!!a.stays_pressed}
+    if(!Object.keys(f).length)return fail("Say what to change: name, count, closes_by_itself, close_after_s, range_m, raises_alarm or stays_pressed.");
+    setProp(o,f);changed();
+    return {ok:true,thing:brief(o),ids:[idOf(o)],at:{x:o.x,y:o.y}};
+  };
+  H.restore_thing=function(a){
+    if(!editable())return fail(RO);
+    var o=byId(a.id);if(!o)return fail("Nothing has the id "+a.id+".");
+    if(o.own)return fail("That one is yours, not the level's: move_item or remove_item.");
+    if(!o._orig)return fail("That is as the level has it already.");
+    resetShipped(o);changed();
+    return {ok:true,restored:brief(o),ids:[idOf(o)],at:{x:o.x,y:o.y}};
+  };
+  // the level's own walkway points (add_walkways and remove_walkways are for yours)
+  function levelNodeAt(a){
+    var w=where(a),best=null,bd=Math.max(0.5,+a.within_m||3);
+    Object.keys(GRAPHS||{}).forEach(function(g){
+      nodesOf(g).forEach(function(n){var d=Math.hypot(n.x-w.x,n.y-w.y);if(d<bd){bd=d;best={graph:String(g),id:n.id,x:n.x,y:n.y,z:n.z}}});
+    });
+    return best;
+  }
+  H.edit_level_walkway=function(a){
+    if(!editable())return fail(RO);
+    var n=levelNodeAt(a);
+    if(!n)return fail("None of the level's walkway points are that close. screenshot_map with show walkways shows them.");
+    if(a.action==="restore"){setNodeEdit(n.graph,n.id,null)}
+    else if(a.action==="remove"){
+      if(!graphEditable(n.graph))return fail("Graph "+n.graph+" can't be changed in this mission.");
+      var us=nodeUsers(n.graph,n.id);
+      if(us.length)return fail("Guards use that point: "+us.join(", ")+". Change their patrols first.");
+      setNodeEdit(n.graph,n.id,{graph:n.graph,id:n.id,action:"remove"});
+    }else if(a.action==="move"){
+      if(!graphEditable(n.graph))return fail("Graph "+n.graph+" can't be changed in this mission.");
+      if(a.to_x==null||a.to_y==null)return fail("Say where to: to_x and to_y.");
+      var z=terrainZ(+a.to_x,+a.to_y);if(z==null)return fail("There is no ground there.");
+      setNodeEdit(n.graph,n.id,{graph:n.graph,id:n.id,action:"move",x:+a.to_x,y:+a.to_y,z:z});
+    }else return fail("action is move, remove or restore.");
+    changed();renderNavSection();
+    return {ok:true,action:a.action,graph:n.graph,point:n.id,at:{x:r1(a.action==="move"?+a.to_x:n.x),y:r1(a.action==="move"?+a.to_y:n.y)},
+      note:"check_mission says whether the routes still join up."};
+  };
+  H.remove_event=function(a){
+    if(!editable())return fail(RO);
+    var v=events[(parseInt(a.number,10)||0)-1];
+    if(!v)return fail("There is no event number "+a.number+". get_overview lists them.");
+    removeEvent(v);changed();
+    return {ok:true,removed:a.number,left:events.length};
+  };
+  H.remove_cutscene=function(a){
+    if(!editable())return fail(RO);
+    var c=cutNamed(a.cutscene);if(!c)return fail("No such cutscene: name it by intro, outro, its name or number.");
+    cutscenes=cutscenes.filter(function(x){return x!==c});
+    changed();renderCutscenes();
+    return {ok:true,removed:c.name,left:cutscenes.length};
+  };
+  // what the check list's Tidy up does: floating things set down, doubled ones out
+  H.tidy_up=function(a){
+    if(!editable())return fail(RO);
+    var st=needServer();if(st)return fail(st);
+    return saveOpen().then(function(){return Store.cleanup(M.id)}).then(function(res){
+      var fl=res.floating||[],dp=res.duplicates||[],n=0;
+      function byUid(u){return placements.filter(function(p){return p.uid===u})[0]||null}
+      if(a.only_report)return {ok:true,floating:fl.map(function(f){return {id:f.uid,name:f.name,gap_m:f.gap}}),doubled:dp.map(function(d){return {id:d.uid,name:d.name}})};
+      fl.forEach(function(f){var o=byUid(f.uid);if(o){o.z=f.rest;n++}});
+      var gone={};dp.forEach(function(d){gone[d.uid]=1});
+      var before=placements.length;
+      placements=placements.filter(function(p){return !gone[p.uid]});
+      if(n||placements.length!==before){sel=null;changed()}
+      return {ok:true,set_down:n,removed_doubles:before-placements.length};
+    });
+  };
+
+  // ---------------------------------------------------------------- its music and its picture
+  H.list_music=function(){
+    return musicTracks().then(function(l){return {ok:true,tracks:(l||[]).map(function(t){return {id:t.id,name:t.name||t.title||t.id,level:t.level}}),next:"set_music picks one."}});
+  };
+  H.set_music=function(a){
+    if(!editable())return fail(RO);
+    if(!a.track){delete MSET.music;changed();return {ok:true,music:"the map's own"}}
+    return musicTracks().then(function(l){
+      var t=(l||[]).filter(function(x){return x.id===a.track})[0];
+      if(!t)return fail("No track "+a.track+". list_music gives them.");
+      MSET.music=t.id;changed();
+      return {ok:true,music:musicName(t.id)};
+    });
+  };
+  H.set_picture=function(a){
+    if(!editable())return fail(RO);
+    var st=needServer();if(st)return fail(st);
+    var take=a.from==="3d"?H.screenshot_3d(Object.assign({},a,{size:800})):H.screenshot_map(Object.assign({},a,{size:800}));
+    return Promise.resolve(take).then(function(r){
+      if(!r||!r.ok||!r.image)throw new Error((r&&r.error)||"No picture came.");
+      if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
+      return Store.save(M.id,{plan:planOf(),name:MISSION,picture:r.image.url}).then(function(s){
+        refreshOpen(s);if(s&&s.plan&&s.plan.settings&&s.plan.settings.picture)MSET.picture=s.plan.settings.picture;
+        renderObjectives();
+        return {ok:true,note:"It is the mission's picture now, in the studio and in the game's mission list once applied."};
+      });
+    });
+  };
+
+  // ---------------------------------------------------------------- moving missions about, and the game
+  H.export_mission=function(a){
+    var st=needServer();if(st)return fail(st);
+    var id=a.id||(M&&M.id);if(!id)return fail("Say which mission: id, from list_missions.");
+    return saveOpen().then(function(){return Store.get(id)}).then(function(m){
+      if(!m)throw new Error("There is no mission "+id+".");
+      return {ok:true,mission:{format:"igi-mission-studio",version:2,name:m.name,description:m.description||"",base:m.base,plan:m.plan},note:"The whole mission: import_mission makes a new one from this."};
+    });
+  };
+  H.import_mission=function(a){
+    var st=needServer();if(st)return fail(st);
+    var d=a.mission;if(!d||typeof d!=="object"||!d.base||!d.plan)return fail("mission is what export_mission gave: it needs its base and plan.");
+    return importPlanData(d,a.name||d.name).then(function(m){return {ok:true,id:m.id,name:m.name,note:"Made, not opened: open_mission opens it."}});
+  };
+  H.list_game_missions=function(){
+    var st=needServer();if(st)return fail(st);
+    return Store.library().then(function(l){
+      return {ok:true,running:undefined,game:(l.game||{}).gamePath||undefined,missions:(l.slots||[]).filter(function(s){return s.custom||s.studio||s.level>=15}).map(function(s){
+        return {number:s.level,name:s.name,yours:!!s.studio,mission_id:s.missionId||undefined}})};
+    });
+  };
+  H.order_game_missions=function(a){
+    var st=needServer();if(st)return fail(st);
+    if(!Array.isArray(a.order)||!a.order.length)return fail("order is the mission numbers from list_game_missions, in the order wanted.");
+    return Store.orderSlots(a.order).then(function(j){
+      if(j&&j.ok===false)throw new Error(j.error||"The game's list could not be changed.");
+      return {ok:true,note:"The game's mission list follows this order now."};
+    });
+  };
+  H.launch_game=function(){
+    var st=needServer();if(st)return fail(st);
+    return fetch("api/launch",{method:"POST"}).then(function(r){return r.json()}).then(function(j){
+      if(j&&j.error)throw new Error(j.error);
+      return {ok:true,running_already:!!(j&&j.running),note:"The user's own game is starting, at its main menu: they play from there. apply_to_game first puts the mission in it."};
     });
   };
 
@@ -19442,7 +19734,7 @@ var AIB=(function(){
       weapon:{type:"string",description:"a weapon id to give them instead of the type's own"},positions:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...] exact spots"},
       floor:{type:"string",description:"ground, top, or metres above the building's base, for spots inside a building"},name:{type:"string"},
       sees_m:{type:"number",description:"how far they see, 10 to 200"},view_deg:{type:"number",description:"how wide they look, 20 to 360"}}),FACE))},
-    {name:"edit_guard",description:"Change a guard (yours or the level's): type, weapon, sight, name, facing.",parameters:P(Object.assign({id:{type:"string"},type:{type:"string"},weapon:{type:"string"},sees_m:{type:"number"},view_deg:{type:"number"},name:{type:"string"}},FACE),["id"])},
+    {name:"edit_guard",description:"Change a guard (yours or the level's): type, weapon, sight, name, facing, model, and side: enemy, friend (fights for the player) or own_side (fights both).",parameters:P(Object.assign({id:{type:"string"},type:{type:"string"},weapon:{type:"string"},sees_m:{type:"number"},view_deg:{type:"number"},name:{type:"string"}},FACE),["id"])},
     {name:"set_patrol",description:"A guard's patrol: he walks through these points in order and around again, each snapped to the nearest point of his walkway graph. No points: he stands still.",parameters:P({guard_id:{type:"string"},points:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]"},places:{type:"array",items:{type:"string"},description:"place names, instead of points"}},["guard_id"])},
     {name:"place_object",description:"Placing a gate (304_01_1) lays a whole gateway: both leaves, the switch that opens them and a fence panel each side (one_leaf true for a single leaf). A building of the game's brings the doors it has, and a door model becomes a door that opens. Place a structure or prop by its model id (list_catalog kind structures), checked the way a placement by hand is. Buildings get level ground under them. map_label names it on the map computer.",parameters:P(Object.assign(withXY({model:{type:"string"},name:{type:"string"},force:{type:"boolean",description:"place it even where the check says no"},one_leaf:{type:"boolean",description:"a gate: one leaf only, not the whole gateway"},floor:{type:"string",description:"a door inside a building: which floor (\"top\", or metres above its base)"},map_label:{type:"string"},map_info:{type:"string"}}),FACE),["model"])},
     {name:"place_fence",description:"A straight run of fence (chain link) or wall panels from one point to another.",parameters:P({from:{type:"array",items:{type:"number"}},to:{type:"array",items:{type:"number"}},kind:{type:"string",enum:["fence","wall"]},model:{type:"string",description:"a panel model instead"}},["from","to"])},
@@ -19527,6 +19819,36 @@ var AIB=(function(){
     {name:"batch",description:"Several changes as one call and one undo step: much faster than one at a time for a whole area. calls run in order; it stops at the first that fails unless stop_on_error is false. all_or_nothing keeps none of them if any fails. Not for pictures, tests or opening missions.",
       parameters:P({calls:{type:"array",items:{type:"object",properties:{tool:{type:"string"},args:{type:"object"}},required:["tool"]}},stop_on_error:{type:"boolean"},all_or_nothing:{type:"boolean"}},["calls"])},
     {name:"apply_to_game",kind:"test",description:"Build the mission and install it in the user's game, ready to play from its mission list. Takes from seconds to a few minutes: if it isn't done in wait_seconds, you get a job for wait_for_job.",parameters:P({wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}})},
+    {name:"fix_check",description:"Do the fix the check list offers for one of its rows: check_mission gives such a row a fix number and says what it does (list_fix).",parameters:P({fix:{type:"integer"}},["fix"])},
+    {name:"get_selection",kind:"look",look:true,description:"What the user has selected on the map right now: when they say this or here, they may mean it.",parameters:P({})},
+    {name:"select_things",kind:"look",look:true,description:"Select things on the map, which the user sees: by ids, or all that can be moved within radius of a point, or in a box [x0, y0, x1, y1]. Yours and the level's, unless mine_only.",
+      parameters:P(withXY({ids:{type:"array",items:{type:"string"}},box:{type:"array",items:{type:"number"}},radius:{type:"number"},mine_only:{type:"boolean"},add:{type:"boolean",description:"add to what is selected"}}))},
+    {name:"change_selection",description:"Act on everything selected at once. action: move (by dx and dy, or its centre to x and y), rotate (degrees, round its centre), drop (onto the ground), duplicate, copy (for paste_copied, in any mission), remove.",
+      parameters:P({action:{type:"string",enum:["move","rotate","drop","duplicate","copy","remove"]},dx:{type:"number"},dy:{type:"number"},x:{type:"number"},y:{type:"number"},degrees:{type:"number"}},["action"])},
+    {name:"paste_copied",description:"Put down what was last copied, centred on a point: a whole area, with its doors and walkways, in this mission or another. Copy an area out of a built-in level (open_mission with level) to bring it here.",
+      parameters:P(withXY({turn_deg:{type:"number"}}))},
+    {name:"save_to_items",kind:"design",description:"Keep what is selected in the user's inventory (Your items) as one thing, to place in any mission with place_design.",
+      parameters:P({name:{type:"string"},description:{type:"string"},category:{type:"string"}},["name"])},
+    {name:"list_ground_materials",kind:"look",look:true,description:"What this level's ground can be painted with: grass, dirt, rock and so on.",parameters:P({})},
+    {name:"paint_ground",kind:"ground",description:"Paint what the ground is made of, not its height: radius metres round a point, or along a line of points [[x, y], ...]: a dirt track, a rocky yard. erase puts back the level's own.",
+      parameters:P(withXY({material:{type:"string",description:"a name from list_ground_materials"},radius:{type:"number",description:"metres, default 6"},along:{type:"array",items:{type:"array",items:{type:"number"}}},erase:{type:"boolean"}}))},
+    {name:"edit_thing",description:"Change a thing that is not a guard: name (yours), count (a pickup), closes_by_itself and close_after_s (a door), range_m and raises_alarm (a camera), stays_pressed (a switch).",
+      parameters:P({id:{type:"string"},name:{type:"string"},count:{type:"integer"},closes_by_itself:{type:"boolean"},close_after_s:{type:"number"},range_m:{type:"number"},raises_alarm:{type:"boolean"},stays_pressed:{type:"boolean"}},["id"])},
+    {name:"restore_thing",description:"Put one of the level's own things back as the level has it, undoing what was changed about it.",parameters:P({id:{type:"string"}},["id"])},
+    {name:"edit_level_walkway",kind:"ground",description:"Change one of the level's own walkway points, the nearest within within_m (default 3) of a point: move it (to_x, to_y), remove it, or restore it. Yours go with add_walkways and remove_walkways.",
+      parameters:P(withXY({action:{type:"string",enum:["move","remove","restore"]},to_x:{type:"number"},to_y:{type:"number"},within_m:{type:"number"}}))},
+    {name:"remove_event",description:"Take out an event, by its number in get_overview.",parameters:P({number:{type:"integer"}},["number"])},
+    {name:"remove_cutscene",description:"Take out a cutscene: intro, outro, its name or number.",parameters:P({cutscene:{type:"string"}},["cutscene"])},
+    {name:"tidy_up",description:"What Tidy up does: sets down what floats above the ground and takes out what is placed twice in one spot. only_report just lists them.",parameters:P({only_report:{type:"boolean"}})},
+    {name:"list_music",kind:"look",look:true,description:"The game's music tracks, for set_music.",parameters:P({})},
+    {name:"set_music",description:"The mission's music: a track from list_music, or no track for its map's own.",parameters:P({track:{type:"string"}})},
+    {name:"set_picture",description:"The mission's picture, in the library and in the game's mission list, taken from the map (from map) or the 3D view (from 3d), of a point (x and y, place or near_id), with the same camera settings as those tools.",
+      parameters:P(withXY({from:{type:"string",enum:["map","3d"]},radius:{type:"number"},distance:{type:"number"},height:{type:"number"},from_bearing:{type:"number"}}))},
+    {name:"export_mission",kind:"mission",anywhere:true,description:"A whole mission as data (the open one if no id is given), to keep or to make another from.",parameters:P({id:{type:"string"}})},
+    {name:"import_mission",kind:"mission",anywhere:true,description:"Make a new mission from what export_mission gave.",parameters:P({mission:{type:"object"},name:{type:"string"}},["mission"])},
+    {name:"list_game_missions",kind:"mission",anywhere:true,description:"The missions in the user's game beyond the 14 of its own, by number.",parameters:P({})},
+    {name:"order_game_missions",kind:"mission",anywhere:true,description:"Put the game's own list of the studio's missions in this order: mission numbers from list_game_missions.",parameters:P({order:{type:"array",items:{type:"integer"}}},["order"])},
+    {name:"launch_game",kind:"test",anywhere:true,description:"Start the user's own game, at its main menu, for them to play.",parameters:P({})},
     {name:"wait_for_job",kind:"test",anywhere:true,description:"How a long job given by apply_to_game or a test is doing: waits up to wait_seconds for its end.",parameters:P({job:{type:"string"},wait_seconds:{type:"integer",description:"at most 50, default 45"}},["job"])},
     {name:"test_load",kind:"test",description:"Try the mission in the real game: it is built into a test copy of the game (never the user's own), started, watched for seconds, then closed. Says whether it built, loaded and ran, the exact text of any fatal error, and gives pictures of the game itself. Takes about a minute, moves the user's mouse for a moment and takes the screen while it runs, so use it when an area is done, not after every change. With a point (x and y, place or near_id), the player starts there for this test. Long: you get a job for wait_for_job.",
       parameters:P(withXY({seconds:{type:"number",description:"how long to watch it run, default 15"},facing_deg:{type:"number"},wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}}))},

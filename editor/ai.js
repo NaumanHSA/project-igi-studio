@@ -1526,6 +1526,9 @@ var LOOKS = { get_overview: "Looked at the mission and the level", check_mission
   stealth_check: "Checked how stealthy it is", list_missions: "Looked through your missions", scout: "Asked the scout",
   list_catalog: "Looked through the catalogue", show_3d: "Opened the 3D view",
   screenshot_map: "Looked at the map", screenshot_3d: "Looked in 3D", studio_status: "Looked at what is open", list_levels: "Looked through the levels",
+  fix_check: "Fixed what the check found", get_selection: "Looked at the selection", select_things: "Selected", change_selection: "Changed the selection", paste_copied: "Pasted", save_to_items: "Kept in Your items",
+  list_ground_materials: "Looked at the ground materials", paint_ground: "Painted the ground", edit_thing: "Changed it", restore_thing: "Put it back", edit_level_walkway: "Changed a walkway point",
+  remove_event: "Took out an event", remove_cutscene: "Took out a cutscene", tidy_up: "Tidied up", list_music: "Looked through the music", set_music: "Set the music", set_picture: "Set the picture",
   read_guide: "Read a guide", wait_for_job: "Waited for the job", test_load: "Tried it in the game", test_tour: "Looked at it in the game" };
 function label(name, a, r) {
   a = a || {}; r = r || {};
