@@ -73,6 +73,7 @@ from studio.extract import model3d as M3
 from studio.server import ai as AI
 from studio.server import community as CM
 from studio.server import mcp as MCP
+from studio.server import gametest as GT
 from urllib.parse import urlparse, parse_qs
 from studio import paths
 from studio.qvm import source as qvm_source
@@ -1414,6 +1415,9 @@ class Handler(SimpleHTTPRequestHandler):
                     res["log"] = lines
                     return self._json(res)
                 return self._guard(sync)
+            if mid and action == "testrun":
+                b = self._body()
+                return self._guard(lambda: self._json({"ok": True, "job": run_job(GT.run, mid, str(MS.STORE), load_config(), b)["id"]}))
             if mid and action == "applyjob":
                 def aj():
                     t = (self._body() or {}).get("test")

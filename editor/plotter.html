@@ -19357,7 +19357,10 @@ var AIB=(function(){
           if(st.done){
             var r=st.result||{ok:false,error:"no result"};
             appliedNow(r);
-            done(Object.assign({},r,{mission:undefined,applied:undefined,log:undefined,job:undefined,log_end:(st.lines||[]).slice(-14)}));
+            var out=Object.assign({},r,{mission:undefined,applied:undefined,log:undefined,job:undefined,log_end:(st.lines||[]).slice(-14)});
+            if(!r.images||!r.images.length)return done(out);
+            Promise.all(r.images.map(function(p){return smaller(p.url,1100).then(function(q){return Object.assign({},p,q)})}))
+              .then(function(list){out.images=list;done(out)},no);
           }else if(Date.now()>=end)done({ok:true,running:true,job:jid,stage:st.stage,percent:st.pct,detail:st.detail,next:"Not finished yet: wait_for_job with this job."});
           else setTimeout(tick,400);
         }).catch(no);
@@ -19367,6 +19370,44 @@ var AIB=(function(){
   H.wait_for_job=function(a){
     if(!a.job)return fail("Say which job.");
     return followJob(String(a.job),a.wait_seconds);
+  };
+  // the mission tried in the real game, in the test copy (studio/server/gametest.py)
+  function runInGame(body,wait){
+    if(!editable())return fail(RO);
+    var st=needServer();if(st)return fail(st);
+    return saveOpen().then(function(){
+      return fetch("api/missions/"+M.id+"/testrun",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    }).then(function(r){return r.json()}).then(function(j){
+      if(!j||!j.job)throw new Error((j&&j.error)||"The server did not start the test.");
+      toast("Trying “"+MISSION+"” in a test copy of the game");
+      return followJob(j.job,wait);
+    });
+  }
+  function testStart(a){
+    if(a.x==null&&!a.place&&!a.near_id)return null;
+    var w=where(a),z=standZ(w.x,w.y);
+    if(z==null)throw new Error("There is no ground there to start on.");
+    return {x:+w.x.toFixed(3),y:+w.y.toFixed(3),z:+z.toFixed(3),gamma:+((+a.facing_deg||0)*Math.PI/180).toFixed(5)};
+  }
+  H.test_load=function(a){
+    return runInGame({seconds:a.seconds,start:testStart(a)},a.wait_seconds);
+  };
+  H.test_tour=function(a){
+    var list=Array.isArray(a.views)?a.views.slice(0,10):[];
+    if(!list.length)return fail("Say what to look at: views, a list of {x, y} or {near_id} or {place}, with distance, from_bearing, height, or from [x, y, z].");
+    var secs=clamp(+a.seconds_each||4,2,10);
+    var shots=list.map(function(v,i){
+      var hasFrom=Array.isArray(v.from)&&v.from.length===3,w=(v.x!=null||v.place||v.near_id)?where(v):hasFrom?{x:+v.from[0],y:+v.from[1]}:where(v);
+      var it=v.near_id?byId(v.near_id):null,g=terrainZ(w.x,w.y);
+      var z=v.z!=null?+v.z:it&&it.z!=null?+it.z+1.5:g;
+      if(z==null)throw new Error("View "+(i+1)+" has no ground under it: it is off the map.");
+      var d=clamp(+v.distance||30,2,1500),b=v.from_bearing!=null?+v.from_bearing:135,up=v.height!=null?+v.height:d*0.45;
+      var c=hasFrom?[+v.from[0],+v.from[1],+v.from[2]]:[w.x+Math.sin(b*Math.PI/180)*d,w.y+Math.cos(b*Math.PI/180)*d,z+up];
+      if(!hasFrom){var gc=terrainZ(c[0],c[1]);if(gc!=null&&c[2]<gc+1.2)c[2]=gc+1.2}
+      return {kind:"tour",about:v.about||w.name||("at "+Math.round(w.x)+", "+Math.round(w.y)),text:"",
+        cams:[camKey(c[0],c[1],c[2],[w.x,w.y,z],1,secs,false)]};
+    });
+    return runInGame({seconds:a.then_seconds||4,tour:shots,start:testStart(a)},a.wait_seconds);
   };
   H.apply_to_game=function(a){
     if(!editable())return fail(RO);
@@ -19487,6 +19528,11 @@ var AIB=(function(){
       parameters:P({calls:{type:"array",items:{type:"object",properties:{tool:{type:"string"},args:{type:"object"}},required:["tool"]}},stop_on_error:{type:"boolean"},all_or_nothing:{type:"boolean"}},["calls"])},
     {name:"apply_to_game",kind:"test",description:"Build the mission and install it in the user's game, ready to play from its mission list. Takes from seconds to a few minutes: if it isn't done in wait_seconds, you get a job for wait_for_job.",parameters:P({wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}})},
     {name:"wait_for_job",kind:"test",anywhere:true,description:"How a long job given by apply_to_game or a test is doing: waits up to wait_seconds for its end.",parameters:P({job:{type:"string"},wait_seconds:{type:"integer",description:"at most 50, default 45"}},["job"])},
+    {name:"test_load",kind:"test",description:"Try the mission in the real game: it is built into a test copy of the game (never the user's own), started, watched for seconds, then closed. Says whether it built, loaded and ran, the exact text of any fatal error, and gives pictures of the game itself. Takes about a minute, moves the user's mouse for a moment and takes the screen while it runs, so use it when an area is done, not after every change. With a point (x and y, place or near_id), the player starts there for this test. Long: you get a job for wait_for_job.",
+      parameters:P(withXY({seconds:{type:"number",description:"how long to watch it run, default 15"},facing_deg:{type:"number"},wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}}))},
+    {name:"test_tour",kind:"test",description:"See the mission in the real game, from cameras you choose: the only true check of how it really looks, and that what you placed is really there. Builds it into a test copy of the game with a cutscene of your views, and takes a picture of each as the game's own camera shows it, then one as the player stands. Each view is x and y, place or near_id, with distance, from_bearing and height, or from [x, y, z]; about says what you are checking. Takes a minute or two and takes the screen. Long: you get a job for wait_for_job.",
+      parameters:P({views:{type:"array",items:{type:"object",properties:Object.assign({},XY,{about:{type:"string"},z:{type:"number"},distance:{type:"number"},from_bearing:{type:"number"},height:{type:"number"},from:{type:"array",items:{type:"number"}}})}},
+        seconds_each:{type:"number",description:"how long each view lasts, default 4"},then_seconds:{type:"number",description:"how long to watch it run after the views, default 4"},wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}},["views"])},
   ];
   // Each tool has a kind, and each agent (the AI designer's, editor/ai.js, or one
   // from outside, editor/mcp.js) the kinds it may use: look and design change

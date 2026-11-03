@@ -28,9 +28,14 @@ player can get through it first time, and an alarm is bad news rather than the e
 5. **Look at every area** before the next: `screenshot_map` close up, `screenshot_3d`
    with `orbit`, and at eye level with `from` (1.7 m above the ground). If it looks wrong,
    it is wrong. Report it with `plan_progress`.
-6. **Finish:** objectives, events, `write_texts`, then `check_mission` and
-   `stealth_check` until they are clean.
-7. **Put it in the game** with `apply_to_game` when the person wants to play it.
+6. **Try it in the game** once an area is done, not after every change: `test_tour`
+   shows it through the game's own camera, the only true check of how it looks and that
+   what you placed is really there. `test_load` tells you whether it loads and runs, with
+   the game's exact words if it stops with a fatal error. They use a test copy of the
+   game, never the person's own, and take a minute or so and the person's screen.
+7. **Finish:** objectives, events, `write_texts`, then `check_mission` and
+   `stealth_check` until they are clean, and `test_load` once more.
+8. **Put it in the game** with `apply_to_game` when the person wants to play it.
 
 ## What makes a place look right
 

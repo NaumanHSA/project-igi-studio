@@ -87,6 +87,9 @@ def save(values):
 
 
 def setting(name, default=None):
+    # a test build's own process: the test copy is its game (studio/build/testbuild.py)
+    if name == "gamePath" and os.environ.get("IGISTUDIO_GAME"):
+        return os.environ["IGISTUDIO_GAME"]
     v = config().get(name)
     return v if v not in (None, "") else (FALLBACK.get(name) if default is None else default)
 
@@ -183,13 +186,21 @@ def checkout():
     return not os.environ.get("IGISTUDIO_HOME") and (ROOT / "config.json").exists()
 
 
+def testrun():
+    """In a test build's own process: its private folder, inside the test copy."""
+    t = os.environ.get("IGISTUDIO_TESTRUN")
+    return pathlib.Path(t) if t else None
+
+
 def writable():
     """The root of everything the studio writes (other than into the game)."""
-    return ROOT if checkout() else home()
+    return testrun() or (ROOT if checkout() else home())
 
 
 def missions():
     """Where the user's own missions (and saved groups) are kept."""
+    if testrun():
+        return testrun() / "missions"
     if checkout() and (ROOT / "missions" / "custom").is_dir():
         return ROOT / "missions"
     return home() / "missions"
@@ -197,6 +208,8 @@ def missions():
 
 def work():
     """Where a build stages its output before it is installed."""
+    if testrun():
+        return testrun() / "work"
     return ROOT / "missions" if checkout() else home() / "work"
 
 
