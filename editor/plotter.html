@@ -4867,8 +4867,7 @@ function addPlacement(wx,wy){
       return;
     }
     o={uid:uid(),own:true,type:"building",kind:"object",model:tool.id,
-       name:tool.label,x:+pose.x.toFixed(3),y:+pose.y.toFixed(3),z:inb?z:(gz!=null?gz:z),gamma:pose.gamma,
-       flatten:wantsFlat(tool.id)};
+       name:tool.label,x:+pose.x.toFixed(3),y:+pose.y.toFixed(3),z:inb?z:(gz!=null?gz:z),gamma:pose.gamma};
     if(inb)o.exact=true;                    // on a floor: left where it was put
     // the next panel of a fence or wall carries on from this one
     tool.chain=pose.end||(segInfo(tool.id)?endOf(o):null);
