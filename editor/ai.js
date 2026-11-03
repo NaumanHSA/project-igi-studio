@@ -1902,6 +1902,7 @@ async function outsideCall(c) {
   if (OUTSIDE.seen !== CHAT.id + who && el.log) {
     OUTSIDE.seen = CHAT.id + who;
     add({ k: "note", text: who + " is working here through MCP. Its calls show below; undo works as usual." });
+    if (!CHAT.title) { CHAT.title = who; CHAT.titled = true; paintThread(); }
   }
   if (!OUTSIDE.shown) { OUTSIDE.shown = true; showTab("ai"); }
   var r = await callShown(c.name, c.args, api().kinds(), true);
@@ -1964,7 +1965,8 @@ var saveTimer = 0;
 function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); }
 function save() {
   clearTimeout(saveTimer);
-  if (!KEY || !CHAT.view.some(function (b) { return b.k === "user"; })) return Promise.resolve();
+  // a chat is kept once someone has said something, or an agent from outside has done something
+  if (!KEY || !CHAT.view.some(function (b) { return b.k === "user" || b.k === "tools"; })) return Promise.resolve();
   if (!CHAT.created) CHAT.created = Math.round(Date.now() / 1000);
   var tid = CHAT.id, data = snapshot(), key = KEY;
   var row = THREADS.filter(function (t) { return t.id === tid; })[0];
