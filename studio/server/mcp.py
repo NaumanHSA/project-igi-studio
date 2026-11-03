@@ -92,8 +92,13 @@ def guide_title(text, name):
 
 
 def guides():
-    """The studio's guides for agents: [{name, title, text}]. Generated ones (made
-    from the person's own game) come from their folder, never from the repository."""
+    """The studio's guides for agents: [{name, title, text}]. The ones measured from the
+    person's own game come from their folder, never from the repository."""
+    try:
+        from studio.extract import anatomy
+        anatomy.ensure()
+    except (ImportError, OSError, ValueError):
+        pass                              # without them, the written guides still stand
     out = []
     for d in (GUIDES, paths.home() / "guide"):
         if not d.is_dir():

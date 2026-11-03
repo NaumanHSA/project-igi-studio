@@ -11,6 +11,7 @@ For working on the studio. To use it, read
 | [architecture.md](architecture.md) | The repository, the desktop app, what happens when a game is connected, where everything is kept |
 | [community.md](community.md) | The community: its database on Neon, the accounts, pulling and sharing, the stand-in for the tests |
 | [qvm.md](qvm.md) | The QVM script format: the file, the opcodes, and what reproducing the game's own bytes requires |
+| [mcp.md](mcp.md) | The MCP server: how an outside agent reaches the one set of tools, testing in the game, and what agents read |
 | [engine.md](engine.md) | The engine's unwritten rules the builder enforces, and the graph file format |
 | [TASK-PARAMETERS.md](TASK-PARAMETERS.md) | The parameters of the game's script tasks, as far as they are known |
 | [releasing.md](releasing.md) | Cutting a release, and what signing will change |

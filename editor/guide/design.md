@@ -14,8 +14,11 @@ player can get through it first time, and an alarm is bad news rather than the e
 ## How to work
 
 1. **Look first.** `studio_status`, `list_levels`, then `screenshot_map` of the level
-   you are thinking of. For a mission from scratch, use `create_mission` with
-   `from: empty`: the level's ground, sky and walkways, with nothing built on it.
+   you are thinking of. `read_guide` with topic `levels` has the measurements of the game's
+   own 14 levels, and `level-3` and so on say what one has, place by place. Open one and look
+   at how its places are laid out: that is the standard to reach. For a mission from scratch,
+   use `create_mission` with `from: empty`: the level's ground, sky and walkways, with
+   nothing built on it.
 2. **Look at the ground.** `screenshot_map` with `show: ["walkways"]` shows where guards
    can walk. `ground_heights` tells you what is flat and what is steep. Put things where
    the land helps: a camp on a flat, a sniper on a rise, the way in along a gully.
@@ -54,12 +57,23 @@ player can get through it first time, and an alarm is bad news rather than the e
 - **Two ways in**, at least: one obvious and guarded, one harder to find.
 - **Guards with jobs.** Some stand at posts, some patrol, some watch from towers. Patrols
   need walkways (`add_walkways`), and they should leave gaps a patient player can use.
-- **Enough, not many.** A small post has 3 to 6 guards and a base 15 to 30. Every guard
-  costs the player time and health, and the game can hold at most 128 people.
+- **Enough, not many.** The game's own levels usually have about 35 guards in all, about 12
+  to a place, a few metres from the next guard. The most is 92, and the game can hold 128
+  people. Every guard costs the player time and health.
+- **Room to breathe.** The first guard is usually about 45 m from the player's start. A level
+  usually has two or three separate places of any size, each about 150 m across and about
+  230 m from the next, with open ground between.
+- **Security in proportion.** Usually about 3 cameras and one alarm system, and about 12
+  pickups in all. Several levels have no cameras at all.
+- **Whole areas are there to take.** `select_things` round a place in a built-in level,
+  `change_selection` with copy, then `paste_copied` in your mission brings it with its doors,
+  guards and walkways, and it will look like the game because it is the game's. Change it
+  afterwards, so that it is not simply the level again.
 - **Alarm with consequences.** Cameras and sirens that bring reinforcements make stealth
   worth it. Give the player a way to deal with them.
 - **Objectives in a sensible order,** across the map and at different heights, with the
-  hardest one last. At most 6: the map computer shows no more.
+  hardest one last. The game's levels usually have two to five. At most 6: the map computer
+  shows no more.
 - **Weapons and ammo** where a player who explores would look. Don't hand out everything
   at the start.
 - **A way on foot** from the player's start to every objective. `stealth_check` tells you

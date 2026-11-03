@@ -3,6 +3,33 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## Unreleased
+
+### New
+
+- **Work with an AI agent.** Press **MCP** at the top, then **Start**, and an
+  agent such as Claude Desktop can make missions in the studio while you watch
+  every change happen on the map. It uses your agent's own account, and undo
+  works as usual. Connecting Claude Desktop is one button.
+- **Agents can see.** Tools now give pictures of the map, with a grid in metres,
+  and of the 3D view from any camera. The AI designer gets them too.
+- **Testing in the real game.** An agent can try a mission in a test copy of the
+  game, made beside yours: whether it loads, the game's exact words if it stops
+  with a fatal error, and pictures through the game's own camera. Your own game
+  is not touched.
+- **Every action has a tool**, for agents and the AI designer alike: selecting
+  and acting on groups, taking whole areas out of the game's levels, painting
+  the ground, changing doors and cameras, doing what the check list offers to
+  fix, and more.
+- **How the game's own levels are built**, measured from your game, for agents
+  to read: how many guards to a place, how far apart, what each level has.
+
+### Fixed
+
+- The check list could say the dry run of Apply "could not be had" after a big
+  change: taking the build's own heights counted as a change to the plan, so its
+  answer was thrown away as soon as it came.
+
 ## 2.0.1
 
 ### New
