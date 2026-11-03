@@ -182,11 +182,8 @@ class FakeGame:
     def on_mission_list(self):
         return self._s() == "list"
 
-    def click_menu(self, at):
-        self.clicks.append(at)
-        self.i += 1
-
-    def close_menu_screen(self):
+    def press(self, key):
+        self.clicks.append(key)
         self.i += 1
 
     def sig(self):
@@ -200,13 +197,13 @@ class FakeGame:
 
 class EnterMissionTests(unittest.TestCase):
     def go(self, game):
-        with mock.patch.object(G, "park"), mock.patch.object(GT.time, "sleep"):
+        with mock.patch.object(GT.time, "sleep"):
             return GT.enter_mission(game, lambda x: None)
 
-    def test_two_clicks_and_the_level(self):
+    def test_two_keys_and_the_level(self):
         g = FakeGame(["menu", "list", "loading", "level"])
         self.assertEqual(self.go(g), (True, None, None))
-        self.assertEqual(g.clicks, [GT.PLAY, GT.OK])
+        self.assertEqual(g.clicks, [G.ENTER, G.ENTER])
 
     def test_a_fatal_error_in_the_menu_is_given_as_it_is(self):
         ok, fatal, why = self.go(FakeGame(["menu"], fatal_at=0))
@@ -219,13 +216,13 @@ class EnterMissionTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("Fatal", fatal)
 
-    def test_a_click_the_game_ignored_is_made_again(self):
-        # the first click takes it nowhere, the second does
+    def test_a_key_the_game_ignored_is_pressed_again(self):
+        # the first Enter takes it nowhere, the second does
         g = FakeGame(["menu", "menu", "list", "loading", "level"])
         with mock.patch.object(GT, "_until", side_effect=[(True, None), (False, None), (True, None), (True, None), (True, None)]):
             ok, _, _ = self.go(g)
         self.assertTrue(ok)
-        self.assertEqual(g.clicks[:2], [GT.PLAY, GT.PLAY])
+        self.assertEqual(g.clicks[:2], [G.ENTER, G.ENTER])
 
 
 class PictureTests(unittest.TestCase):

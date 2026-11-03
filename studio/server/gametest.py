@@ -2,27 +2,27 @@
 #
 # Never in the person's game: in a test copy, made once beside it. The mission is
 # built there by a process of its own (studio/build/testbuild.py), the copy is
-# started in a window, the main menu's two clicks are made (the list opens on the
-# mission), and from then on it only watches: a fatal error is a dialog box whose
-# text can be read, a crash is the process going away, and the window can be
-# pictured. Then the copy is closed.
+# started in a window, Enter is pressed twice (the main menu's first item, then
+# the mission list, which opens on the mission), and from then on it only watches:
+# a fatal error is a dialog box whose text can be read, a crash is the process
+# going away, and the window can be pictured. Then the copy is closed.
 #
-# It takes the person's mouse for a second or two, and the window has to stay in
-# front while it runs (the game pauses when it isn't): so only ever when asked.
+# The keys go to the game's window as messages, not through the keyboard: so the
+# person's mouse and keyboard are never used, and it works with the PC locked
+# (where clicks made with the mouse reach nothing, 2026-11-03).
 import base64, json, os, pathlib, shutil, subprocess, sys, tempfile, threading, time
 
 from studio import paths
 from studio.server import gamewin as G
 
 MENU = (640, 480)            # what the menu's coordinates are in: it sits centred in a bigger window
-PLAY = (321, 199)            # "Play Project IGI"
-OK = (594, 414)              # "OK" on Select Mission
 # The two screens look much alike overall, so they are told apart by the bright green
 # text that is on one and not the other, in the menu's own coordinates.
 PLAY_TEXT = (250, 188, 390, 210)
 OK_TEXT = (575, 402, 615, 426)
 TEXT = 25                    # bright green pixels that make it text
 CHANGED = 6.0                # how different two screens are, 0..255, for the level to have replaced the loading screen
+JUMP = 5.0                   # how different two moments 0.1 s apart are, for the tour's camera to have cut
 WIDTH, HEIGHT = 1024, 768
 _one_at_a_time = threading.Lock()
 
@@ -141,20 +141,13 @@ class Game:
     def on_mission_list(self):
         return self.green(OK_TEXT) >= TEXT
 
-    def click_menu(self, at):
+    def press(self, key):
+        """A key, to the game's window."""
         i = self.inner()
         if not i:
             return False
-        x = (i["w"] - MENU[0]) // 2 + at[0]
-        y = (i["h"] - MENU[1]) // 2 + at[1]
-        G.front(i["hwnd"])
-        G.click(i["hwnd"], x, y)
+        G.press(i["hwnd"], key)
         return True
-
-    def close_menu_screen(self):
-        """Cancel on the mission list, which sits just under OK."""
-        self.click_menu((OK[0], OK[1] + 24))
-        G.park()
 
     def close(self):
         if self.alive():
@@ -176,31 +169,31 @@ def _until(game, test, seconds):
 
 def enter_mission(game, say):
     """From the main menu into the mission: (ok, fatal, why not). ok once the level's own
-    picture has replaced the loading screen. The list opens on the mission, so it is two
-    clicks; each is checked, because the game sometimes takes no notice of one."""
+    picture has replaced the loading screen. Enter on the main menu is its first item,
+    Play; on the mission list, which opens on the mission, it starts it. Each is checked,
+    because the game sometimes takes no notice of a key while a screen fades in."""
     for attempt in range(4):
         ok, fatal = _until(game, game.on_main_menu, 40)
         if fatal:
             return False, fatal, fatal
         if not ok:
             return False, None, "The game's main menu did not come up."
-        time.sleep(0.5)                 # it fades in: click what is really there
-        game.click_menu(PLAY)
+        time.sleep(0.5)                 # it fades in
+        game.press(G.ENTER)
         ok, fatal = _until(game, game.on_mission_list, 4)
         if fatal:
             return False, fatal, fatal
         if not ok:
-            say("the main menu took no notice of the click: trying again")
+            say("the main menu took no notice of the key: trying again")
             continue
         time.sleep(0.5)
-        game.click_menu(OK)
-        G.park()
+        game.press(G.ENTER)
         ok, fatal = _until(game, lambda: not game.on_mission_list(), 5)
         if fatal:
             return False, fatal, fatal
         if not ok:
-            say("the mission list took no notice of the click: going back to the menu")
-            game.close_menu_screen()
+            say("the mission list took no notice of the key: going back to the menu")
+            game.press(G.ESCAPE)
             continue
         say("STAGE the mission is loading in the game")
         time.sleep(0.4)                 # the loading screen, once it has faded in
@@ -250,7 +243,6 @@ def _run(mid, store, cfg, options, say):
         return {"ok": False, "stage": "build", "error": "It did not build: %s" % (built.get("error") or "see the log")}
     say("STAGE starting the test copy of the game")
     game = Game(copy)
-    was = G.foreground()
     tour = options.get("tour") or []
     pics = []
     try:
@@ -265,21 +257,7 @@ def _run(mid, store, cfg, options, say):
         fatal = None
         if tour:
             say("STAGE the game's camera is going round the mission")
-            t = 0.0
-            for i, sh in enumerate(tour):
-                dur = sum(float(k.get("dur") or 0) for k in sh.get("cams") or [])
-                when = started + t + dur * 0.6
-                t += dur
-                while time.time() < when:
-                    fatal = game.fatal()
-                    if fatal:
-                        break
-                    time.sleep(0.1)
-                if fatal:
-                    break
-                c = game.picture()
-                if c:
-                    pics.append(_pic(c, what="in the game: " + str(sh.get("about") or "view %d" % (i + 1))))
+            pics, fatal = tour_pictures(game, tour, started)
         # then as the player stands, and long enough for what goes wrong as it starts
         seconds = max(3.0, min(120.0, float(options.get("seconds") or 15)))
         say("STAGE watching the mission run")
@@ -307,4 +285,41 @@ def _run(mid, store, cfg, options, say):
                 "said": "It built, loaded and ran in the game with no error. The pictures are the game's own."}
     finally:
         game.close()
-        G.give_back_foreground(was)
+
+
+def tour_pictures(game, tour, started=None):
+    """A picture of each view of the tour, as the game's camera shows it: (pictures,
+    fatal). Each view's camera stands still, so a view starts where the picture jumps
+    from one moment to the next (a cut), and its picture is taken once it has settled a
+    moment after. Going by the cut, not the clock, keeps every picture with its own
+    view: the cutscene does not start the moment the level first shows (2026-11-03, a
+    picture a view behind its label). A cut too slight to see (two views much alike)
+    is given up on a little after the view should have ended."""
+    pics, fatal = [], None
+    begun = started or time.time()
+    for i, sh in enumerate(tour):
+        dur = sum(float(k.get("dur") or 0) for k in sh.get("cams") or [])
+        if i:
+            prev = game.sig()
+            deadline = begun + dur_before + 2.5
+            while time.time() < deadline:
+                fatal = game.fatal()
+                if fatal:
+                    return pics, fatal
+                time.sleep(0.08)
+                s = game.sig()
+                if s and prev and G.difference(s, prev) > JUMP:
+                    break
+                prev = s or prev
+            begun = time.time()
+        dur_before = dur
+        settle = time.time() + min(1.2, dur * 0.35)
+        while time.time() < settle:
+            fatal = game.fatal()
+            if fatal:
+                return pics, fatal
+            time.sleep(0.1)
+        c = game.picture()
+        if c:
+            pics.append(_pic(c, what="in the game: " + str(sh.get("about") or "view %d" % (i + 1))))
+    return pics, fatal

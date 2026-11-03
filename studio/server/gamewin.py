@@ -314,7 +314,22 @@ def brightness(a):
     return sum(a) / len(a) if a else 0.0
 
 
-# ------------------------------------------------------------------ input, for the menu's two clicks
+# ------------------------------------------------------------------ keys, to a window
+ENTER, ESCAPE = 0x0D, 0x1B
+WM_KEYDOWN, WM_KEYUP = 0x0100, 0x0101
+if _u32:
+    _u32.PostMessageW.argtypes = [W.HWND, W.UINT, W.WPARAM, W.LPARAM]
+
+
+def press(hwnd, key):
+    """A key pressed and let go, sent to the window as messages: the person's own
+    keyboard and mouse are not used, and it reaches the window with the PC locked."""
+    _u32.PostMessageW(W.HWND(hwnd), WM_KEYDOWN, key, 1)
+    time.sleep(0.1)
+    _u32.PostMessageW(W.HWND(hwnd), WM_KEYUP, key, 0xC0000001)
+
+
+# ------------------------------------------------------------------ the mouse (the tests no longer use it)
 class _MOUSEINPUT(C.Structure):
     _fields_ = [("dx", C.c_long), ("dy", C.c_long), ("mouseData", W.DWORD), ("dwFlags", W.DWORD), ("time", W.DWORD),
                 ("dwExtraInfo", C.c_size_t)]

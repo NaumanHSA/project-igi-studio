@@ -163,9 +163,15 @@ def oriented(mesh, trans):
         verts.append([vx + 24, vy + 24, z, (t1 << 2) | t2, sl])
     tris = []
     for a, b, c, top in mesh.tris:
-        # a mirrored cube is drawn the other way round (terrain.py's ids), so its
-        # faces still face up
-        tris.append([c, b, a, top] if trans & 4 else [a, b, c, top])
+        # A mirrored cube is drawn the other way round (terrain.py's ids), so its
+        # faces still face up. Turned round, a face can no longer go on in the
+        # strip it was in: the game reads each face of a strip from the one
+        # before, and with every face's points reversed it draws them from the
+        # wrong points - big pale sheets of sky where a rebuilt mission kept a
+        # mirrored cube of the level's (2026-11-03, tried in the game: with each
+        # face a strip of its own they are gone, not turned round the ground
+        # there is not drawn at all). So each is a strip of its own.
+        tris.append([c, b, a, 0xF0] if trans & 4 else [a, b, c, top])
     return Mesh(verts, mesh.nfixed, tris)
 
 
@@ -417,7 +423,7 @@ def cube_mesh(z9, bottom3, level, own=None, keep=None):
         # the whole square in this cube: the game's own layout, triangle for triangle
         verts = [[GRID9[k][0], GRID9[k][1], lz[k], 0, SLIDE9.get(k, 0)] for k in range(9)]
         tris = [[a, b, c, STRIP8[i]] for i, (a, b, c) in enumerate(TRIS8)]
-        return _with_flags(_adopt_slides(Mesh(verts, 4, tris), own, keep))
+        return _with_flags(_unflip(_adopt_slides(Mesh(verts, 4, tris), own, keep)))
     polys = []
     for a, b, c in TRIS8:
         poly = _clip_slab([pts[a], pts[b], pts[c]], own_edge)
@@ -426,22 +432,42 @@ def cube_mesh(z9, bottom3, level, own=None, keep=None):
     return _assemble(polys, own, keep) if polys else None
 
 
+def _on_border(v):
+    return v[0] in (0, 48) or v[1] in (0, 48)
+
+
 def _assemble(polys, own=None, keep=None):
     """Cut pieces into a mesh: fixed vertices (corners and cut points) first,
-    sliding ones (the grid's middles and centre, and the level's own middle-
-    height points kept on its edge) after, each onto a fixed one."""
+    sliding ones (the grid's middles and centre, the level's own middle-height
+    points kept on its edge, and every cut point inside the square) after, each
+    onto a fixed one.
+
+    A cut point inside the square slides: in the game's own cubes every fixed
+    point is on the square's edge (none inside, in 9,463 cut cubes of level 2).
+    Left fixed, it stays where it is as the cube is seen from further off while
+    the points on the edge merge, and the faces between them turn over: the sky
+    shows through them, as big pale sheets (2026-11-03). Only a cube with no
+    fixed point on its edge at all (a piece of ground that rises through the
+    floor in the middle) keeps them fixed, or it would have none."""
+    polys = [[e for i, e in enumerate(p) if e[0] != p[i - 1][0]] if len(p) > 1 else p for p in polys]
+    polys = [p for p in polys if len(p) >= 3]
+    slides_at = {}
+    for poly in polys:
+        for (x, y, z), tag in poly:
+            if (x, y, z) not in slides_at:
+                slides_at[(x, y, z)] = tag[1] >= 4 if tag[0] == "grid" else tag[1]
+    if any(_on_border(p) and not s for p, s in slides_at.items()):
+        for p in slides_at:
+            if not _on_border(p):
+                slides_at[p] = True
     fixed, sliding, index, faces = [], [], {}, []
     for poly in polys:
-        # a point twice in a row would make every fan from it flat
-        poly = [e for i, e in enumerate(poly) if e[0] != poly[i - 1][0]] if len(poly) > 1 else poly
-        if len(poly) < 3:
-            continue
         ids = []
         for (x, y, z), tag in poly:
             key = (x, y, z)
             ent = index.get(key)
             if ent is None:
-                slides = tag[1] >= 4 if tag[0] == "grid" else tag[1]
+                slides = slides_at[key]
                 lst = sliding if slides else fixed
                 ent = index[key] = (not slides, len(lst))
                 lst.append([x, y, z, 0, 0, tag])
@@ -473,7 +499,53 @@ def _assemble(polys, own=None, keep=None):
         tris.append([ia, ib, ic, 0xF0])                   # each face a strip of its own
     if not tris:
         return None
-    return _with_flags(_adopt_slides(Mesh(verts, nfix, tris), own, keep))
+    return _with_flags(_unflip(_adopt_slides(Mesh(verts, nfix, tris), own, keep)))
+
+
+def _area2(a, b, c):
+    return (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+
+
+def far_flips(m):
+    """The faces that turn over once every sliding point has merged into its
+    fixed one, as the game draws the cube from further off: seen from above, the
+    sky shows through each."""
+    far = [m.verts[v[4]] if i >= m.nfixed else v for i, v in enumerate(m.verts)]
+    out = []
+    for t, (a, b, c, _) in enumerate(m.tris):
+        near = _area2(m.verts[a], m.verts[b], m.verts[c])
+        f = _area2(far[a], far[b], far[c])
+        if (near > 0 and f < 0) or (near < 0 and f > 0):
+            out.append(t)
+    return out
+
+
+def _unflip(m):
+    """A sliding point inside the square whose merge turns a face over merges
+    into another fixed point instead: the one that leaves fewest faces turned
+    over, the nearest of those. The points on the square's edge keep their rule,
+    which the cube beside shares."""
+    bad = far_flips(m)
+    if not bad:
+        return m
+    inside = [i for i in range(m.nfixed, len(m.verts)) if not _on_border(m.verts[i])]
+    for _ in range(3):
+        for i in inside:
+            if not any(i in m.tris[t][:3] for t in bad):
+                continue
+            v = m.verts[i]
+            order = _inside_order(v, m.verts[:m.nfixed])
+            best = None
+            for rank, j in enumerate(order):
+                v[4] = j
+                score = (len(far_flips(m)), rank)
+                if best is None or score < best[0]:
+                    best = (score, j)
+            v[4] = best[1]
+            bad = far_flips(m)
+            if not bad:
+                return m
+    return m
 
 
 def _adopt_slides(m, own, keep=None):
@@ -527,12 +599,25 @@ def _slide_to(v, fixed):
                 best, bd = i, d
         if best is not None:
             return best
-    best, bd = 0, None
-    for i, f in enumerate(fixed):
-        d = ((f[0] - x) ** 2 + (f[1] - y) ** 2 + (f[2] - z) ** 2, f[0], f[1], f[2])
-        if bd is None or d < bd:
-            best, bd = i, d
-    return best
+    return _inside_order(v, fixed)[0]
+
+
+def _inside_order(v, fixed):
+    """The fixed points a sliding point inside the square may merge into, best
+    first. A cut point on the cube's floor or ceiling goes to the nearest fixed
+    point on that same plane: the cube on the other side of it has the same cut
+    points there, and picks the same, so the ground leaving one and entering the
+    other folds to the same line in both (folded anywhere else, a triangle of
+    sky opens between them). Then the nearest counting height too, so merging
+    never pulls a face across the cube."""
+    x, y, z = v[0], v[1], v[2]
+
+    def rank(i):
+        f = fixed[i]
+        same = z in (0, 48) and f[2] == z
+        d2 = (f[0] - x) ** 2 + (f[1] - y) ** 2
+        return (0, d2, f[0], f[1]) if same else (1, d2 + (f[2] - z) ** 2, f[0], f[1], f[2])
+    return sorted(range(len(fixed)), key=rank)
 
 
 def _with_flags(m):
