@@ -1628,7 +1628,8 @@ function knowledge(kinds, drop) {
     "- hack targets are the level's own terminals; kill, destroy and collect need targets the game can test (no_task_id means it can't).",
     "- Keep a way on foot from the player start to every objective, and don't wall the player in.",
     "- Weapons and ammo lie on something, as the game's own do: a desk, a crate, a box or a bed. Place that first, then the pickup at the same spot, and it is laid on top.",
-    "- A gate goes into the fence line: place_object the gate (304_01_1) on the line, facing along it; it takes out the fence panels in its way. Fence panels lie along the ground up to about 10 degrees of slope; steeper, they are let into it.",
+    "- A gate goes into the fence line: place_object the gate (304_01_1) on the line, facing along it; it takes out the fence panels in its way.",
+    "- Anything placed on the ground, fence panels, walls and gates included, levels the ground under it and smooths it for 5 m round it, at one height with what stands within 5 m. Don't shape the ground for them.",
     has("test") ? "- A mission is in the game only once apply_to_game has run. Until then it is only in the studio." :
       "- Building the mission into the game (Apply) is the user's action. Never say the mission is in the game.",
     "",

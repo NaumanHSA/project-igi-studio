@@ -51,12 +51,13 @@ player can get through it first time, and an alarm is bad news rather than the e
 - Fences join up. A gap in a fence is a way in, so make it on purpose or close it.
 - A gate goes in the fence line: `place_object` with the gate (304_01_1) on the line, facing
   along it. It takes out the panels in its way and fills to the fence on each side.
-- Fence panels and walls lie along the ground, tilted with it, up to about 10 degrees. On
-  steeper ground they are let into it, so run fences along the slope or level it first.
 - Weapons and ammo lie on something: a desk, a crate, a box or a bed, as the game's own do.
   Place that first, then the pickup at the same spot: it is laid on top.
-- Things stand on level ground. Use `shape_ground` under a building before placing it,
-  and check it in 3D: a building on a slope floats on one side and is buried on the other.
+- Things stand on level ground, and the studio sees to it: anything you place on the ground,
+  fence panels, walls and gates included, levels the ground under it and smooths it for 5 m
+  round it, at one height with what stands within 5 m. You don't shape the ground for them.
+  A run of fence climbing more than about 4 m steps where it has to, so lay fences and camps
+  on reasonably even ground, and `shape_ground` only for what you want shaped.
 - Clusters, not grids. Put things close together with space between clusters, and leave
   open ground to cross, because open ground is what the player is afraid of.
 - Height matters. Towers need a line of sight, and ridges hide things.

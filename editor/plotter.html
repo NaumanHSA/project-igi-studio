@@ -2655,7 +2655,6 @@ function asDoor(o,kind){
   if(!d||(o.door&&o.door.kind))return o;
   o.door={kind:kind||"door",stop:d.stop.slice(),slider:d.slider,head:d.head,fixed:(d.fixed||[0,0]).slice(),
     openTime:d.openTime,maxAngle:d.maxAngle,pickTime:d.pickTime,close:d.close||"",sounds:(d.sounds||[]).slice()};
-  o.flatten=false;
   return o;
 }
 var intCache={v:"",src:null,list:[]};
@@ -2850,10 +2849,6 @@ function settle(o,explicit){
   var x0=o.x,y0=o.y,seq=(o._gq=(o._gq||0)+1);
   var pt={kind:kindOf(o),x:o.x,y:o.y,gamma:o.gamma||0,model:kindOf(o)==="building"?o.model:null,ref:o.own?null:o.ref};
   if(near!=null)pt.z=near;
-  // a fence panel or a wall of yours lies along the ground, tilted with it, as
-  // the build lays it (surface.py follow) - not on the lowest ground under it
-  var follows=!explicit&&o.own&&o.type==="building"&&!o.exact&&!(o.door&&typeof o.door==="object")&&!!segInfo(o.model);
-  if(follows)pt.follow=true;
   var body=planContext();body.points=[pt];
   if(o.type==="building")body.objects=body.objects.filter(function(q){return !(q.x===o.x&&q.y===o.y&&q.model===o.model)});
   return fetch("api/ground",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
@@ -2862,9 +2857,6 @@ function settle(o,explicit){
       if(!a||a.z==null||o._gq!==seq||o.x!==x0||o.y!==y0)return;   // gone, or moved again since
       // the server knows the level's ground; the mission's shaping is added here
       var gz=a.z+lift+(a.on==="terrain"?groundShift(o.x,o.y):0);
-      if(follows&&a.beta!=null&&(Math.abs((o.alpha||0)-a.alpha)>1e-4||Math.abs((o.beta||0)-a.beta)>1e-4)){
-        o.alpha=a.alpha;o.beta=a.beta;touch();draw();
-      }
       if(Math.abs(gz-o.z)<0.005)return;
       setZ(o,+gz.toFixed(3));
     }).catch(function(){});
@@ -2945,13 +2937,9 @@ function applyHeights(j){
   if(JSON.stringify(tb)!==JSON.stringify(TBUDGET)){TBUDGET=tb;if(groundOpen())renderGround()}
   var moves=[];
   placements.forEach(function(q){
-    // a fence panel or wall lies along the ground: the build's tilt for it too
-    var z=(j.placements||{})[q.uid],t=(j.tilts||{})[q.uid];
-    if(q.exact)return;
-    var up=z!=null&&Math.abs(z-q.z)>=0.02;
-    var tilt=t&&(Math.abs((q.alpha||0)-t[0])>1e-4||Math.abs((q.beta||0)-t[1])>1e-4)?t:null;
-    if(!up&&!tilt)return;
-    moves.push({o:q,z:up?z:q.z,tilt:tilt,riders:up?ridersOf(q,false):[]});
+    var z=(j.placements||{})[q.uid];
+    if(q.exact||z==null||Math.abs(z-q.z)<0.02)return;
+    moves.push({o:q,z:z,riders:ridersOf(q,false)});
   });
   Object.keys(edits).forEach(function(ref){
     var e=edits[ref],o=objByRef(ref),z=(j.edits||{})[ref];
@@ -2978,7 +2966,6 @@ function applyHeights(j){
   try{
     moves.forEach(function(mv){
       var dz=mv.z-mv.o.z;
-      if(mv.tilt){mv.o.alpha=mv.tilt[0];mv.o.beta=mv.tilt[1]}
       if(mv.o.own)mv.o.z=mv.z;else editShipped(mv.o,{x:mv.o.x,y:mv.o.y,z:mv.z});
       carry(mv.riders.filter(function(r){return !moves.some(function(m2){return m2.o===r})}),0,0,dz);
       syncDoorsOf(mv.o);                 // a building's own doors stay in its doorways
@@ -4703,14 +4690,26 @@ function drawBuildable(){
 // Can a building stand here? How much the ground under its footprint varies,
 // whether it is on the map at all, and whether something is built there already.
 // A new building gets the ground under it levelled when the mission is built
-// (studio/build/flatten.py writes height maps): real buildings by default, not walls
-// or small props. One height map moves the ground about 4 m either way.
+// (studio/build/flatten.py writes height maps). Everything of yours: a building, a
+// fence panel, a wall, a gate, a crate, whether placed by hand or by a tool.
 var FLAT_MAX=20,FLAT_APRON=1.5;          // ground up to 20 m uneven can be levelled: past 4 m, by the terrain itself
-function wantsFlat(model){
-  var z=MODELS&&MODELS.sizes&&MODELS.sizes[model];
-  return !!(z&&z.body&&z.body.length&&z.h>=2.5&&Math.min(z.w,z.d)>=2&&z.w*z.d>=16&&!segInfo(model));
+function footprintOf(model){
+  var s=MODELS&&MODELS.sizes&&MODELS.sizes[model];
+  if(!s)return [];
+  if(s.body&&s.body.length)return s.body;
+  return s.w&&s.d?[[(s.cx||0)-s.w/2,(s.cy||0)-s.d/2,s.w,s.d]]:[];
 }
-function flattens(o){return !!o&&(o.type==="building"||o.type==null)&&(o.flatten!=null?!!o.flatten:wantsFlat(o.model))}
+function wantsFlat(model){return footprintOf(model).length>0}
+// what stays out of it, as plan.py wants_flat has it: a door and what came with a
+// building, a pasted area kept as the game has it, what drives or flies, what is
+// on an area levelled for it, and what was told to keep its ground
+function flattens(o){
+  if(!o||(o.type!=="building"&&o.type!=null))return false;
+  if(o.keepGround||o.of||o.batch||o.flight||drives(o)||(o.lift&&typeof o.lift==="object"))return false;
+  if(o.door&&typeof o.door==="object"&&o.door.kind!=="gate")return false;
+  if(o.onLevel&&groundEdits.some(function(a){return a.uid===o.onLevel}))return false;
+  return wantsFlat(o.model);
+}
 var placeMemo={};
 function placeCheck(o){
   var s=MODELS&&MODELS.sizes&&MODELS.sizes[o.model];
@@ -4746,7 +4745,6 @@ function placeCheck(o){
       }
     }
     if(hit)res={level:"bad",why:"overlaps "+displayName(hit),spread:spread};
-    else if(fence)res={level:spread>3?"warn":"ok",why:spread>3?"the ground drops "+spread.toFixed(1)+" m along it":"",spread:spread};
     else if(flat){
       if(spread>FLAT_MAX)res={level:"bad",why:"too steep even to level: the ground varies "+spread.toFixed(1)+" m under it",spread:spread};
       else if(spread>0.25)res={level:spread>4?"warn":"ok",why:"the ground under it gets levelled ("+spread.toFixed(1)+" m)",spread:spread,flat:true};
@@ -4908,7 +4906,7 @@ function addBuildingProps(b){
   slots.forEach(function(sl){
     var o={uid:uid(),own:true,type:"building",kind:"object",model:sl.model,name:modelTitle(sl.model),
       x:+(b.x+sl.dx*c-sl.dy*sn).toFixed(3),y:+(b.y+sl.dx*sn+sl.dy*c).toFixed(3),z:+(b.z+sl.dz).toFixed(3),
-      gamma:+(((((b.gamma||0)+sl.dh)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),exact:true,flatten:false,
+      gamma:+(((((b.gamma||0)+sl.dh)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),exact:true,
       of:b.uid,slot:{dx:sl.dx,dy:sl.dy,dz:sl.dz,dh:sl.dh}};
     placements.push(o);made++;
   });
@@ -4937,7 +4935,7 @@ function addBuildingLifts(b){
     }
     var o={uid:uid(),own:true,type:"building",kind:"object",model:L.cabin||"200_01_1",name:"Lift",
       x:+(b.x+L.dx*c-L.dy*sn).toFixed(3),y:+(b.y+L.dx*sn+L.dy*c).toFixed(3),z:+(b.z+L.dz).toFixed(3),
-      gamma:+(((((b.gamma||0)+lh)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),exact:true,flatten:false,
+      gamma:+(((((b.gamma||0)+lh)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),exact:true,
       of:b.uid,slot:{dx:L.dx,dy:L.dy,dz:L.dz,dh:lh},
       lift:{speed:L.speed||5,stops:(L.stops||[]).map(inLift),calls:(L.calls||[]).map(inLift),
             inside:L.inside?inLift(L.inside):null}};
@@ -5021,7 +5019,7 @@ function addGateKit(wx,wy,gamma,alone){
     var x=at[0]-r[0],y=at[1]-r[1],z=groundAt(x,y);
     var o={uid:uid(),own:true,type:"building",kind:"object",model:model,name:name,
       x:+x.toFixed(3),y:+y.toFixed(3),z:+((z!=null?z:guessZ(x,y))||0).toFixed(3),
-      gamma:+(((g%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),flatten:false};
+      gamma:+(((g%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5)};
     placements.push(o);made.push(o);
     return o;
   }
@@ -5055,11 +5053,9 @@ function addGateKit(wx,wy,gamma,alone){
   });
   // the switch on the gate post, at hand height, as level 10 has its gate switch
   var px=wx+ux*(L-0.25)-uy*0.35,py=wy+uy*(L-0.25)+ux*0.35,gz=groundAt(px,py);
-  sw.x=+px.toFixed(3);sw.y=+py.toFixed(3);sw.z=+(((gz!=null?gz:guessZ(px,py))||0)+1.06).toFixed(3);
+  sw.x=+px.toFixed(3);sw.y=+py.toFixed(3);sw.z=+(((gz!=null?gz:guessZ(px,py))||0)+GATE_SWITCH_UP).toFixed(3);
   sw.gamma=+(((th%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5);
   placements.push(sw);made.push(sw);
-  // the panels lie along the ground, as the build lays them
-  made.forEach(function(o){if(o.type==="building"&&!o.door)settle(o)});
   touch();renderSide();renderList();draw();
   return made;
 }
@@ -5084,6 +5080,7 @@ function guardGraph(wx,wy,wz){
 // time limit and weather. What it understood is listed before anything is
 // added; then it goes in as one undo step, selected as a group.
 var GATE_LEAF="304_01_1",GATE_FENCE="303_02_1",GATE_HALF="303_01_1";
+var GATE_SWITCH_UP=1.06;                 // hand height on the post, as level 10's
 var DRAFT_NUM={a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,couple:2,pair:2,few:3,several:4};
 var DRAFT_UNITS=[
   [/^snipers?$/,"AITYPE_SNIPER","Sniper"],[/^gunners?$/,"AITYPE_GUNNER","Gunner"],[/^rpg$|^rpgs$|^rocketeers?$/,"AITYPE_RPG","RPG trooper"],
@@ -5359,7 +5356,7 @@ function buildCompound(cx,cy,C){
   var names={};((CATALOG&&CATALOG.structures)||[]).forEach(function(s){names[s.model]=s.name});
   function put(model,x,y,g){
     var gz=flatZ!=null?flatZ:groundAt(x,y),o={uid:uid(),own:true,type:"building",kind:"object",model:model,name:names[model]||model,
-      x:+x.toFixed(3),y:+y.toFixed(3),z:gz!=null?+gz.toFixed(3):(terrainZ(x,y)||0),gamma:+(((g%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),flatten:wantsFlat(model)};
+      x:+x.toFixed(3),y:+y.toFixed(3),z:gz!=null?+gz.toFixed(3):(terrainZ(x,y)||0),gamma:+(((g%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5)};
     if(area)o.onLevel=area.uid;
     placements.push(o);made.push(o);return o;
   }
@@ -5402,7 +5399,7 @@ function buildCompound(cx,cy,C){
     [[gateInfo.g1,1,-1],[gateInfo.g2,-1,1]].forEach(function(L2,li){
       var c=[L2[0][0]+gateInfo.ux*L2[1]*leaf.len/2,L2[0][1]+gateInfo.uy*L2[1]*leaf.len/2];
       var o=put("304_01_1",c[0]-r[0],c[1]-r[1],gg);
-      o.name="Gate";o.flatten=false;o.door={stop:[L2[2]*(leaf.len-0.4),0],switch:sw.uid};
+      o.name="Gate";o.door={stop:[L2[2]*(leaf.len-0.4),0],switch:sw.uid};
     });
     // the switch: inside, on the fence by the second post, at hand height
     var inx=cx-(gateInfo.g2[0]+gateInfo.g1[0])/2,iny=cy-(gateInfo.g2[1]+gateInfo.g1[1])/2,il=Math.hypot(inx,iny)||1;
@@ -6190,7 +6187,7 @@ function objectInspector(el){
   if(own)h+=driveSection(o);
   if(own&&o.flight)h+=flightSection(o);
   if(own&&o.type==="building"&&!segInfo(o.model))h+=mapLabelSection(o);
-  if(own&&o.type==="building"&&!segInfo(o.model))h+=flattenSection(o);
+  if(own&&o.type==="building")h+=flattenSection(o);
   if(o.model&&!isSoldier&&!isPickup)h+=textureSection(o);
   if(hasLayout(o))h+=interiorSection(o);
   if(isSoldier)h+=patrolSection(o);
@@ -6288,7 +6285,7 @@ function objectInspector(el){
   if($("idel"))$("idel").addEventListener("click",removeSel);
   if($("i3d"))$("i3d").addEventListener("click",function(){open3d(sel)});
   if($("iflat"))$("iflat").addEventListener("change",function(){
-    o.flatten=$("iflat").checked;touch();renderSide();draw()});
+    o.keepGround=$("iflat").checked?undefined:true;touch();renderSide();draw()});
   if($("iint"))$("iint").addEventListener("change",function(){
     o.interior=$("iint").checked;touch();renderSide();draw()});
   if($("iaddint"))$("iaddint").addEventListener("click",function(){
@@ -6332,7 +6329,7 @@ function flattenSection(o){
     '<label class="sg-t"><input type="checkbox" id="iflat"'+(on?' checked':'')+'> Level the ground under it</label>'+
     '<p class="hint" style="margin:2px 0 0">'+(sp==null?'':'The ground under it varies '+sp.toFixed(1)+' m. ')+
     (on?(sp!=null&&sp>GROUND_MAX?'That is more than a height map can move: the build rebuilds the terrain under it, so it is levelled all the same.':
-        'When the mission is built the ground is levelled at its median height, with a '+FLAT_APRON+' m apron easing back into the slope.')
+        'When the mission is built the ground is levelled, at one height with what stands within '+LEVEL_NEAR+' m of it, and eases back over '+PAD_BLEND+' m.')
       :'It rests on the lowest ground under it, and sinks into the slope on the high side.')+'</p>';
 }
 function interiorSection(o){
@@ -7694,7 +7691,7 @@ function placeFlight(x,y){
   var z=groundAt(x,y);
   var o={uid:uid(),own:true,type:"building",kind:"object",model:f.model,name:(f.kind==="plane"?"Plane":"Helicopter")+" flight",
     x:+x.toFixed(2),y:+y.toFixed(2),z:z!=null?z:0,gamma:+(((f.rot||[0,0,0])[2])||0).toFixed(5),
-    flight:{level:f.level,id:f.id,start:"now"},flatten:false};
+    flight:{level:f.level,id:f.id,start:"now"}};
   placements.push(o);
   FLIGHTPICK=null;sel=o;multi=[];
   touch();renderSide();renderCutscenes();renderList();draw();
@@ -10391,40 +10388,110 @@ function shapeZ(a,z,wt,x,y,grid,k){
 }
 // The pads the build levels under your buildings (flatten.py pad_for, FLAT and
 // BLEND): the footprint and 1.5 m round it at the middle height of the ground
-// under it (as the areas and the brush leave it), eased back over 4 m. The map
-// and the 3D close-up show the ground the game gets.
-var PAD_FLAT=1.5,PAD_BLEND=4.0;
+// under it (as the areas and the brush leave it), eased back over 5 m; and what
+// stands close together at one height (flatten.py level_together). The map and
+// the 3D close-up show the ground the game gets.
+var PAD_FLAT=1.5,PAD_BLEND=5.0,LEVEL_NEAR=5.0,LEVEL_SPREAD=4.0,ON_GROUND=0.6,FLAT_ENOUGH=0.1;
+function padDist(pd,x,y){
+  var dx=x-pd.x,dy=y-pd.y,mx=dx*pd.c+dy*pd.s,my=-dx*pd.s+dy*pd.c,d=1e9;
+  for(var r=0;r<pd.rects.length;r++){
+    var q=pd.rects[r];
+    d=Math.min(d,Math.hypot(Math.max(q[0]-mx,0,mx-(q[0]+q[2])),Math.max(q[1]-my,0,my-(q[1]+q[3]))));
+  }
+  return d;
+}
+function levelTogether(pads){
+  var n=pads.length,up=[],lo=[],hi=[],pairs=[],i,j;
+  function root(a){while(up[a]!==a){up[a]=up[up[a]];a=up[a]}return a}
+  for(i=0;i<n;i++){up[i]=i;lo[i]=hi[i]=pads[i].target}
+  for(i=0;i<n;i++){
+    var A=pads[i];
+    if(A.fixed)continue;
+    for(j=i+1;j<n;j++){
+      var B=pads[j];
+      if(B.fixed)continue;
+      var same=!!A.gate&&A.gate===B.gate;
+      if(!same){
+        var ba=A.box,bb=B.box;
+        if(ba[0]>bb[1]||bb[0]>ba[1]||ba[2]>bb[3]||bb[2]>ba[3])continue;
+        var close=false;
+        for(var t=0;t<A.pts.length&&!close;t++)close=padDist(B,A.pts[t][0],A.pts[t][1])<=LEVEL_NEAR;
+        if(!close)continue;
+      }
+      pairs.push([same?-1:Math.abs(A.target-B.target),i,j]);
+    }
+  }
+  pairs.sort(function(p,q){return p[0]-q[0]||p[1]-q[1]||p[2]-q[2]});
+  pairs.forEach(function(q){
+    var a=root(q[1]),b=root(q[2]);
+    if(a===b)return;
+    var l=Math.min(lo[a],lo[b]),h=Math.max(hi[a],hi[b]);
+    if(q[0]>=0&&h-l>LEVEL_SPREAD)return;
+    up[b]=a;lo[a]=l;hi[a]=h;
+  });
+  var groups={};
+  pads.forEach(function(p,k){if(!p.fixed)(groups[root(k)]=groups[root(k)]||[]).push(p)});
+  Object.keys(groups).forEach(function(g){
+    var zs=[];
+    groups[g].forEach(function(p){zs=zs.concat(p.zs)});
+    zs.sort(function(q1,q2){return q1-q2});
+    groups[g].forEach(function(p){p.target=zs[zs.length>>1]});
+  });
+}
+// standing in or under something bigger: on its floor, not on the ground
+function insideAnother(p){
+  var s=MODELS.sizes[p.model]||{},area=(s.w||0)*(s.d||0),g=p.gamma||0,c=Math.cos(g),sn=Math.sin(g);
+  var cx=s.cx||0,cy=s.cy||0,x=p.x+cx*c-cy*sn,y=p.y+cx*sn+cy*c;
+  var others=placements.concat(MODE==="empty"?[]:(LEVEL&&LEVEL.objects)||[]);
+  for(var i=0;i<others.length;i++){
+    var q=others[i];
+    if(q===p||q.type!=="building"||q.cutscene||q.x==null)continue;
+    var qs=MODELS.sizes[q.model];
+    if(!qs||!qs.body||(qs.w||0)*(qs.d||0)<1.5*area)continue;
+    var reach=Math.hypot(qs.w||0,qs.d||0)+Math.hypot(qs.cx||0,qs.cy||0);
+    if(Math.abs(q.x-x)>reach||Math.abs(q.y-y)>reach)continue;
+    if(inBody(q,x,y,0))return true;
+  }
+  return false;
+}
 function buildingPads(){
-  var out=[];
+  var out=[],all=[];
   if(!TERR||!MODELS||!MODELS.sizes)return out;
   placements.forEach(function(p){
-    if(p.type!=="building"||!flattens(p))return;
-    var s=MODELS.sizes[p.model];
-    if(!s||!s.body||!s.body.length)return;
-    var g=p.gamma||0,c=Math.cos(g),sn=Math.sin(g),zs=[],xs=[],ys=[];
-    s.body.forEach(function(r){
+    if(p.type!=="building"||!flattens(p)||insideAnother(p))return;
+    var seat=seatOf(p.model),fixed=false,target=null;
+    if(p.exact){
+      // put down by hand: it stays, and the ground comes to it if it is on the ground at all
+      var gz=zOn(TERR.h,p.x,p.y);target=p.z-seat;
+      if(gz==null||Math.abs(target-gz)>ON_GROUND)return;
+      fixed=true;
+    }
+    var rects=footprintOf(p.model),st=p.door&&p.door.kind==="gate"&&p.door.stop;
+    if(st)rects=rects.concat(rects.map(function(r){return [r[0]+(st[0]||0),r[1]+(st[1]||0),r[2],r[3]]}));
+    var g=p.gamma||0,c=Math.cos(g),sn=Math.sin(g),zs=[],xs=[],ys=[],pts=[];
+    rects.forEach(function(r){
       var nx=Math.max(1,Math.ceil(r[2])),ny=Math.max(1,Math.ceil(r[3]));
       for(var i=0;i<=nx;i++)for(var j=0;j<=ny;j++){
         var mx=r[0]+r[2]*i/nx,my=r[1]+r[3]*j/ny,wx=p.x+mx*c-my*sn,wy=p.y+mx*sn+my*c;
-        xs.push(wx);ys.push(wy);
+        xs.push(wx);ys.push(wy);pts.push([wx,wy]);
         var z=zOn(TERR.h,wx,wy);if(z!=null)zs.push(z);
       }
     });
     if(!zs.length)return;
     zs.sort(function(q1,q2){return q1-q2});
-    if(zs[zs.length-1]-zs[0]<=0.25)return;          // flat enough already: no pad (apply_plan.py)
     var R=PAD_FLAT+PAD_BLEND;
-    out.push({p:p,rects:s.body,c:c,s:sn,target:zs[zs.length>>1],z:zs[zs.length>>1]+seatOf(p.model),
+    all.push({p:p,x:p.x,y:p.y,rects:rects,c:c,s:sn,zs:zs,pts:pts,seat:seat,fixed:fixed,target:fixed?target:zs[zs.length>>1],
+      gate:p.door&&p.door.kind==="gate"?(p.door.switch||p.uid):null,
       box:[Math.min.apply(null,xs)-R,Math.max.apply(null,xs)+R,Math.min.apply(null,ys)-R,Math.max.apply(null,ys)+R]});
+  });
+  levelTogether(all);
+  all.forEach(function(pd){
+    pd.z=pd.target+pd.seat;
+    if(pd.zs.some(function(z){return Math.abs(z-pd.target)>FLAT_ENOUGH}))out.push(pd);
   });
   return out;
 }
-function padWeight(pd,x,y){
-  var dx=x-pd.p.x,dy=y-pd.p.y,mx=dx*pd.c+dy*pd.s,my=-dx*pd.s+dy*pd.c,d=1e9;
-  for(var r=0;r<pd.rects.length;r++){
-    var q=pd.rects[r];
-    d=Math.min(d,Math.hypot(Math.max(q[0]-mx,0,mx-(q[0]+q[2])),Math.max(q[1]-my,0,my-(q[1]+q[3]))));
-  }
+function padWeight(d){
   if(d<=PAD_FLAT)return 1;
   if(d>=PAD_FLAT+PAD_BLEND)return 0;
   var t=(PAD_FLAT+PAD_BLEND-d)/PAD_BLEND;
@@ -10434,7 +10501,7 @@ function padWeight(pd,x,y){
 var PAD_SIG="";
 function padSignature(){
   return placements.filter(function(p){return p.type==="building"&&flattens(p)}).map(function(p){
-    return p.uid+":"+p.model+":"+(+p.x).toFixed(2)+":"+(+p.y).toFixed(2)+":"+(+(p.gamma||0)).toFixed(3)}).join("|");
+    return p.uid+":"+p.model+":"+(+p.x).toFixed(2)+":"+(+p.y).toFixed(2)+":"+(+(p.gamma||0)).toFixed(3)+(p.exact?":"+(+p.z).toFixed(2):"")}).join("|");
 }
 function padsSoon(){
   var sig=padSignature();
@@ -10505,14 +10572,24 @@ function applyGround(){
   if(pads.length){
     var u=pads.reduce(function(a2,pd){return a2?[Math.min(a2[0],pd.box[0]),Math.max(a2[1],pd.box[1]),Math.min(a2[2],pd.box[2]),Math.max(a2[3],pd.box[3])]:pd.box.slice()},null);
     var c3=cellsOf(u[0],u[1],u[2],u[3]);grow(c3);
-    for(var j3=c3[2];j3<=c3[3];j3++)for(var i3=c3[0];i3<=c3[1];i3++){
-      var k3=j3*W_+i3;if(h[k3]!==h[k3])continue;
-      var x3=m.x0+i3*m.cell,y3=m.y0+j3*m.cell,best=null,bw=0;
-      pads.forEach(function(pd){
-        var b=pd.box;if(x3<b[0]||x3>b[1]||y3<b[2]||y3>b[3])return;
-        var w3=padWeight(pd,x3,y3);if(w3>bw){bw=w3;best=pd}
-      });
-      if(best)h[k3]=h[k3]+(best.target-h[k3])*bw;
+    // each pad holds its own footprint; between pads at different heights the ground
+    // goes smoothly from one to the other, the nearer counting for more (flatten.py
+    // _sample). What a thing of the level's own stands on stays
+    var holds=keepList().filter(function(k){return !k.o.own&&k.o.type!=="pickup"});
+    var pw=Object.create(null);
+    pads.forEach(function(pd){
+      var cp=cellsOf(pd.box[0],pd.box[1],pd.box[2],pd.box[3]);
+      for(var jp=cp[2];jp<=cp[3];jp++)for(var ip=cp[0];ip<=cp[1];ip++){
+        var kp=jp*W_+ip;if(h[kp]!==h[kp])continue;
+        var xp=m.x0+ip*m.cell,yp=m.y0+jp*m.cell,dp=padDist(pd,xp,yp),wp=padWeight(dp);
+        if(wp<=0)continue;
+        var qp=wp/((dp+0.25)*(dp+0.25)),e=pw[kp]||(pw[kp]={q:0,t:0,w:0,x:xp,y:yp});
+        e.q+=qp;e.t+=qp*pd.target;if(wp>e.w)e.w=wp;
+      }
+    });
+    for(var kk in pw){
+      var e3=pw[kk],hold=holds.length?keepAt(holds,e3.x,e3.y):1;
+      if(hold>0)h[kk]=h[kk]+(e3.t/e3.q-h[kk])*e3.w*hold;
     }
   }
   TERR.kfAt=kfAt;
@@ -13774,7 +13851,7 @@ function planOf(){
         start:p.type==="soldier"&&p.start==="follow"?"follow":undefined,
         orders:p.type==="soldier"&&p.orders&&p.orders.length?JSON.parse(JSON.stringify(p.orders)):undefined,
         interior:p.type==="building"?p.interior!==false:undefined,
-        flatten:p.type==="building"?flattens(p):undefined,
+        keepGround:p.keepGround||undefined,
         label:p.type==="building"&&p.label?{title:p.label.title||"",info:p.label.info||""}:undefined,
         cam:p.type==="camera"?p.cam:undefined,alarm:p.type==="camera"?p.alarm!==false:undefined,
         mount:p.mount||undefined,turn:p.turn||undefined,
@@ -16448,34 +16525,52 @@ function segInfo(model){
                  :{a:[cx,cy-s.d/2],b:[cx,cy+s.d/2],off:-Math.PI/2,len:hi};
 }
 function rot2(p,g){var c=Math.cos(g),s=Math.sin(g);return [p[0]*c-p[1]*s,p[0]*s+p[1]*c]}
-// The gateways of yours with a fence panel of yours across their opening:
-// [{x, y, panels}] (a gate laid into a fence line before addGateKit cut its way in)
-function gateBlocks(){
+function segEnds(p,sg){var g=p.gamma||0,a=rot2(sg.a,g),b=rot2(sg.b,g);return [[p.x+a[0],p.y+a[1]],[p.x+b[0],p.y+b[1]]]}
+// The gateways of yours: [{leaves, x0, y0, ux, uy, lo, hi}], the opening being from
+// lo to hi along (ux, uy) from (x0, y0). The leaves opened by one switch are one gateway.
+function ownGateways(){
   var out=[],seen={},leaf=segInfo(GATE_LEAF);
   if(!leaf)return out;
-  function ends(p,sg){var g=p.gamma||0,a=rot2(sg.a,g),b=rot2(sg.b,g);return [[p.x+a[0],p.y+a[1]],[p.x+b[0],p.y+b[1]]]}
+  function isLeaf(q){return q.own&&q.model===GATE_LEAF&&q.door&&typeof q.door==="object"&&q.door.kind==="gate"}
   placements.forEach(function(o){
-    var d=o.door;
-    if(!o.own||o.model!==GATE_LEAF||!d||typeof d!=="object"||d.kind!=="gate")return;
-    var key=d.switch||o.uid;if(seen[key])return;seen[key]=1;
-    var leaves=placements.filter(function(q){return q.model===GATE_LEAF&&q.door&&typeof q.door==="object"&&(q.door.switch||q.uid)===key});
-    var e0=ends(leaves[0],leaf),ux=e0[1][0]-e0[0][0],uy=e0[1][1]-e0[0][1],ul=Math.hypot(ux,uy)||1;
+    if(!isLeaf(o))return;
+    var key=o.door.switch||o.uid;if(seen[key])return;seen[key]=1;
+    var leaves=placements.filter(function(q){return isLeaf(q)&&(q.door.switch||q.uid)===key});
+    var e0=segEnds(leaves[0],leaf),ux=e0[1][0]-e0[0][0],uy=e0[1][1]-e0[0][1],ul=Math.hypot(ux,uy)||1;
     ux/=ul;uy/=ul;
-    var ox=e0[0][0],oy=e0[0][1],lo=1e9,hi=-1e9;
-    leaves.forEach(function(q){ends(q,leaf).forEach(function(e){var t=(e[0]-ox)*ux+(e[1]-oy)*uy;lo=Math.min(lo,t);hi=Math.max(hi,t)})});
+    var x0=e0[0][0],y0=e0[0][1],lo=1e9,hi=-1e9;
+    leaves.forEach(function(q){segEnds(q,leaf).forEach(function(e){var t=(e[0]-x0)*ux+(e[1]-y0)*uy;lo=Math.min(lo,t);hi=Math.max(hi,t)})});
+    out.push({leaves:leaves,x0:x0,y0:y0,ux:ux,uy:uy,lo:lo,hi:hi});
+  });
+  return out;
+}
+// Those with a fence panel of yours across the opening: [{x, y, panels}] (a gate
+// laid into a fence line before addGateKit cut its way in)
+function gateBlocks(){
+  var out=[];
+  ownGateways().forEach(function(w){
     var panels=placements.filter(function(p){
       if(!p.own||p.type!=="building"||(p.door&&typeof p.door==="object"))return false;
       var sg=segInfo(p.model);if(!sg)return false;
       var t=[],ok=true;
-      ends(p,sg).forEach(function(e){
-        if(Math.abs(-(e[0]-ox)*uy+(e[1]-oy)*ux)>0.6)ok=false;
-        t.push((e[0]-ox)*ux+(e[1]-oy)*uy);
+      segEnds(p,sg).forEach(function(e){
+        if(Math.abs(-(e[0]-w.x0)*w.uy+(e[1]-w.y0)*w.ux)>0.6)ok=false;
+        t.push((e[0]-w.x0)*w.ux+(e[1]-w.y0)*w.uy);
       });
-      return ok&&Math.max(t[0],t[1])>lo+0.3&&Math.min(t[0],t[1])<hi-0.3;
+      return ok&&Math.max(t[0],t[1])>w.lo+0.3&&Math.min(t[0],t[1])<w.hi-0.3;
     });
-    if(panels.length)out.push({x:ox+ux*(lo+hi)/2,y:oy+uy*(lo+hi)/2,panels:panels});
+    if(panels.length)out.push({x:w.x0+w.ux*(w.lo+w.hi)/2,y:w.y0+w.uy*(w.lo+w.hi)/2,panels:panels});
   });
   return out;
+}
+// Is this point within a model's outline? (inBody knows only what has a solid
+// body in the size data, and the game's box has none: a box under a pickup went
+// unseen and the check list offered another, 2026-11-03)
+function onFootprint(q,wx,wy,m){
+  var s=MODELS&&MODELS.sizes&&MODELS.sizes[q.model];
+  if(!s||!s.w||!s.d)return false;
+  var g=q.gamma||0,c=Math.cos(g),sn=Math.sin(g),dx=wx-q.x,dy=wy-q.y;
+  return Math.abs(dx*c+dy*sn-(s.cx||0))<=s.w/2+m&&Math.abs(-dx*sn+dy*c-(s.cy||0))<=s.d/2+m;
 }
 // Pickups of yours lying on the bare ground, out in the open
 function bareGroundPickups(){
@@ -16483,7 +16578,7 @@ function bareGroundPickups(){
     if(!o.own||o.type!=="pickup"||o.cutscene)return false;
     var g=groundAt(o.x,o.y);
     return g!=null&&o.z-g<0.3&&!buildingAt(o.x,o.y,o.z)&&!placements.concat(MODE==="empty"?[]:(LEVEL&&LEVEL.objects)||[]).some(function(q){
-      return q!==o&&q.model&&q.type!=="pickup"&&q.type!=="soldier"&&!q.cutscene&&inBody(q,o.x,o.y,0.3);
+      return q!==o&&q.model&&q.type!=="pickup"&&q.type!=="soldier"&&!q.cutscene&&onFootprint(q,o.x,o.y,0.3);
     });
   });
 }
@@ -16494,7 +16589,7 @@ function boxUnder(list){
   list.forEach(function(o){
     var g=groundAt(o.x,o.y);if(g==null)return;
     placements.push({uid:uid(),own:true,type:"building",kind:"object",model:BOX_MODEL,name:"Box",
-      x:o.x,y:o.y,z:+g.toFixed(3),gamma:o.gamma||0,flatten:false});
+      x:o.x,y:o.y,z:+g.toFixed(3),gamma:o.gamma||0});
     o.z=+(g+h+0.02).toFixed(3);
   });
   touch();renderSide();renderList();draw();
@@ -18581,7 +18676,7 @@ var AIB=(function(){
     }
     var o={uid:uid(),own:true,type:"building",kind:"object",model:model,name:a.name?String(a.name).slice(0,60):catName(model),
       x:+w.x.toFixed(3),y:+w.y.toFixed(3),z:fz!=null?+fz.toFixed(3):(gz!=null?+gz.toFixed(3):(terrainZ(w.x,w.y)||0)),
-      gamma:facingArg(a,w.x,w.y,0),flatten:wantsFlat(model)};
+      gamma:facingArg(a,w.x,w.y,0)};
     if(fz!=null)o.exact=true;
     var chk=inb?null:placeCheck(o);
     if(chk&&chk.level==="bad"&&!a.force)return fail("Can't place "+o.name+" there: "+chk.why+". Try a spot a little away (look_around shows what is there), or force it.");
@@ -18617,7 +18712,7 @@ var AIB=(function(){
       var m=len-at>12?panel:half,si=segInfo(m)||segInfo(panel),start=Math.min(at,Math.max(0,len-si.len));
       var P=[A[0]+Math.cos(th)*start,A[1]+Math.sin(th)*start],g=th-si.off,sp=rot2(si.a,g),x=P[0]-sp[0],y=P[1]-sp[1],gz=groundAt(x,y);
       var o={uid:uid(),own:true,type:"building",kind:"object",model:m,name:catName(m),x:+x.toFixed(3),y:+y.toFixed(3),
-        z:gz!=null?+gz.toFixed(3):(terrainZ(x,y)||0),gamma:+(((g%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5),flatten:wantsFlat(m)};
+        z:gz!=null?+gz.toFixed(3):(terrainZ(x,y)||0),gamma:+(((g%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5)};
       placements.push(o);made.push(o);at=start+si.len;
     }
     changed();made.forEach(function(o){settle(o,false)});
@@ -18879,7 +18974,7 @@ var AIB=(function(){
     (a.parts||[]).slice(0,80).forEach(function(pt,i){
       if(!pt||!MODELS.sizes[pt.model]){notes.push("Part "+(i+1)+": no model "+(pt&&pt.model)+", left out.");return}
       items.push({type:"building",kind:"object",own:true,model:pt.model,name:catName(pt.model),dx:+(+pt.dx||0).toFixed(3),dy:+(+pt.dy||0).toFixed(3),
-        z:+(+pt.dz||0).toFixed(3),gamma:gammaOf(+pt.facing_deg||0),flatten:wantsFlat(pt.model)});
+        z:+(+pt.dz||0).toFixed(3),gamma:gammaOf(+pt.facing_deg||0)});
     });
     (a.guards||[]).slice(0,12).forEach(function(g,i){var it=guardItem(g,notes,i);if(it)items.push(it)});
     (a.pickups||[]).slice(0,24).forEach(function(pk,i){
@@ -19864,7 +19959,7 @@ var AIB=(function(){
       sees_m:{type:"number",description:"how far they see, 10 to 200"},view_deg:{type:"number",description:"how wide they look, 20 to 360"}}),FACE))},
     {name:"edit_guard",description:"Change a guard (yours or the level's): type, weapon, sight, name, facing, model, and side: enemy, friend (fights for the player) or own_side (fights both).",parameters:P(Object.assign({id:{type:"string"},type:{type:"string"},weapon:{type:"string"},sees_m:{type:"number"},view_deg:{type:"number"},name:{type:"string"}},FACE),["id"])},
     {name:"set_patrol",description:"A guard's patrol: he walks through these points in order and around again, each snapped to the nearest point of his walkway graph. No points: he stands still.",parameters:P({guard_id:{type:"string"},points:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]"},places:{type:"array",items:{type:"string"},description:"place names, instead of points"}},["guard_id"])},
-    {name:"place_object",description:"Placing a gate (304_01_1) lays a whole gateway: both leaves, the switch that opens them and a fence panel each side (one_leaf true for a single leaf). A building of the game's brings the doors it has, and a door model becomes a door that opens. Place a structure or prop by its model id (list_catalog kind structures), checked the way a placement by hand is. Buildings get level ground under them. map_label names it on the map computer.",parameters:P(Object.assign(withXY({model:{type:"string"},name:{type:"string"},force:{type:"boolean",description:"place it even where the check says no"},one_leaf:{type:"boolean",description:"a gate: one leaf only, not the whole gateway"},floor:{type:"string",description:"a door inside a building: which floor (\"top\", or metres above its base)"},map_label:{type:"string"},map_info:{type:"string"}}),FACE),["model"])},
+    {name:"place_object",description:"Placing a gate (304_01_1) lays a whole gateway: both leaves, the switch that opens them and a fence panel each side (one_leaf true for a single leaf). A building of the game's brings the doors it has, and a door model becomes a door that opens. Place a structure or prop by its model id (list_catalog kind structures), checked the way a placement by hand is. Anything placed on the ground gets level ground under it, smoothed for 5 m round it, at one height with what stands within 5 m. map_label names it on the map computer.",parameters:P(Object.assign(withXY({model:{type:"string"},name:{type:"string"},force:{type:"boolean",description:"place it even where the check says no"},one_leaf:{type:"boolean",description:"a gate: one leaf only, not the whole gateway"},floor:{type:"string",description:"a door inside a building: which floor (\"top\", or metres above its base)"},map_label:{type:"string"},map_info:{type:"string"}}),FACE),["model"])},
     {name:"place_fence",description:"A straight run of fence (chain link) or wall panels from one point to another.",parameters:P({from:{type:"array",items:{type:"number"}},to:{type:"array",items:{type:"number"}},kind:{type:"string",enum:["fence","wall"]},model:{type:"string",description:"a panel model instead"}},["from","to"])},
     {name:"build_compound",description:"A ready fenced compound centred on a point: fence or wall round a rectangle, a sliding gate with a switch on the side facing the player's start, a floodlight, watchtowers, guards at the gate (only where walkways are near), and levelled ground.",parameters:P(withXY({width:{type:"number",description:"16 to 100 m"},depth:{type:"number",description:"16 to 100 m"},wall:{type:"string",enum:["fence","wall"]},towers:{type:"integer",enum:[0,2,4]},guards:{type:"integer",description:"0 to 4"},gate:{type:"boolean"},light:{type:"boolean"},level_ground:{type:"boolean"}}))},
     {name:"place_pickup",description:"A weapon, ammo or item to pick up (list_catalog kind weapons).",parameters:P(Object.assign(withXY({item:{type:"string"},count:{type:"integer"},floor:{type:"string"}}),FACE),["item"])},

@@ -374,8 +374,10 @@ def _rise(kind, how):
 # building's own, and the guards and pickups around it - sees the new ground.
 from studio.build import flatten as FL
 PADS, FLAT_PATCHES, FLAT_HMP = {}, [], None
+LEVEL_AT = {}           # id(placement): the height of the ground levelled for it
 # The Ground tool: areas to level, raise, lower, smooth or ramp, and brush strokes.
 AREAS = [a for a in (plan.get("ground") or []) if isinstance(a, dict)]
+AREA_UIDS = {a.get("uid") for a in AREAS}
 AREA_PADS = []
 BRUSH = FL.brush_cells(plan.get("brush"))
 SCULPT = FL.sculpt_cells(plan.get("sculpt"))   # the big shapes, on the terrain's 4 m grid
@@ -396,13 +398,41 @@ BASE_HMP = GAME / "missions" / "location0" / ("level%d" % LV) / "terrain" / "ter
 
 
 def wants_flat(p):
-    if p.get("type") != "building" or p in OWN_CARS or p in OWN_FLIGHTS:
+    """Everything of yours that stands on the ground levels it (flatten.py
+    level_together), unless told to keep it (keepGround). Not what goes with a
+    building or a level as it is (a door, what came with it, a pasted area), not
+    what flies or drives, and not what stands on an area levelled for it."""
+    if p.get("type") != "building" or p in OWN_CARS or p in OWN_FLIGHTS or isinstance(p.get("flight"), dict):
         return False
-    if "flatten" in p:
-        return bool(p["flatten"])
-    sz = _sizes.get(p.get("model")) or {}
-    return (bool(sz.get("body")) and sz.get("h", 0) >= 2.5
-            and min(sz.get("w", 0), sz.get("d", 0)) >= 2.0 and sz.get("w", 0) * sz.get("d", 0) >= 16)
+    if p.get("keepGround") or p.get("of") or p.get("batch") or isinstance(p.get("lift"), dict):
+        return False
+    if isinstance(p.get("door"), dict) and p["door"].get("kind") != "gate":
+        return False
+    if p.get("onLevel") and p["onLevel"] in AREA_UIDS:
+        return False
+    return bool(FL.footprint(p.get("model"), _sizes))
+
+
+def _inside_another(p):
+    """Standing in or under something bigger: on its floor, not on the ground."""
+    s = _sizes.get(p.get("model")) or {}
+    area = (s.get("w") or 0.0) * (s.get("d") or 0.0)
+    g = p.get("gamma") or 0.0
+    cx, cy = s.get("cx") or 0.0, s.get("cy") or 0.0
+    x, y = p["x"] + cx * math.cos(g) - cy * math.sin(g), p["y"] + cx * math.sin(g) + cy * math.cos(g)
+    for q in WORLD + PLACE:
+        if q is p or q.get("type") != "building" or q.get("cutscene") or q.get("x") is None:
+            continue
+        qs = _sizes.get(q.get("model")) or {}
+        if not qs.get("body") or (qs.get("w") or 0.0) * (qs.get("d") or 0.0) < 1.5 * area:
+            continue
+        reach = math.hypot(qs.get("w") or 0.0, qs.get("d") or 0.0) + math.hypot(qs.get("cx") or 0.0, qs.get("cy") or 0.0)
+        if abs(q["x"] - x) > reach or abs(q["y"] - y) > reach:
+            continue
+        qg = q.get("gamma") or 0.0
+        if FL._distance({"x": q["x"], "y": q["y"], "c": math.cos(qg), "s": math.sin(qg), "rects": qs["body"]}, x, y) <= 0:
+            return True
+    return False
 
 
 # The height maps the shaped ground needs take most of a build (15 s on a
@@ -517,19 +547,21 @@ MESH = None
 if TERR0 is not None and _surface is not None and _surface.terrain is not None and not NO_SNAP:
     _terr = TERR0
     _pads = []
-    if AREAS or BRUSH or SCULPT:
-        for o in WORLD + [p for p in PLACE if not wants_flat(p)]:
-            if o.get("type") not in KEEP_TYPES or o.get("cutscene") or o.get("x") is None:
-                continue
-            if o.get("onLevel"):
-                continue                # set on ground this plan levels for it (a compound)
-            if o.get("type") != "building":
-                g0 = _terr.z(o["x"], o["y"])
-                if g0 is not None and abs(o["z"] - g0) >= 3:
-                    continue            # on a roof or up a tower: what it stands on keeps its ground
-            k = FL.keep_for(o, _sizes)
-            if k:
-                KEEP.append(k)
+    _world_ids = {id(o) for o in WORLD}
+    for o in WORLD + [p for p in PLACE if not wants_flat(p)]:
+        if o.get("type") not in KEEP_TYPES or o.get("cutscene") or o.get("x") is None:
+            continue
+        if o.get("onLevel") and o["onLevel"] in AREA_UIDS:
+            continue                # set on ground this plan levels for it (a compound)
+        if o.get("type") != "building":
+            g0 = _terr.z(o["x"], o["y"])
+            if g0 is not None and abs(o["z"] - g0) >= 3:
+                continue            # on a roof or up a tower: what it stands on keeps its ground
+        k = FL.keep_for(o, _sizes)
+        if k:
+            # what the level's own things stand on stays under your pads too
+            k["world"] = id(o) in _world_ids and o.get("type") != "pickup"
+            KEEP.append(k)
     for _i, _a in enumerate(AREAS):
         try:
             _apad = FL.pad_for_area(dict(_a, name="ground area %d" % (_i + 1)), _terr)
@@ -540,12 +572,29 @@ if TERR0 is not None and _surface is not None and _surface.terrain is not None a
             _pads.append(_apad)
     # a building placed on shaped ground is levelled for the ground as shaped
     _shaped = FL.Shaped(_terr, AREA_PADS, KEEP, BRUSH, SCULPT) if (AREA_PADS or BRUSH or SCULPT) else _terr
+    _levels = []
     for p in PLACE:
-        if wants_flat(p):
+        if not wants_flat(p) or _inside_another(p):
+            continue
+        if p.get("exact"):
+            # put down by hand: it stays, and the ground comes to it if it is on the ground at all
+            _base, _gz = p["z"] - SF.seat_of(_sizes, p.get("model")), _shaped.z(p["x"], p["y"])
+            if _gz is None or abs(_base - _gz) > FL.ON_GROUND:
+                continue
+            pad = FL.pad_for(p, _sizes, _shaped, target=_base)
+            if pad:
+                pad["fixed"] = True
+        else:
             pad = FL.pad_for(p, _sizes, _shaped)
-            if pad and pad["high"] - pad["low"] > 0.25:
-                _pads.append(pad)
-                PADS[id(p)] = pad
+        if pad:
+            _levels.append((p, pad))
+    FL.level_together([_pd for _, _pd in _levels])
+    for p, pad in _levels:
+        LEVEL_AT[id(p)] = pad["target"]
+        if any(abs(z - pad["target"]) > FL.FLAT_ENOUGH for z in pad["zs"]):
+            _pads.append(pad)
+            PADS[id(p)] = pad
+        del pad["zs"], pad["pts"]
     if _pads or BRUSH or SCULPT:
         try:
             # levels 2, 4, 5, 7 and 11-14 ship without height maps: start an empty file
@@ -556,9 +605,11 @@ if TERR0 is not None and _surface is not None and _surface.terrain is not None a
         except _TooMuchGround as e:
             errors.append(str(e))
             PADS, FLAT_PATCHES, MESH = {}, [], None
+            LEVEL_AT = {}
         except (OSError, ValueError) as e:
             warnings.append("ground not flattened: %s" % e)
             PADS, FLAT_PATCHES, MESH = {}, [], None
+            LEVEL_AT = {}
     if FLAT_PATCHES:
         # what stands on ground that moves goes with it: before and after
         _boxes = [pd["box"] for pd in _pads]
@@ -640,33 +691,18 @@ if TERR0 is not None and _surface is not None and _surface.terrain is not None a
 def _snap_place(p):
     if p.get("exact"):
         return                  # put down by hand in the 3D close-up: where it was put
-    pad = PADS.get(id(p))
-    if pad is not None and FLAT_PATCHES:
+    level = LEVEL_AT.get(id(p))
+    if level is not None:
         # on the ground levelled for it
-        z = pad["target"] + SF.seat_of(_sizes, p.get("model"))
-        if abs(z - p["z"]) > 0.15:
-            warnings.append("%s: z %.2f -> %.2f (on ground flattened from %.1f-%.1f)"
-                            % (p.get("name", "?"), p["z"], z, pad["low"], pad["high"]))
-        p["z"] = round(z, 3)
+        p["z"] = round(level + SF.seat_of(_sizes, p.get("model")), 3)
         return
-    if (p["type"] == "building" and _surface is not None and not NO_SNAP and not isinstance(p.get("door"), dict)
-            and SF.segment(_sizes, p.get("model"))):
-        # a fence panel or a wall: along the ground under it, tilted with it
-        f = _surface.follow(p.get("model"), p["x"], p["y"], p.get("gamma") or 0)
-        if f is not None:
-            z, p["alpha"], p["beta"], under = f
-            p["_follows"] = True
-            if under > 1.0:
-                warnings.append("%s: the ground under it is too steep or uneven for it - it stands up to %.1f m deep "
-                                "in it" % (p.get("name", "?"), under))
-            p["z"] = round(z, 3)
-            return
     if p["type"] == "building" and _surface is not None and not NO_SNAP             and (_sizes.get(p.get("model")) or {}).get("body"):
         # on the lowest ground under its footprint, so no side of it floats
         z, how = _surface.rest("building", p["x"], p["y"], None, p.get("model"), gamma=p.get("gamma") or 0)
         spread = (_surface.last or {}).get("spread")
         if z is not None:
-            if abs(z - p["z"]) > 0.15:
+            # (the leaves of a gate stand at one height, set below: not news each time)
+            if abs(z - p["z"]) > 0.15 and not isinstance(p.get("door"), dict):
                 warnings.append("%s: z %.2f -> %.2f (on %s)" % (p.get("name", "?"), p["z"], z, how))
             if spread is not None and spread > 1.5:
                 warnings.append("%s: the ground under it varies by %.1f m - it sinks up to %.1f m into the slope "
@@ -763,6 +799,12 @@ for _leaves in _gateways.values():
     _low = min(q["z"] for q in _leaves)
     for q in _leaves:
         q["z"] = _low
+# ... and its switch stays at hand height on the post, on the ground as it is now
+for p in PLACE:
+    if (p.get("type") == "switch" and p.get("gate") and not p.get("mount") and not p.get("exact")
+            and p.get("uid") in _gateways and not (p.get("onLevel") and p["onLevel"] in AREA_UIDS)):
+        _l0 = _gateways[p["uid"]][0]
+        p["z"] = round(_l0["z"] - SF.seat_of(_sizes, _l0.get("model")) + 1.06, 3)
 for e in EDITS:
     _snap_edit(e, ("prop", "building"))
 
@@ -1010,8 +1052,6 @@ try:
     (OUT / "heights.json").write_text(json.dumps({
         "placements": {p["uid"]: round(float(p["z"]), 3) for p in PLACE if p.get("uid") and p.get("z") is not None},
         "edits": {e["ref"]: round(float(e["z"]), 3) for e in EDITS if e.get("z") is not None},
-        # fence panels and walls laid along the ground: alpha, beta
-        "tilts": {p["uid"]: [p["alpha"], p["beta"]] for p in PLACE if p.get("_follows") and p.get("uid")},
         "terrain": TERRAIN_MESH}), encoding="utf-8")
 except (OSError, TypeError, ValueError):
     pass
@@ -5517,7 +5557,7 @@ if FLAT_PATCHES:
         if m == "remove":
             return "taken down to its surroundings"
         return "ramp %.1f -> %.1f m" % (pd["z0"], pd["z1"])
-    _what = ["%s %.1f m" % (pd["name"], pd["high"] - pd["low"]) for pd in PADS.values()]
+    _what = ["%s %.1f m" % (pd["name"], pd["high"] - pd["low"]) for pd in list(PADS.values())[:8]]
     _what += ["%s: %s" % (pd["name"], _area_text(pd)) for pd in AREA_PADS]
     if BRUSH:
         _what.append("brush strokes over %d m2" % len(BRUSH))

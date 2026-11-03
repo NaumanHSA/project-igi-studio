@@ -1,7 +1,8 @@
 """A mission made on an empty map, as the build writes it. Found 2026-11-03 playing
 one an agent had made: no numbers on the map computer, weapons hanging in the air, a
-fence buried at its uphill ends, and the two leaves of a gate a metre apart."""
-import json, math, os, pathlib, re, shutil, subprocess, sys, tempfile, unittest
+fence buried in places and above the ground in others, and the two leaves of a gate a
+metre apart."""
+import json, pathlib, re, shutil, subprocess, sys, tempfile, unittest
 
 from studio.build import surface as SF
 
@@ -24,11 +25,15 @@ class EmptyMapMission(unittest.TestCase):
         g = cls.t.z
         cls.g = g
         door = lambda: {"kind": "gate", "stop": [3.4, 0], "slider": 0, "head": 2, "fixed": [0, 0], "switch": "sw"}
-        common = {"kind": "object", "type": "building", "patrol": [], "flatten": False}
+        common = {"kind": "object", "type": "building", "patrol": []}
         plan = {
             "name": "Probe", "base": {"level": 2, "kind": "empty"},
             "placements": [
-                dict(common, uid="fence", model="303_02_1", name="Fence", x=30940, y=-9388, z=g(30940, -9388), gamma=0),
+                # (flatten False is what older missions have for these: it asks for nothing now)
+                dict(common, uid="fence", model="303_02_1", name="Fence", x=30908, y=-9388, z=g(30908, -9388), gamma=0, flatten=False),
+                dict(common, uid="fence2", model="303_02_1", name="Fence", x=30923.84, y=-9388, z=g(30923.84, -9388), gamma=0),
+                dict(common, uid="alone", model="301_01_1", name="Crate", x=30800, y=-9440, z=g(30800, -9440), gamma=0),
+                dict(common, uid="kept", model="301_01_1", name="Crate", x=30700, y=-9440, z=g(30700, -9440), gamma=0, keepGround=True),
                 dict(common, uid="leaf1", model="304_01_1", name="Gate", x=30962, y=-9388, z=g(30962, -9388), gamma=0, door=door()),
                 dict(common, uid="leaf2", model="304_01_1", name="Gate", x=30966, y=-9388, z=g(30966, -9388), gamma=0, door=door()),
                 {"uid": "sw", "type": "switch", "kind": "alarm", "model": "202_01_1", "gate": True, "name": "Gate switch",
@@ -36,7 +41,7 @@ class EmptyMapMission(unittest.TestCase):
                 dict(common, uid="box", model="219_01_1", name="Box", x=30904.5, y=-9360, z=g(30904.5, -9360), gamma=0,
                      label={"title": "Stores", "info": "What the base keeps."}),
                 {"uid": "ground", "type": "pickup", "kind": "pickup", "pickupId": "WEAPON_ID_AK47", "name": "On the ground",
-                 "patrol": [], "x": 30900, "y": -9360, "z": g(30900, -9360) + 0.5, "gamma": 1.5708},
+                 "patrol": [], "x": 30880, "y": -9360, "z": g(30880, -9360) + 0.5, "gamma": 1.5708},
                 {"uid": "lid", "type": "pickup", "kind": "pickup", "pickupId": "WEAPON_ID_AK47", "name": "On the box",
                  "patrol": [], "x": 30904.5, "y": -9360, "z": g(30904.5, -9360) + 0.52, "gamma": 1.5708},
             ],
@@ -92,19 +97,21 @@ class EmptyMapMission(unittest.TestCase):
         self.assertAlmostEqual(float(m.group(1)) / PIECE, self.g(30910, -9350) + 1.0, delta=0.05)
 
     def test_a_pickup_lies_on_what_is_under_it(self):
-        self.assertAlmostEqual(self.h["placements"]["ground"], self.g(30900, -9360) + 0.03, delta=0.01)
-        top = self.g(30904.5, -9360) + 0.5
-        self.assertAlmostEqual(self.h["placements"]["lid"], top + 0.02, delta=0.08)
+        self.assertAlmostEqual(self.h["placements"]["ground"], self.g(30880, -9360) + 0.03, delta=0.01)
+        self.assertAlmostEqual(self.h["placements"]["lid"], self.h["placements"]["box"] + 0.5 + 0.02, delta=0.05)
 
-    def test_a_fence_panel_follows_the_ground(self):
-        alpha, beta = self.h["tilts"]["fence"]
-        self.assertEqual(alpha, 0)
-        self.assertLess(abs(beta), math.atan(SF.Surface.FOLLOW_SLOPE) + 1e-3)
-        self.assertGreater(beta, 0.02, "this ground falls to the east, so its far end goes down")
+    def test_a_run_of_fence_stands_at_one_height_on_ground_levelled_for_it(self):
+        self.assertEqual(self.h["placements"]["fence"], self.h["placements"]["fence2"])
+        self.assertTrue((self.dir / "out" / "terrain" / "terrain.hmp").exists(), "no ground was shaped")
 
-    def test_the_leaves_of_a_gate_stand_at_one_height(self):
+    def test_nothing_is_tilted_to_fit(self):
+        for m in re.finditer(r'"EditRigidObj", "Fence", [-.0-9]+, [-.0-9]+, [-.0-9]+, ([-.0-9]+), ([-.0-9]+),', self.src):
+            self.assertEqual((float(m.group(1)), float(m.group(2))), (0.0, 0.0))
+        self.assertNotIn("tilts", self.h)
+
+    def test_the_leaves_of_a_gate_stand_at_one_height_and_its_switch_on_the_post(self):
         self.assertEqual(self.h["placements"]["leaf1"], self.h["placements"]["leaf2"])
-        self.assertNotIn("leaf1", self.h["tilts"])
+        self.assertAlmostEqual(self.h["placements"]["sw"] - self.h["placements"]["leaf1"], 1.06 - 0.205, delta=0.01)
 
 
 if __name__ == "__main__":

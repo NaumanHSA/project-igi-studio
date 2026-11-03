@@ -30,7 +30,7 @@ SCALE = 4096.0
 LOD = 13                      # 64 m cubes
 SIZE = 128                    # 129 x 129 samples, 0.5 m apart
 FLAT = 1.5                    # metres of level ground around the footprint
-BLEND = 4.0                   # metres over which it eases back
+BLEND = 5.0                   # metres over which it eases back
 STEP = 1.0 / 16.0             # metres per height map value
 SLOTS = 256
 
@@ -97,15 +97,38 @@ def body_rects(model, sizes):
     return s.get("body") or []
 
 
+def footprint(model, sizes):
+    """What a model stands on: its collision body, or its outline if it has none
+    in the size data (the game's box, a barrel)."""
+    s = sizes.get(model) or {}
+    if s.get("body"):
+        return s["body"]
+    w, d = s.get("w") or 0.0, s.get("d") or 0.0
+    if not w or not d:
+        return []
+    return [[(s.get("cx") or 0.0) - w / 2, (s.get("cy") or 0.0) - d / 2, w, d]]
+
+
+def gate_key(p):
+    """What a gate leaf shares its height with: the leaves opened by one switch."""
+    d = p.get("door")
+    return (d.get("switch") or p.get("uid")) if isinstance(d, dict) and d.get("kind") == "gate" else None
+
+
 def pad_for(p, sizes, terrain, target=None):
     """What one building needs: its footprint in world space and the height to
-    level it at (the median of the ground under it, unless given)."""
-    rects = body_rects(p.get("model"), sizes)
+    level it at (the median of the ground under it, unless given). A gate leaf's
+    takes in where it slides to, open."""
+    rects = footprint(p.get("model"), sizes)
     if not rects:
         return None
     g = p.get("gamma") or 0.0
+    gate = gate_key(p)
+    if gate:
+        st = p["door"].get("stop") or [0, 0]
+        rects = list(rects) + [[r[0] + (st[0] or 0.0), r[1] + (st[1] or 0.0), r[2], r[3]] for r in rects]
     pad = {"name": p.get("name") or p.get("model"), "x": p["x"], "y": p["y"], "c": math.cos(g), "s": math.sin(g),
-           "rects": rects}
+           "rects": rects, "gate": gate}
     xs, ys, zs = [], [], []
     for r in rects:
         nx, ny = max(1, int(math.ceil(r[2]))), max(1, int(math.ceil(r[3])))
@@ -122,9 +145,73 @@ def pad_for(p, sizes, terrain, target=None):
     zs.sort()
     pad["target"] = target if target is not None else zs[len(zs) // 2]
     pad["low"], pad["high"] = zs[0], zs[-1]
+    pad["zs"], pad["pts"] = zs, list(zip(xs, ys))
     reach = FLAT + BLEND
     pad["box"] = (min(xs) - reach, max(xs) + reach, min(ys) - reach, max(ys) + reach)
     return pad
+
+
+# Everything of yours standing on the ground levels it, as the game's own levels
+# have theirs on level ground: a building, a fence panel, a wall, a gate, a crate.
+# What stands close together shares one height, or a fence would step at every
+# panel and the two leaves of a gate meet a metre apart; a long fence up a real
+# slope steps where that would move the ground too far. (Fences used to rest on
+# the lowest ground under them, buried at the uphill end, 2026-11-03.)
+# The editor does the same sums (plotter.html levelTogether).
+LEVEL_NEAR = 5.0                # metres apart: things this close share their ground...
+LEVEL_SPREAD = 4.0              # ... unless that takes it this far from their lowest to their highest
+ON_GROUND = 0.6                 # a thing put down by hand stands on the ground if it is this close to it
+FLAT_ENOUGH = 0.1               # ground this close to the height wanted is left alone
+
+
+def level_together(pads):
+    """Give the pads standing close together one height: their "target"s, in place.
+    A pad "fixed" at a height (a thing put down by hand) keeps it. The closest in
+    height join first, so a group is broken where the ground really changes."""
+    n = len(pads)
+    up, lo, hi = list(range(n)), [p["target"] for p in pads], [p["target"] for p in pads]
+
+    def root(a):
+        while up[a] != a:
+            up[a] = up[up[a]]
+            a = up[a]
+        return a
+
+    pairs = []
+    for i in range(n):
+        a = pads[i]
+        if a.get("fixed"):
+            continue
+        for j in range(i + 1, n):
+            b = pads[j]
+            if b.get("fixed"):
+                continue
+            same = bool(a.get("gate")) and a.get("gate") == b.get("gate")
+            if not same:
+                ba, bb = a["box"], b["box"]
+                if ba[0] > bb[1] or bb[0] > ba[1] or ba[2] > bb[3] or bb[2] > ba[3]:
+                    continue
+                if not any(_distance(b, x, y) <= LEVEL_NEAR for x, y in a["pts"]):
+                    continue
+            pairs.append((-1.0 if same else abs(a["target"] - b["target"]), i, j))
+    pairs.sort()
+    for d, i, j in pairs:
+        a, b = root(i), root(j)
+        if a == b:
+            continue
+        l, h = min(lo[a], lo[b]), max(hi[a], hi[b])
+        if d >= 0 and h - l > LEVEL_SPREAD:
+            continue
+        up[b], lo[a], hi[a] = a, l, h
+    groups = {}
+    for i, p in enumerate(pads):
+        if not p.get("fixed"):
+            groups.setdefault(root(i), []).append(p)
+    for members in groups.values():
+        zs = sorted(z for p in members for z in p["zs"])
+        if zs:
+            for p in members:
+                p["target"] = zs[len(zs) // 2]
 
 
 def _to_world(pad, mx, my):
@@ -327,9 +414,11 @@ def keep_for(o, sizes):
     return k
 
 
-def _keep(keeps, gx, gy):
+def _keep(keeps, gx, gy, world_only=False):
     f = 1.0
     for k in keeps:
+        if world_only and not k.get("world"):
+            continue
         x0, x1, y0, y1 = k["box"]
         if not (x0 <= gx <= x1 and y0 <= gy <= y1):
             continue
@@ -501,7 +590,7 @@ def _sample(near, keeps, brush, brushed, gx, gy, v0, base_at, sculpt=None):
     g = base = full = None
     touched = False
     kf = None
-    best, bw = None, 0.0
+    here = []
     if sculpt:
         sd = _sculpt_at(sculpt, gx, gy)
         if sd:
@@ -515,12 +604,12 @@ def _sample(near, keeps, brush, brushed, gx, gy, v0, base_at, sculpt=None):
         bx0, bx1, by0, by1 = pad["box"]
         if not (bx0 <= gx <= bx1 and by0 <= gy <= by1):
             continue
-        wt = _weight(pad, _distance(pad, gx, gy), gx, gy)
+        dist = _distance(pad, gx, gy)
+        wt = _weight(pad, dist, gx, gy)
         if wt <= 0:
             continue
         if not pad.get("area"):
-            if wt > bw:              # buildings: the nearest pad wins, after the areas
-                best, bw = pad, wt
+            here.append((pad, wt, dist))        # buildings: after the areas
             continue
         if keeps:
             if kf is None:
@@ -550,15 +639,27 @@ def _sample(near, keeps, brush, brushed, gx, gy, v0, base_at, sculpt=None):
                 if g is not None:
                     g += bd * kf
                     touched = True
-    if best is not None:
+    # Each pad holds its own footprint exactly; between pads at different heights
+    # the ground goes smoothly from one to the other, the nearer counting for more
+    # (the nearest pad alone left a step where they met). What a thing of the
+    # level's own stands on stays: it does not move with the earth.
+    hold = _keep(keeps, gx, gy, True) if here and keeps else 1.0
+    if here and hold > 0:
         if g is None:
             base = base_at()
             if base is not None:
                 g = base / SCALE + (v0 - 64.0) * STEP
         if g is not None:
-            g = _shape(best, g, bw, gx, gy)
+            sq = st = bw = 0.0
+            for pad, wt, dist in here:
+                q = wt / ((dist + 0.25) * (dist + 0.25))
+                sq += q
+                st += q * pad["target"]
+                if wt > bw:
+                    bw, best = wt, pad
+            g += (st / sq - g) * bw * hold
             touched = True
-            if bw > 0.99:
+            if bw * hold > 0.99:
                 full = best
     return g, base, touched, full
 

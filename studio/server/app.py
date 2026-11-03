@@ -578,10 +578,12 @@ def mission_cleanup(cfg, mid):
                              "sameAs": seen[key]})
                 continue
             seen[key] = p.get("uid")
+            if p["type"] == "building" and not p.get("keepGround"):
+                continue                       # the level's ground is not what it stands on: the build levels it for it
             src, z = surf.height(p["x"], p["y"], p["z"], reach_up=0.02, skip="own:%s" % p.get("uid"))
             if z is None or src != "terrain":
                 continue                       # only bare ground is certain enough to act on
-            rest = z + (0.5 if p["type"] == "pickup" else SF.seat_of(sizes, p.get("model")))
+            rest = z + (SF.Surface.PICKUP_RISE if p["type"] == "pickup" else SF.seat_of(sizes, p.get("model")))
             gap = p["z"] - rest
             if 0.05 < gap < 0.6:
                 floating.append({"uid": p.get("uid"), "name": p.get("name"), "type": p["type"],
@@ -846,14 +848,6 @@ def ground_at(cfg, body):
     out = []
     with world as s:
         for pt in body.get("points") or []:
-            if pt.get("follow") and pt.get("model"):
-                # a fence panel or a wall: along the ground, tilted with it (as the build lays it)
-                f = s.follow(pt["model"], float(pt["x"]), float(pt["y"]), float(pt.get("gamma") or 0),
-                             skip=pt.get("ref"))
-                if f is not None:
-                    out.append({"z": round(f[0], 3), "on": "terrain", "alpha": f[1], "beta": f[2],
-                                "under": round(f[3], 2)})
-                    continue
             z, on = s.rest(pt.get("kind") or "soldier", float(pt["x"]), float(pt["y"]),
                            None if pt.get("z") is None else float(pt["z"]), pt.get("model"), skip=pt.get("ref"),
                            gamma=float(pt.get("gamma") or 0))

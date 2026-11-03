@@ -34,12 +34,16 @@ section is also that release's notes on GitHub.
 - **Weapons and ammo no longer hang in the air.** They were laid half a metre over
   open ground; they now lie on it, as the game's own do. The check list also offers
   to put a box under pickups left on the bare ground.
-- **Fences and walls follow the ground.** On a slope a panel used to rest on the
-  lowest ground under it, its uphill end buried. It now tilts with the slope, up to
-  about 10 degrees.
+- **Everything you place levels the ground under it.** Buildings, fences, walls,
+  gates and crates, placed by hand or by a tool: the ground under them is levelled
+  and smoothed for 5 m round them, and what stands within 5 m of each other shares
+  one height, so a fence runs straight and a gate meets level. It is how the game's
+  own missions are laid out. A building's Ground section can turn it off for that one.
 - **Gates fit the fence they go into.** A gate placed on a fence line takes out the
-  panels in its way and fills the fence up to each post, and its two leaves stand at
-  one height. The check list finds a panel left across a gateway and takes it out.
+  panels in its way and fills the fence up to each post. The check list finds a
+  panel left across a gateway and takes it out.
+- **Reshaped ground no longer shows pale sheets of sky.** Parts of the ground the
+  studio rebuilt could be drawn inside out, and looked like glass.
 - **The check list offers an intro** to a mission that starts with none.
 - The check list could say the dry run of Apply "could not be had" after a big
   change: taking the build's own heights counted as a change to the plan, so its
