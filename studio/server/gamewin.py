@@ -109,6 +109,17 @@ def pids_of(path):
     return out
 
 
+def images_of(name):
+    """The full paths of the running programs with this file name."""
+    out = []
+    for pid, exe in _processes():
+        if exe.lower() == name.lower():
+            img = _image_of(pid)
+            if img:
+                out.append(img)
+    return out
+
+
 def any_game_running(name="IGI.exe"):
     """Any copy of the game at all: it takes the display and input for itself, so
     only one can run at a time."""

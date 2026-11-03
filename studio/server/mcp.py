@@ -642,6 +642,20 @@ def connect_info():
             "claudeDesktop": {"found": bool(f and f.parent.is_dir()), "path": str(f) if f else "", "added": _desktop_has(f)}}
 
 
+def claude_desktop_running():
+    """Is Claude Desktop open? Not Claude Code, which runs as claude.exe too. It counts as
+    open while it sits in the tray with its window closed."""
+    try:
+        from studio.server import gamewin as G
+        for img in G.images_of("claude.exe"):
+            low = img.lower()
+            if "\\windowsapps\\claude_" in low or "\\anthropicclaude\\" in low:
+                return True
+    except (ImportError, OSError, AttributeError):
+        pass
+    return False
+
+
 def _desktop_has(f):
     try:
         return "igi-studio" in (json.loads(f.read_text(encoding="utf-8")).get("mcpServers") or {})
@@ -651,10 +665,14 @@ def _desktop_has(f):
 
 def add_to_claude_desktop():
     """At the person's click: the studio in Claude Desktop's list of MCP servers.
-    What else is in the file stays as it is, and the file as it was is kept."""
+    What else is in the file stays as it is, and the file as it was is kept. Only while
+    Claude Desktop is closed: it holds this file in memory and writes it back as it
+    closes, so what is added while it runs is lost when it next restarts."""
     f = claude_desktop_config()
     if not f or not f.parent.is_dir():
         return {"ok": False, "error": "Claude Desktop's folder is not on this PC."}
+    if claude_desktop_running():
+        return {"ok": False, "running": True, "error": "Claude Desktop is open."}
     cfg = {}
     if f.exists():
         raw = f.read_text(encoding="utf-8")

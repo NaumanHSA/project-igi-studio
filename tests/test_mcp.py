@@ -3,9 +3,12 @@ of the protocol, the road from an agent's call to the window and back, who may
 connect, and the relay with the studio open and closed."""
 import base64, json, os, pathlib, shutil, subprocess, sys, tempfile, threading, time, unittest, urllib.error, urllib.request
 
+from unittest import mock
+
 from studio.server import mcp as M
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+ORIGINAL_RUNNING = M.claude_desktop_running
 TOOLS = [{"name": "get_overview", "description": "the level", "parameters": {"type": "object", "properties": {}},
           "annotations": {"readOnlyHint": True}},
          {"name": "place_guards", "description": "guards", "parameters": {"type": "object", "properties": {"x": {"type": "number"}}}}]
@@ -384,6 +387,32 @@ class ClaudeDesktopTests(_Home):
         os.environ["APPDATA"] = self.app
         (pathlib.Path(self.app) / "Claude").mkdir()
         self.f = pathlib.Path(self.app) / "Claude" / "claude_desktop_config.json"
+        p = mock.patch.object(M, "claude_desktop_running", return_value=False)
+        self.running = p.start()
+        self.addCleanup(p.stop)
+
+    def test_it_waits_for_claude_desktop_to_close_or_its_own_copy_would_undo_this(self):
+        self.running.return_value = True
+        was = {"mcpServers": {"other": {"command": "x"}}}
+        self.f.write_text(json.dumps(was))
+        r = M.add_to_claude_desktop()
+        self.assertFalse(r["ok"])
+        self.assertTrue(r["running"])
+        self.assertEqual(json.loads(self.f.read_text()), was)
+        self.running.return_value = False
+        self.assertTrue(M.add_to_claude_desktop()["ok"])
+        self.assertIn("igi-studio", json.loads(self.f.read_text())["mcpServers"])
+
+    def test_claude_code_is_not_claude_desktop(self):
+        from studio.server import gamewin as G
+        cases = [([r"C:\Users\Me\.vscode\extensions\anthropic.claude-code-2\native-binary\claude.exe",
+                   r"C:\Users\Me\.local\bin\claude.exe"], False),
+                 ([r"C:\Program Files\WindowsApps\Claude_3.6_x64__abc\app\Claude.exe"], True),
+                 ([r"C:\Users\Me\AppData\Local\AnthropicClaude\app-1.0\claude.exe"], True),
+                 ([], False)]
+        for images, want in cases:
+            with mock.patch.object(G, "images_of", return_value=images):
+                self.assertEqual(ORIGINAL_RUNNING(), want, images)
 
     def tearDown(self):
         os.environ["APPDATA"] = self.was_app or ""

@@ -148,20 +148,35 @@ function paintConnect() {
   box.innerHTML = '<div class="mcp-h">Connect an agent</div>' +
     '<p class="hint" style="margin:0 0 12px">Once for each program. After that, press Start here and use it. If the studio is stopped, the agent is told to start it.</p>' +
     '<div class="mcp-row"><p><b>Claude Desktop</b></p>' +
-    (cd.found ? (cd.added ? '<p>It is added. Restart Claude Desktop if it is running, and <b>igi-studio</b> shows among its connectors.</p>' :
-      '<p>Adds the studio to its list of servers. Nothing else in its settings changes. Then restart Claude Desktop.</p><button class="btn" id="mcp-cd" type="button">Add to Claude Desktop</button>') :
+    (cd.found ? (cd.added ? '<p>It is added. Open Claude Desktop, and <b>igi-studio</b> shows among its connectors.</p>' :
+      '<p>Adds the studio to its list of servers. Nothing else in its settings changes.</p><button class="btn" id="mcp-cd" type="button">Add to Claude Desktop</button>' +
+      '<p id="mcp-cd-wait" hidden style="margin-top:8px"></p>') :
       "<p>Not found on this PC. If you install it, add the settings below to its claude_desktop_config.json.</p>") + '</div>' +
     '<div class="mcp-row"><p><b>Claude Code</b>: run this once in a terminal.</p>' + codeRow("mcp-cc", c.claudeCode) + '</div>' +
     '<div class="mcp-row"><p><b>Any other program</b> (Cursor, VS Code, and so on): add this to its MCP settings.</p>' + codeRow("mcp-json", c.json) + '</div>';
   var add = $("mcp-cd");
   if (add) add.addEventListener("click", function () {
     add.disabled = true;
-    post("api/mcp/claude-desktop").then(function (r) {
-      if (!r.ok) { A().toast(r.error); add.disabled = false; return; }
-      conn.claudeDesktop.added = true;
-      paintConnect();
-      A().toast("Added. Restart Claude Desktop");
-    });
+    // Claude Desktop writes its settings back as it closes, so this waits for it to be closed
+    (function attempt() {
+      if (!sheetOpen || !$("mcp-cd")) return;
+      post("api/mcp/claude-desktop").then(function (r) {
+        if (r.running) {
+          var w = $("mcp-cd-wait");
+          if (w) {
+            w.hidden = false;
+            w.innerHTML = "<b>Please quit Claude Desktop.</b> Closing its window is not enough: right-click its icon near the clock, or use its File menu, and choose <b>Quit</b>. It has to be closed, or it undoes this as it closes. The studio adds it as soon as it has.";
+          }
+          add.textContent = "Waiting for Claude Desktop to close…";
+          setTimeout(attempt, 1500);
+          return;
+        }
+        if (!r.ok) { A().toast(r.error); add.disabled = false; return; }
+        conn.claudeDesktop.added = true;
+        paintConnect();
+        A().toast("Added. Now open Claude Desktop");
+      }).catch(function () { add.disabled = false; });
+    })();
   });
   box.querySelectorAll("[data-copy]").forEach(function (b) {
     b.addEventListener("click", function () {

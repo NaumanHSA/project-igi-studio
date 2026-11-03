@@ -48,6 +48,10 @@ settings never hold a secret. It answers with the studio closed too: from the to
 published (`mcp-tools.json`), with any call told to open the studio and press Start, because a
 client that fails its first handshake often isn't tried again.
 
+Claude Desktop holds its settings file in memory and writes it back as it closes, so an entry added
+while it runs is lost on its next restart. Add to Claude Desktop waits until it is closed. Tell it from
+Claude Code, which also runs as `claude.exe`, by its path.
+
 Calls queue in `Bridge` and run one at a time in the window. Clients time a tool call out at about
 a minute, so a long job (Apply, a test) answers within 50 s with a job id for `wait_for_job`.
 
