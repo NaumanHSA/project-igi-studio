@@ -20,6 +20,19 @@ UP = 0.6                     # a triangle is a floor if its normal is this close
 NODE_REACH = 2.5             # metres: a node this close says what floor you are on
 
 
+def segment(sizes, model):
+    """A fence panel or a wall: thin and long (as the editor's segInfo has it).
+    (along x?, its first end, its last end, its middle across) in the model's
+    own frame, or None."""
+    s = sizes.get(model) or {}
+    w, d = s.get("w") or 0.0, s.get("d") or 0.0
+    lo, hi = min(w, d), max(w, d)
+    if not lo or lo > 1.2 or hi < 3 * lo or hi < 2:
+        return None
+    cx, cy = s.get("cx") or 0.0, s.get("cy") or 0.0
+    return (True, cx - w / 2, cx + w / 2, cy) if w >= d else (False, cy - d / 2, cy + d / 2, cx)
+
+
 def seat_of(sizes, model):
     """How high a model's origin stands above the lowest ground under it: as
     the game's levels stand it (extract/seats.py - a barracks has its origin
@@ -341,8 +354,57 @@ class Surface:
     # without a height: a guard steps onto a kerb, an apron or a low platform but
     # not onto a desk; a pickup lands on a desk, crate or bed.
     DROP = {"soldier": (0.35, 0.25), "building": (0.35, 0.25), "pickup": (1.2, 0.8)}
-    PICKUP_RISE = 0.5            # a pickup on open ground, like the shipped ones
-    PICKUP_ON_TOP = 0.02         # ... and lying on furniture (median +0.03 over 52)
+    # A pickup lies right on what is under it: the game's levels lay weapons on
+    # tables, beds and crates (median +0.03 over 52 of them in levels 1-6) and
+    # ammo on the ground (level 2's by its crates, 3 mm under the terrain's
+    # height). Half a metre over open ground, as the studio had it, left them
+    # hanging in the air (2026-11-03).
+    PICKUP_RISE = 0.03           # on the ground or a floor
+    PICKUP_ON_TOP = 0.02         # on furniture
+    # A fence panel or a wall follows the ground along it, tilted up to this
+    # slope (about 10 degrees): further, its ends no longer meet the next panel's
+    FOLLOW_SLOPE = 0.18
+    FOLLOW_OVER = 0.1            # metres it may stand over a dip; lower, it is let into the ground
+
+    def follow(self, model, x, y, gamma=0.0, skip=None, spacing=1.0):
+        """A fence panel or wall laid along the ground under it: (z of its origin,
+        alpha, beta, the most it is let into the ground), or None for any other
+        model. The game draws a tilted panel as tilted (alpha about x, beta about
+        y, then the heading); resting on the lowest ground under it instead, as a
+        building does, a 16 m panel across a slope stood metres deep at its
+        uphill end (2026-11-03)."""
+        seg = segment(self._sizes, model)
+        if seg is None or self.terrain is None:
+            return None
+        along_x, a, b, mid = seg
+        c, sn = math.cos(gamma or 0.0), math.sin(gamma or 0.0)
+        n = max(2, int(math.ceil((b - a) / spacing)))
+        pts = []
+        for i in range(n + 1):
+            u = a + (b - a) * i / n
+            mx, my = (u, mid) if along_x else (mid, u)
+            px, py = x + mx * c - my * sn, y + mx * sn + my * c
+            t = self.terrain.z(px, py)
+            if t is None:
+                continue
+            z = self.height(px, py, t + 0.35, reach_up=0.25, skip=skip, trust_near=False)[1]
+            if z is not None:
+                pts.append((u, z))
+        if len(pts) < 2:
+            return None
+        mu = sum(u for u, _ in pts) / len(pts)
+        mz = sum(z for _, z in pts) / len(pts)
+        suu = sum((u - mu) ** 2 for u, _ in pts)
+        k = sum((u - mu) * (z - mz) for u, z in pts) / suu if suu else 0.0
+        k = max(-self.FOLLOW_SLOPE, min(self.FOLLOW_SLOPE, k))
+        z0 = mz - k * mu                          # the line's height over the origin
+        over = max(z0 + k * u - z for u, z in pts)
+        if over > self.FOLLOW_OVER:
+            z0 -= over - self.FOLLOW_OVER
+        under = max(0.0, max(z - (z0 + k * u) for u, z in pts))
+        tilt = math.atan(k)
+        alpha, beta = (0.0, -tilt) if along_x else (tilt, 0.0)
+        return z0 + seat_of(self._sizes, model), round(alpha, 5), round(beta, 5), under
 
     def under_footprint(self, model, x, y, gamma=0.0, skip=None, spacing=1.5):
         """(what the lowest point stands on, its height, how much the ground varies)

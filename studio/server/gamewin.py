@@ -315,7 +315,7 @@ def brightness(a):
 
 
 # ------------------------------------------------------------------ keys, to a window
-ENTER, ESCAPE = 0x0D, 0x1B
+ENTER, ESCAPE, KEY_M = 0x0D, 0x1B, 0x4D
 WM_KEYDOWN, WM_KEYUP = 0x0100, 0x0101
 if _u32:
     _u32.PostMessageW.argtypes = [W.HWND, W.UINT, W.WPARAM, W.LPARAM]
@@ -324,9 +324,10 @@ if _u32:
 def press(hwnd, key):
     """A key pressed and let go, sent to the window as messages: the person's own
     keyboard and mouse are not used, and it reaches the window with the PC locked."""
-    _u32.PostMessageW(W.HWND(hwnd), WM_KEYDOWN, key, 1)
+    scan = (_u32.MapVirtualKeyW(key, 0) & 0xFF) << 16       # as a keyboard's own message has it
+    _u32.PostMessageW(W.HWND(hwnd), WM_KEYDOWN, key, 1 | scan)
     time.sleep(0.1)
-    _u32.PostMessageW(W.HWND(hwnd), WM_KEYUP, key, 0xC0000001)
+    _u32.PostMessageW(W.HWND(hwnd), WM_KEYUP, key, 0xC0000001 | scan)
 
 
 # ------------------------------------------------------------------ the mouse (the tests no longer use it)
@@ -362,6 +363,16 @@ def front(hwnd):
     _u32.keybd_event(0x12, 0, 0, 0)
     _u32.keybd_event(0x12, 0, 2, 0)
     _u32.SetForegroundWindow(W.HWND(hwnd))
+
+
+def key(vk):
+    """A real key press, to the window in front, by its scan code: in a mission the
+    game reads the keyboard itself (DirectInput), not the window's messages, so a
+    posted M never opened the map computer (2026-11-03)."""
+    sc = _u32.MapVirtualKeyW(vk, 0)
+    _u32.keybd_event(vk, sc, 8, 0)              # KEYEVENTF_SCANCODE
+    time.sleep(0.1)
+    _u32.keybd_event(vk, sc, 8 | 2, 0)          # ... KEYEVENTF_KEYUP
 
 
 def give_back_foreground(hwnd):

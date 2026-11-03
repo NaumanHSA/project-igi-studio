@@ -240,11 +240,12 @@ for _kit in alarm_kit:
 # ---------------------------------------------------------------- ground snap
 # The F11 overlay reports the player's EYE height, about 1.65 units above the
 # surface they are standing on. Soldiers snap themselves, but a pickup placed at
-# a raw overlay reading hangs in the air at head height. Shipped ground pickups
-# sit +0.50 above the nearest navmesh node, so that is what we aim for.
-PICKUP_RISE = 0.5
-# ...but on a desk, a crate or a bed the shipped ones lie right on the top
-# (median +0.03 over 52 of them in levels 1-6)
+# a raw overlay reading hangs in the air at head height. A pickup lies right on
+# what is under it, as the shipped ones do: weapons on a desk, a crate or a bed
+# (median +0.03 over 52 of them in levels 1-6), ammo on the ground (level 2's,
+# 3 mm under the terrain). Half a metre over open ground, as the studio had it
+# until 2026-11-03, left weapons hanging in the air in the game.
+PICKUP_RISE = 0.03             # surface.py Surface keeps the same
 PICKUP_ON_TOP = 0.02
 NO_SNAP = "--no-snap" in argv
 _nodes = []
@@ -341,6 +342,11 @@ def rest_z(x, y, near_z, model=None, skip=None):
     if z is None:
         z = ground_z(x, y, None)
         src_ = "navmesh"
+    if z is None and _surface is not None and _surface.terrain is not None:
+        # no walkway near: the terrain itself (a reach objective on an empty map's
+        # open ground had its area written at z 1, deep under the ground)
+        z = _surface.terrain.z(x, y)
+        src_ = "terrain"
     if z is None:
         return None, None
     # models are set down as the levels set them down, or by their lowest point
@@ -643,6 +649,18 @@ def _snap_place(p):
                             % (p.get("name", "?"), p["z"], z, pad["low"], pad["high"]))
         p["z"] = round(z, 3)
         return
+    if (p["type"] == "building" and _surface is not None and not NO_SNAP and not isinstance(p.get("door"), dict)
+            and SF.segment(_sizes, p.get("model"))):
+        # a fence panel or a wall: along the ground under it, tilted with it
+        f = _surface.follow(p.get("model"), p["x"], p["y"], p.get("gamma") or 0)
+        if f is not None:
+            z, p["alpha"], p["beta"], under = f
+            p["_follows"] = True
+            if under > 1.0:
+                warnings.append("%s: the ground under it is too steep or uneven for it - it stands up to %.1f m deep "
+                                "in it" % (p.get("name", "?"), under))
+            p["z"] = round(z, 3)
+            return
     if p["type"] == "building" and _surface is not None and not NO_SNAP             and (_sizes.get(p.get("model")) or {}).get("body"):
         # on the lowest ground under its footprint, so no side of it floats
         z, how = _surface.rest("building", p["x"], p["y"], None, p.get("model"), gamma=p.get("gamma") or 0)
@@ -655,10 +673,9 @@ def _snap_place(p):
                                 "on the high side" % (p.get("name", "?"), spread, spread))
             p["z"] = round(z, 3)
             return
-    # a pickup lies half a metre over the floor under it: that floor is looked
-    # for from there, not from the pickup - asked from itself under a roof it was
-    # its own floor, and it rose half a metre with every dry run the editor took
-    # its heights from
+    # a pickup lies a little over the floor under it: that floor is looked for
+    # from there, not from the pickup - asked from itself under a roof it was its
+    # own floor, and it rose with every dry run the editor took its heights from
     near = p.get("z")
     if p["type"] == "pickup" and near is not None:
         near = float(near) - PICKUP_RISE
@@ -733,6 +750,19 @@ def inside(o, x, y, z, margin=0.3):
 for p in PLACE:
     if p.get("type") in ("building", "explodable"):
         _snap_place(p)      # cameras, buttons, sirens and lights hang where they were mounted
+# The leaves of one gateway (opened by the same switch) stand at one height, the
+# lower one's: each set on its own ground, the two halves of a gate on a slope
+# met a metre apart (2026-11-03)
+_gateways = collections.defaultdict(list)
+for p in PLACE:
+    _d = p.get("door")
+    if (p.get("type") == "building" and isinstance(_d, dict) and _d.get("kind") == "gate" and _d.get("switch")
+            and not p.get("exact")):
+        _gateways[_d["switch"]].append(p)
+for _leaves in _gateways.values():
+    _low = min(q["z"] for q in _leaves)
+    for q in _leaves:
+        q["z"] = _low
 for e in EDITS:
     _snap_edit(e, ("prop", "building"))
 
@@ -980,6 +1010,8 @@ try:
     (OUT / "heights.json").write_text(json.dumps({
         "placements": {p["uid"]: round(float(p["z"]), 3) for p in PLACE if p.get("uid") and p.get("z") is not None},
         "edits": {e["ref"]: round(float(e["z"]), 3) for e in EDITS if e.get("z") is not None},
+        # fence panels and walls laid along the ground: alpha, beta
+        "tilts": {p["uid"]: [p["alpha"], p["beta"]] for p in PLACE if p.get("_follows") and p.get("uid")},
         "terrain": TERRAIN_MESH}), encoding="utf-8")
 except (OSError, TypeError, ValueError):
     pass
@@ -2839,13 +2871,9 @@ for o in objects:
         o["_calls"] = [take_id() for _ in (_d0.get("calls") or [])[:len(_d0.get("stops") or [])]]
         OWN_LIFTS.append(o)
         continue
-    # a building with a map computer label needs a task id for the label to point at
-    ob_id = take_id() if isinstance(o.get("label"), dict) and (o["label"].get("title") or "").strip() else -1
-    if ob_id >= 0:
-        o["_tid"] = ob_id
     # its tilt, set in the 3D view: alpha about east, beta about north, then the heading
-    blocks.append('Task_New(%d, "EditRigidObj", "%s", %s, %s, %s, %s, %s, %s, "%s", 1, 1, 1, 0, 0, 0), %s'
-                  % (ob_id, o.get("name", "Object"), q(o["x"]), q(o["y"]), q(o["z"]),
+    blocks.append('Task_New(-1, "EditRigidObj", "%s", %s, %s, %s, %s, %s, %s, "%s", 1, 1, 1, 0, 0, 0), %s'
+                  % (o.get("name", "Object"), q(o["x"]), q(o["y"]), q(o["z"]),
                      round(float(o["alpha"]), 5) if o.get("alpha") else 0,
                      round(float(o["beta"]), 5) if o.get("beta") else 0,
                      round(o.get("gamma", 0), 5), o.get("model") or "219_01_1", EOL))
@@ -3968,9 +3996,10 @@ def shipped_hilights(text):
 
 # A marker is drawn where the TASK IT NAMES stands, not at its own position:
 # level 1 puts all 17 of its hilights at one point and they show at their own
-# buildings. The computer can only find the level's fixed objects this way - a
-# marker pointing at a guard or at a weapon on the ground draws nothing - so
-# every marker is hung on the nearest thing it does know.
+# buildings. The computer can only find fixed objects of these kinds this way -
+# a marker pointing at a guard, at a weapon on the ground or at a placed object
+# draws nothing - so a marker on anything else is hung on a thing of its own,
+# right there (marker_anchor).
 LOCATABLE = ("Building", "Terminal", "GenericPickup", "ExplodeObject", "Car", "Heli",
              "Generator", "Radio", "Switch")
 
@@ -3988,28 +4017,14 @@ def _pickup_spot(x, y, z):
     return " || AreaActivate_%d.nActive" % aid
 
 
-def marker_anchor(x, y):
-    """Task id of the nearest thing the map computer can place, or None."""
-    cands = sorted(((math.hypot(o["x"] - x, o["y"] - y), i, o) for i, o in enumerate(WORLD)
-                    if o.get("qtype") in LOCATABLE and not o.get("cutscene")),
-                   key=lambda c: c[0])
-    if not cands:
-        return None
-    near = cands[0]
-    with_id = next((c for c in cands if c[2].get("id", -1) >= 0), None)
-    # one that already has an id is worth a few metres of detour
-    if with_id and with_id[0] <= max(25.0, near[0] * 1.5):
-        return with_id[2]["id"]
-    o = near[2]
-    if o.get("id", -1) >= 0:
-        return o["id"]
-    if not o.get("ref"):
-        return with_id[2]["id"] if with_id else None
-    nid = take_id()                     # the level left it at -1: give it one
-    ANCHOR_NEW.append((o["ref"], nid))
-    o["id"] = nid
-    _by_id[nid] = o
-    return nid
+def marker_anchor(x, y, z):
+    """The id of something at this spot for a marker to name: a Building with no
+    model, which nothing draws and nothing bumps into (level 5's alarm control has
+    no model either). Seen in the game on 2026-11-03: the map draws a number on one,
+    as it does not on a weapon, an area or a placed object (EditRigidObj)."""
+    aid = take_id()
+    blocks.append('Task_New(%d, "Building", "Map marker", %s, %s, %s, 0, 0, 0, ""), %s' % (aid, q(x), q(y), q(z), EOL))
+    return aid
 
 
 def _objective_expr(ob):
@@ -4021,7 +4036,9 @@ def _objective_expr(ob):
         aid = take_id()
         r = max(1.0, float(ob.get("r") or 5.0))
         gz = rest_z(ob["x"], ob["y"], ob.get("z"))[0]
-        z = (gz if gz is not None else (ob.get("z") or 0.0)) + 1.0
+        if gz is None and ob.get("z") is None:
+            return None, "no ground there to stand on"
+        z = (gz if gz is not None else ob["z"]) + 1.0
         OBJ_AT[id(ob)] = (ob["x"], ob["y"], z)
         blocks.append('Task_New(%d, "AreaActivate", "Objective area", %s, %s, %s, 0, 0, 0, %s, %s, %s, "CRITERIA_HUMAN0"), %s'
                       % (aid, q(ob["x"]), q(ob["y"]), q(z), q(r), q(r), q(3.0), EOL))
@@ -4110,10 +4127,9 @@ if OBJECTIVES:
                 OBJ_MARKS.append((len(slots_txt), hl[0], hl[1], hl[2], link, hl[3] or "1"))
             elif link >= 0 and link in _by_id:
                 o = _by_id[link]
-                anchor = o["id"] if o.get("qtype") in LOCATABLE else marker_anchor(o["x"], o["y"])
-                if anchor is not None:
-                    OBJ_MARKS.append((len(slots_txt), q(o["x"]), q(o["y"]), q(o.get("z") or 0.0), anchor,
-                                      done and ("!(%s)" % done) or "1"))
+                anchor = o["id"] if o.get("qtype") in LOCATABLE else marker_anchor(o["x"], o["y"], o.get("z") or 0.0)
+                OBJ_MARKS.append((len(slots_txt), q(o["x"]), q(o["y"]), q(o.get("z") or 0.0), anchor,
+                                  done and ("!(%s)" % done) or "1"))
             report.append("objective %d: %s (the level's own)%s"
                           % (i, (ob.get("text") or key)[:60], "" if done else " - it has no completion of its own"))
             continue
@@ -4141,22 +4157,14 @@ if OBJECTIVES:
         anchor = None
         if at:
             tgt = _world_by_ref.get((ob.get("target") or {}).get("ref") or "")
-            anchor = tgt["id"] if tgt and tgt.get("qtype") in LOCATABLE and tgt.get("id", -1) >= 0 \
-                else marker_anchor(at[0], at[1])
-            if anchor is None:
-                warnings.append("objective %d: nothing near it that the map computer can mark" % i)
+            anchor = tgt["id"] if tgt and tgt.get("qtype") in LOCATABLE and tgt.get("id", -1) >= 0                 else marker_anchor(at[0], at[1], at[2])
         # the number on the map, and where the computer goes when the objective is
-        # picked in the list, both name a task the computer can place
+        # picked in the list, name a task the computer can place. With nothing of
+        # the level's to name no marker was made at all, so an empty map's
+        # objectives had no numbers on the map (2026-11-03).
         slots_txt.append('"%s", %d, "%s", ""' % (key, anchor if anchor is not None else link, done_expr))
-        if anchor is not None:
+        if at:
             OBJ_MARKS.append((len(slots_txt), q(at[0]), q(at[1]), q(at[2]), anchor, "!" + done_expr))
-            if anchor != link:
-                a_o = _by_id.get(anchor)
-                if a_o:
-                    report.append("objective %d: marked by %s (%.0f m from it) - the map computer cannot place a %s"
-                                  % (i, a_o.get("name") or a_o.get("modelName") or a_o.get("qtype"),
-                                     math.hypot(a_o["x"] - at[0], a_o["y"] - at[1]),
-                                     (tgt or {}).get("qtype") if tgt else "placed object"))
         report.append("objective %d: %s  [%s]" % (i, text, expr if len(expr) < 90 else expr[:87] + "..."))
     if slots_txt:
         while len(slots_txt) < 6:
@@ -4195,9 +4203,11 @@ for i, p in enumerate(LABELS, 1):
     tk, ik = PREFIX + "L%dT" % i, PREFIX + "L%dI" % i
     LANG["messages.res"][tk] = p["label"]["title"].strip()
     LANG["messages.res"][ik] = (p["label"].get("info") or "").strip() or p["label"]["title"].strip()
+    # named on a thing of its own at the building: the map cannot place a placed object
     LABEL_TASKS.append('Task_New(%d, "ComputerHilight", "%s", %s, %s, %s, "1", "%d", "", "MARKER_NONE", '
                        '"MARKER_COLOR_NONE", "%s", "%s")'
-                       % (take_id(), _qstr(p["label"]["title"], 60), q(p["x"]), q(p["y"]), q(p["z"]), p["_tid"], tk, ik))
+                       % (take_id(), _qstr(p["label"]["title"], 60), q(p["x"]), q(p["y"]), q(p["z"]),
+                          marker_anchor(p["x"], p["y"], p["z"]), tk, ik))
 if LABELS:
     report.append("map computer labels: %s" % ", ".join(p["label"]["title"].strip() for p in LABELS))
 # The map computer holds 32 of these and no more: a 33rd is the fatal
@@ -4212,9 +4222,11 @@ if len(LABEL_TASKS) > max(0, _room):
     warnings.append("map computer labels: %d left out - it holds %d markers and this level already uses %d"
                     % (dropped, HILIGHT_MAX, _hil_have))
     LABEL_TASKS = LABEL_TASKS[:max(0, _room)]
+OWN_MARKS_ONLY = False
 if not re.search(r'Task_New\(-?\d+, "ComputerHilight"', src):
     blocks.extend(t + ", " + EOL for t in LABEL_TASKS + MARK_TASKS)
     LABEL_TASKS, MARK_TASKS = [], []
+    OWN_MARKS_ONLY = True               # the level has no markers of its own (an empty map)
 if errors:
     print("PLAN REJECTED - %d problem(s):" % len(errors))
     for e in errors:
@@ -4779,8 +4791,10 @@ if OBJ_TASK_IDS.get("slots"):
     # are written over them where there are enough, so the map computer's list of
     # 32 does not grow; any left over are switched off, and any still needed are
     # added below.
-    spare = [(m.start(), task_end(out_src, m.start())) for m in HILIGHT.finditer(out_src)
-             if "COMPUTER:h_" in out_src[m.start():task_end(out_src, m.start())]]
+    # (on an empty map the only numbered markers are the mission's own, just put
+    # in: taken for the level's left over, they were switched off, 2026-11-03)
+    spare = [] if OWN_MARKS_ONLY else [(m.start(), task_end(out_src, m.start())) for m in HILIGHT.finditer(out_src)
+                                       if "COMPUTER:h_" in out_src[m.start():task_end(out_src, m.start())]]
     reuse = min(len(spare), len(MARK_TASKS))
     for i in range(len(spare) - 1, -1, -1):
         a, b = spare[i]

@@ -2818,10 +2818,10 @@ function floorAt(wx,wy,near){
 // floor, a platform) instead of dropping from just above the ground.
 // the player's start stands on the ground the way a guard does
 var PLAYER_LIFT=0.94;
-// a pickup on open ground, or on a floor of walkways, lies half a metre up, as
-// the shipped ones do and the build lays it (plan.py PICKUP_RISE): the floor
-// under one is looked for from that far below it
-var PICKUP_RISE=0.5;
+// a pickup on open ground, or on a floor of walkways, lies right on it, as the
+// shipped ones do and the build lays it (plan.py PICKUP_RISE): the floor under
+// one is looked for from that far below it
+var PICKUP_RISE=0.03;
 function kindOf(o){return o.type==="soldier"||o.type==="player"?"soldier":o.type==="pickup"?"pickup":"building"}
 function planContext(){
   return {level:LV,empty:MODE==="empty",removeRefs:removeRefs,
@@ -2842,15 +2842,18 @@ function settle(o,explicit){
       if(fz!=null&&Math.abs(fz+lift-o.z)>0.005)setZ(o,+(fz+lift).toFixed(3));
       return;
     }
-    // a pickup: how high over that floor it lies is the build's to say - half
-    // a metre over a floor of walkways, right on one the building's model
-    // makes (a barracks'); the server asks the build's own surfaces
+    // a pickup: how high over that floor it lies is the build's to say; the
+    // server asks the build's own surfaces
     if(fz==null)return;
     near=fz;
   }
   var x0=o.x,y0=o.y,seq=(o._gq=(o._gq||0)+1);
-  var pt={kind:kindOf(o),x:o.x,y:o.y,model:kindOf(o)==="building"?o.model:null,ref:o.own?null:o.ref};
+  var pt={kind:kindOf(o),x:o.x,y:o.y,gamma:o.gamma||0,model:kindOf(o)==="building"?o.model:null,ref:o.own?null:o.ref};
   if(near!=null)pt.z=near;
+  // a fence panel or a wall of yours lies along the ground, tilted with it, as
+  // the build lays it (surface.py follow) - not on the lowest ground under it
+  var follows=!explicit&&o.own&&o.type==="building"&&!o.exact&&!(o.door&&typeof o.door==="object")&&!!segInfo(o.model);
+  if(follows)pt.follow=true;
   var body=planContext();body.points=[pt];
   if(o.type==="building")body.objects=body.objects.filter(function(q){return !(q.x===o.x&&q.y===o.y&&q.model===o.model)});
   return fetch("api/ground",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
@@ -2859,6 +2862,9 @@ function settle(o,explicit){
       if(!a||a.z==null||o._gq!==seq||o.x!==x0||o.y!==y0)return;   // gone, or moved again since
       // the server knows the level's ground; the mission's shaping is added here
       var gz=a.z+lift+(a.on==="terrain"?groundShift(o.x,o.y):0);
+      if(follows&&a.beta!=null&&(Math.abs((o.alpha||0)-a.alpha)>1e-4||Math.abs((o.beta||0)-a.beta)>1e-4)){
+        o.alpha=a.alpha;o.beta=a.beta;touch();draw();
+      }
       if(Math.abs(gz-o.z)<0.005)return;
       setZ(o,+gz.toFixed(3));
     }).catch(function(){});
@@ -2939,9 +2945,13 @@ function applyHeights(j){
   if(JSON.stringify(tb)!==JSON.stringify(TBUDGET)){TBUDGET=tb;if(groundOpen())renderGround()}
   var moves=[];
   placements.forEach(function(q){
-    var z=(j.placements||{})[q.uid];
-    if(q.exact||z==null||Math.abs(z-q.z)<0.02)return;
-    moves.push({o:q,z:z,riders:ridersOf(q,false)});
+    // a fence panel or wall lies along the ground: the build's tilt for it too
+    var z=(j.placements||{})[q.uid],t=(j.tilts||{})[q.uid];
+    if(q.exact)return;
+    var up=z!=null&&Math.abs(z-q.z)>=0.02;
+    var tilt=t&&(Math.abs((q.alpha||0)-t[0])>1e-4||Math.abs((q.beta||0)-t[1])>1e-4)?t:null;
+    if(!up&&!tilt)return;
+    moves.push({o:q,z:up?z:q.z,tilt:tilt,riders:up?ridersOf(q,false):[]});
   });
   Object.keys(edits).forEach(function(ref){
     var e=edits[ref],o=objByRef(ref),z=(j.edits||{})[ref];
@@ -2968,6 +2978,7 @@ function applyHeights(j){
   try{
     moves.forEach(function(mv){
       var dz=mv.z-mv.o.z;
+      if(mv.tilt){mv.o.alpha=mv.tilt[0];mv.o.beta=mv.tilt[1]}
       if(mv.o.own)mv.o.z=mv.z;else editShipped(mv.o,{x:mv.o.x,y:mv.o.y,z:mv.z});
       carry(mv.riders.filter(function(r){return !moves.some(function(m2){return m2.o===r})}),0,0,dz);
       syncDoorsOf(mv.o);                 // a building's own doors stay in its doorways
@@ -4844,8 +4855,9 @@ function addPlacement(wx,wy){
     var gp=placementPose(wx,wy),kit=addGateKit(gp.x,gp.y,gp.gamma,!!tool.alone);
     if(!kit){toast("The gate model is not in this level's data");return}
     sel=kit[0];multi=kit;tool.chain=null;
-    toast(tool.alone?"A gate on its own: both leaves and the switch that opens them. Hold Alt to place a single leaf"
-      :"A gateway: both leaves, the switch that opens them and a fence panel each side. Hold Alt to place a single leaf");
+    toast((tool.alone?"A gate on its own: both leaves and the switch that opens them. Hold Alt to place a single leaf"
+      :"A gateway: both leaves, the switch that opens them and the fence each side. Hold Alt to place a single leaf")+
+      (kit.removed.length?". "+kit.removed.length+" fence panel"+(kit.removed.length>1?"s":"")+" in its way taken out":""));
     renderSide();draw();
     return;
   }
@@ -4978,10 +4990,31 @@ function syncDoorsOf(b){
 // posts, the switch that opens them, and a fence panel in line on each side, so
 // a run of fence carries straight on from either end. The panels are set out
 // the way a fence run is (each model's own ends, segInfo), so nothing overlaps.
+// Put into a fence of yours already there, it takes out the panels in its way
+// and fills from each post to where that fence carries on: a gate laid into a
+// fence line had a panel left standing across half its opening (2026-11-03).
+// Returns what it placed; .removed what it took out.
 function addGateKit(wx,wy,gamma,alone){
-  var leaf=segInfo(GATE_LEAF),fence=segInfo(GATE_FENCE);
+  var leaf=segInfo(GATE_LEAF),fence=segInfo(GATE_FENCE),half=segInfo(GATE_HALF);
   if(!leaf)return null;
-  var th=gamma,ux=Math.cos(th),uy=Math.sin(th),L=leaf.len,made=[];
+  var th=gamma,ux=Math.cos(th),uy=Math.sin(th),L=leaf.len,made=[],removed=[];
+  // a fence panel or wall of yours along this line: [from, to] along it, from the gateway's middle
+  function span(p){
+    if(!p.own||p.type!=="building"||(p.door&&typeof p.door==="object"))return null;
+    var sg=segInfo(p.model);if(!sg)return null;
+    var g=p.gamma||0,a=rot2(sg.a,g),b=rot2(sg.b,g),t=[],ok=true;
+    [a,b].forEach(function(e){
+      var dx=p.x+e[0]-wx,dy=p.y+e[1]-wy;
+      if(Math.abs(-dx*uy+dy*ux)>0.6)ok=false;
+      t.push(dx*ux+dy*uy);
+    });
+    return ok?[Math.min(t[0],t[1]),Math.max(t[0],t[1])]:null;
+  }
+  placements.slice().forEach(function(p){
+    var sp=span(p);
+    if(sp&&sp[1]>-L+0.3&&sp[0]<L-0.3){placements.splice(placements.indexOf(p),1);removed.push(p)}
+  });
+  made.removed=removed;
   // laid the way a run of fence is: the panel's own start put on this point
   function put(model,seg,at,name){
     var g=th-seg.off,r=rot2(seg.a,g);
@@ -4996,17 +5029,37 @@ function addGateKit(wx,wy,gamma,alone){
   var sw={uid:uid(),own:true,type:"switch",kind:"alarm",model:"202_01_1",gate:true,name:"Gate switch",
     x:0,y:0,z:0,gamma:0,mount:"",alarmId:null};
   // the leaves: each fills half the gateway and slides back behind its own post
-  [[-L,-1],[0,1]].forEach(function(w){
+  var leaves=[[-L,-1],[0,1]].map(function(w){
     var o=put(GATE_LEAF,leaf,along(w[0]),"Gate");
     o.door={kind:"gate",stop:[w[1]*(L-0.4),0],slider:0,head:2,fixed:[0,0],switch:sw.uid};
+    return o;
   });
-  // a fence panel in line on each side, starting where the gateway ends
-  if(fence&&!alone)[-(L+fence.len),L].forEach(function(d){put(GATE_FENCE,fence,along(d),"Fence")});
+  // the two halves meet at one height, the lower one's (the build does the same)
+  var lowZ=Math.min.apply(null,leaves.map(function(o){return o.z}));
+  leaves.forEach(function(o){o.z=lowZ});
+  // fence in line on each side, from the post out to where a fence of yours
+  // along this line carries on, or one panel where there is none
+  if(fence&&!alone)[-1,1].forEach(function(sign){
+    var post=sign*L,reach=null;
+    placements.forEach(function(p){
+      var sp=span(p);if(!sp)return;
+      var d=sign>0?sp[0]-post:post-sp[1];
+      if(d>-0.6&&d<fence.len+0.6&&(reach==null||d<reach))reach=d;
+    });
+    if(reach==null)reach=fence.len;
+    for(var at=0;reach-at>0.3;){
+      var sg=half&&reach-at<=half.len+0.3?half:fence;
+      put(sg===fence?GATE_FENCE:GATE_HALF,sg,along(sign>0?post+at:post-at-sg.len),"Fence");
+      at+=sg.len;
+    }
+  });
   // the switch on the gate post, at hand height, as level 10 has its gate switch
   var px=wx+ux*(L-0.25)-uy*0.35,py=wy+uy*(L-0.25)+ux*0.35,gz=groundAt(px,py);
   sw.x=+px.toFixed(3);sw.y=+py.toFixed(3);sw.z=+(((gz!=null?gz:guessZ(px,py))||0)+1.06).toFixed(3);
   sw.gamma=+(((th%(2*Math.PI))+2*Math.PI)%(2*Math.PI)).toFixed(5);
   placements.push(sw);made.push(sw);
+  // the panels lie along the ground, as the build lays them
+  made.forEach(function(o){if(o.type==="building"&&!o.door)settle(o)});
   touch();renderSide();renderList();draw();
   return made;
 }
@@ -5030,7 +5083,7 @@ function guardGraph(wx,wy,wz){
 // guards, cameras and pickups placed where the words say, objectives, and the
 // time limit and weather. What it understood is listed before anything is
 // added; then it goes in as one undo step, selected as a group.
-var GATE_LEAF="304_01_1",GATE_FENCE="303_02_1";
+var GATE_LEAF="304_01_1",GATE_FENCE="303_02_1",GATE_HALF="303_01_1";
 var DRAFT_NUM={a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,couple:2,pair:2,few:3,several:4};
 var DRAFT_UNITS=[
   [/^snipers?$/,"AITYPE_SNIPER","Sniper"],[/^gunners?$/,"AITYPE_GUNNER","Gunner"],[/^rpg$|^rpgs$|^rocketeers?$/,"AITYPE_RPG","RPG trooper"],
@@ -16395,6 +16448,57 @@ function segInfo(model){
                  :{a:[cx,cy-s.d/2],b:[cx,cy+s.d/2],off:-Math.PI/2,len:hi};
 }
 function rot2(p,g){var c=Math.cos(g),s=Math.sin(g);return [p[0]*c-p[1]*s,p[0]*s+p[1]*c]}
+// The gateways of yours with a fence panel of yours across their opening:
+// [{x, y, panels}] (a gate laid into a fence line before addGateKit cut its way in)
+function gateBlocks(){
+  var out=[],seen={},leaf=segInfo(GATE_LEAF);
+  if(!leaf)return out;
+  function ends(p,sg){var g=p.gamma||0,a=rot2(sg.a,g),b=rot2(sg.b,g);return [[p.x+a[0],p.y+a[1]],[p.x+b[0],p.y+b[1]]]}
+  placements.forEach(function(o){
+    var d=o.door;
+    if(!o.own||o.model!==GATE_LEAF||!d||typeof d!=="object"||d.kind!=="gate")return;
+    var key=d.switch||o.uid;if(seen[key])return;seen[key]=1;
+    var leaves=placements.filter(function(q){return q.model===GATE_LEAF&&q.door&&typeof q.door==="object"&&(q.door.switch||q.uid)===key});
+    var e0=ends(leaves[0],leaf),ux=e0[1][0]-e0[0][0],uy=e0[1][1]-e0[0][1],ul=Math.hypot(ux,uy)||1;
+    ux/=ul;uy/=ul;
+    var ox=e0[0][0],oy=e0[0][1],lo=1e9,hi=-1e9;
+    leaves.forEach(function(q){ends(q,leaf).forEach(function(e){var t=(e[0]-ox)*ux+(e[1]-oy)*uy;lo=Math.min(lo,t);hi=Math.max(hi,t)})});
+    var panels=placements.filter(function(p){
+      if(!p.own||p.type!=="building"||(p.door&&typeof p.door==="object"))return false;
+      var sg=segInfo(p.model);if(!sg)return false;
+      var t=[],ok=true;
+      ends(p,sg).forEach(function(e){
+        if(Math.abs(-(e[0]-ox)*uy+(e[1]-oy)*ux)>0.6)ok=false;
+        t.push((e[0]-ox)*ux+(e[1]-oy)*uy);
+      });
+      return ok&&Math.max(t[0],t[1])>lo+0.3&&Math.min(t[0],t[1])<hi-0.3;
+    });
+    if(panels.length)out.push({x:ox+ux*(lo+hi)/2,y:oy+uy*(lo+hi)/2,panels:panels});
+  });
+  return out;
+}
+// Pickups of yours lying on the bare ground, out in the open
+function bareGroundPickups(){
+  return placements.filter(function(o){
+    if(!o.own||o.type!=="pickup"||o.cutscene)return false;
+    var g=groundAt(o.x,o.y);
+    return g!=null&&o.z-g<0.3&&!buildingAt(o.x,o.y,o.z)&&!placements.concat(MODE==="empty"?[]:(LEVEL&&LEVEL.objects)||[]).some(function(q){
+      return q!==o&&q.model&&q.type!=="pickup"&&q.type!=="soldier"&&!q.cutscene&&inBody(q,o.x,o.y,0.3);
+    });
+  });
+}
+// a box of the game's (219_01_1, half a metre high) under each, the pickup on its lid
+var BOX_MODEL="219_01_1";
+function boxUnder(list){
+  var s=MODELS&&MODELS.sizes&&MODELS.sizes[BOX_MODEL],h=s?s.h:0.5;
+  list.forEach(function(o){
+    var g=groundAt(o.x,o.y);if(g==null)return;
+    placements.push({uid:uid(),own:true,type:"building",kind:"object",model:BOX_MODEL,name:"Box",
+      x:o.x,y:o.y,z:+g.toFixed(3),gamma:o.gamma||0,flatten:false});
+    o.z=+(g+h+0.02).toFixed(3);
+  });
+  touch();renderSide();renderList();draw();
+}
 // Joints of your fence and wall runs with a gap between them: a panel whose
 // start is 0.15 to 1 m from where another ends, in line with it.
 function fenceGaps(){
@@ -16726,6 +16830,27 @@ function localChecks(){
     if(gone)add("warn","Structures",displayName(p)+" was opened or closed by something no longer in the mission: the player opens it by hand, "+
       "and it closes a few seconds after it opens",p,null,num(p.x)+", "+num(p.y));
   });
+  // a fence panel of yours across a gateway: the gate slides open onto fence
+  gateBlocks().forEach(function(b){
+    add("warn","Structures","A fence panel stands across the gateway at "+num(b.x)+", "+num(b.y)+": the gate opens onto fence",b.panels[0],
+      {label:"Take "+(b.panels.length>1?"them":"it")+" out",fn:function(){
+        b.panels.forEach(function(p){var i=placements.indexOf(p);if(i>=0)placements.splice(i,1)});
+        touch();renderSide();renderList();draw();
+      }},num(b.x)+", "+num(b.y));
+  });
+  // weapons and ammo of yours on the bare ground: the game's levels lay them on
+  // a desk, a crate or a bed (and the studio once hung them half a metre up)
+  var bare=bareGroundPickups();
+  if(bare.length)add("info","Pickups",bare.length+" pickup"+(bare.length>1?"s lie":" lies")+" on the bare ground. The game's levels lay "+
+    "weapons and ammo on a desk, a crate or a bed, where a player who looks round finds them",bare[0],
+    {label:"Put a box under "+(bare.length>1?"each":"it"),fn:function(){boxUnder(bare)}},
+    bare.slice(0,3).map(displayName).join(", ")+(bare.length>3?" and "+(bare.length-3)+" more":""));
+  // no intro: the mission opens on the player standing there
+  if(objectives.length&&!cutscenes.some(function(c){return c.where==="intro"})&&
+     !levelMotion().cutscenes.some(function(c){return c.role==="intro"&&sceneKept(c)}))
+    add("info","Cutscenes","No intro: the mission starts with the player standing at the start. The game's missions open on a "+
+      "look at where he is going",null,{label:"Make an intro",fn:function(){makeIntro(false)}},
+      "a fly-over of the area, each objective, then the player");
   var gaps=fenceGaps();
   if(gaps.length)add("warn","Structures",gaps.length+" fence or wall joint"+(gaps.length>1?"s leave":" leaves")+" a gap of about "+
     (gaps.reduce(function(a,g){return a+g.d},0)/gaps.length).toFixed(1)+" m in the game (laid before panels were measured from their models). "+
@@ -18437,8 +18562,11 @@ var AIB=(function(){
       if(!kit)return fail("This level's data has no gate model.");
       changed();
       return {ok:true,placed:kit.map(brief),ids:kit.map(function(k){return k.uid}),at:{x:r1(w.x),y:r1(w.y)},
-        notes:["Both leaves, the switch that opens them, and a fence panel each side in line. Carry the fence on from either end with place_fence.",
-               "one_leaf true places a single leaf instead."]};
+        removed:kit.removed.map(function(k){return k.uid}),
+        notes:["Both leaves, the switch that opens them, and fence in line each side: out to where a fence of yours along this line carries on, "+
+               "or one panel where there is none. Carry the fence on from either end with place_fence."].concat(
+               kit.removed.length?[kit.removed.length+" panel(s) of your fence in the gateway's way were taken out."]:[],
+               ["one_leaf true places a single leaf instead."])};
     }
     var gz=groundAt(w.x,w.y);
     // a door goes in a doorway: inside a building it stands on a floor there
@@ -19682,7 +19810,7 @@ var AIB=(function(){
     return {x:+w.x.toFixed(3),y:+w.y.toFixed(3),z:+z.toFixed(3),gamma:+((+a.facing_deg||0)*Math.PI/180).toFixed(5)};
   }
   H.test_load=function(a){
-    return runInGame({seconds:a.seconds,start:testStart(a)},a.wait_seconds);
+    return runInGame({seconds:a.seconds,start:testStart(a),map:!!a.show_map},a.wait_seconds);
   };
   H.test_tour=function(a){
     var list=Array.isArray(a.views)?a.views.slice(0,10):[];
@@ -19850,8 +19978,8 @@ var AIB=(function(){
     {name:"order_game_missions",kind:"mission",anywhere:true,description:"Put the game's own list of the studio's missions in this order: mission numbers from list_game_missions.",parameters:P({order:{type:"array",items:{type:"integer"}}},["order"])},
     {name:"launch_game",kind:"test",anywhere:true,description:"Start the user's own game, at its main menu, for them to play.",parameters:P({})},
     {name:"wait_for_job",kind:"test",anywhere:true,description:"How a long job given by apply_to_game or a test is doing: waits up to wait_seconds for its end.",parameters:P({job:{type:"string"},wait_seconds:{type:"integer",description:"at most 50, default 45"}},["job"])},
-    {name:"test_load",kind:"test",description:"Try the mission in the real game: it is built into a test copy of the game (never the user's own), started, watched for seconds, then closed. Says whether it built, loaded and ran, the exact text of any fatal error, and gives pictures of the game itself. Takes about a minute, moves the user's mouse for a moment and takes the screen while it runs, so use it when an area is done, not after every change. With a point (x and y, place or near_id), the player starts there for this test. Long: you get a job for wait_for_job.",
-      parameters:P(withXY({seconds:{type:"number",description:"how long to watch it run, default 15"},facing_deg:{type:"number"},wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}}))},
+    {name:"test_load",kind:"test",description:"Try the mission in the real game: it is built into a test copy of the game (never the user's own), started, watched for seconds, then closed. Says whether it built, loaded and ran, the exact text of any fatal error, and gives pictures of the game itself. Takes about a minute and takes the screen while it runs, so use it when an area is done, not after every change. With a point (x and y, place or near_id), the player starts there for this test. show_map true ends on a picture of the map computer: the objectives' numbers on it, about 420 m across round the player. Long: you get a job for wait_for_job.",
+      parameters:P(withXY({seconds:{type:"number",description:"how long to watch it run, default 15"},show_map:{type:"boolean",description:"also a picture of the map computer, for the objectives' numbers"},facing_deg:{type:"number"},wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}}))},
     {name:"test_tour",kind:"test",description:"See the mission in the real game, from cameras you choose: the only true check of how it really looks, and that what you placed is really there. Builds it into a test copy of the game with a cutscene of your views, and takes a picture of each as the game's own camera shows it, then one as the player stands. Each view is x and y, place or near_id, with distance, from_bearing and height, or from [x, y, z]; about says what you are checking. Takes a minute or two and takes the screen. Long: you get a job for wait_for_job.",
       parameters:P({views:{type:"array",items:{type:"object",properties:Object.assign({},XY,{about:{type:"string"},z:{type:"number"},distance:{type:"number"},from_bearing:{type:"number"},height:{type:"number"},from:{type:"array",items:{type:"number"}}})}},
         seconds_each:{type:"number",description:"how long each view lasts, default 4"},then_seconds:{type:"number",description:"how long to watch it run after the views, default 4"},wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}},["views"])},

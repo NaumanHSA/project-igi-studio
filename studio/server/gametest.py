@@ -149,6 +149,18 @@ class Game:
         G.press(i["hwnd"], key)
         return True
 
+    def key_in_front(self, key):
+        """A real key, with the game's window in front a moment: what was in front
+        before, to give it back (give_back)."""
+        i = self.inner()
+        if not i:
+            return None
+        before = G.foreground()
+        G.front(i["hwnd"])
+        time.sleep(0.4)
+        G.key(key)
+        return before
+
     def close(self):
         if self.alive():
             G.end(self.pid)
@@ -221,8 +233,9 @@ def _pic(c, **about):
 
 
 def run(mid, store, cfg, options, say=print):
-    """Build it into the test copy, start it, and report. options: {seconds, start, tour}
-    where a tour is a list of shots, each {cams: [{dur, ...}], about: what it looks at}."""
+    """Build it into the test copy, start it, and report. options: {seconds, start, tour,
+    map} where a tour is a list of shots, each {cams: [{dur, ...}], about: what it looks
+    at}, and map asks for a picture of the map computer at the end."""
     if not _one_at_a_time.acquire(blocking=False):
         return {"ok": False, "error": "A test is running already: wait_for_job follows it. One at a time."}
     try:
@@ -274,6 +287,20 @@ def _run(mid, store, cfg, options, say):
             c = game.picture()
             if c:
                 pics.append(_pic(c, what="in the game, %d s after it started" % int(time.time() - started)))
+        if not fatal and options.get("map"):
+            # the map computer, with the objectives' markers on it: in a mission the
+            # game reads the keyboard itself, so M is a real key press, with the
+            # game in front for a moment
+            say("STAGE opening the map computer")
+            before = game.key_in_front(G.KEY_M)
+            time.sleep(2.5)
+            fatal = game.fatal()
+            c = None if fatal else game.picture()
+            if c:
+                pics.append(_pic(c, what="the map computer"))
+            if not fatal:
+                G.key(G.KEY_M)
+            G.give_back_foreground(before)
         if fatal:
             c = game.picture() if game.alive() else None
             if c:

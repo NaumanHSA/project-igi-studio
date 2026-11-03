@@ -26,6 +26,21 @@ section is also that release's notes on GitHub.
 
 ### Fixed
 
+- **Objectives have their numbers on the map computer on an empty map.** They
+  had none, because there was nothing of the level's for a number to stand on.
+  Now each number stands exactly on its objective, on any map, rather than on the
+  nearest building. Map labels on your own buildings were tied to something the
+  map cannot find, and are now done the same way.
+- **Weapons and ammo no longer hang in the air.** They were laid half a metre over
+  open ground; they now lie on it, as the game's own do. The check list also offers
+  to put a box under pickups left on the bare ground.
+- **Fences and walls follow the ground.** On a slope a panel used to rest on the
+  lowest ground under it, its uphill end buried. It now tilts with the slope, up to
+  about 10 degrees.
+- **Gates fit the fence they go into.** A gate placed on a fence line takes out the
+  panels in its way and fills the fence up to each post, and its two leaves stand at
+  one height. The check list finds a panel left across a gateway and takes it out.
+- **The check list offers an intro** to a mission that starts with none.
 - The check list could say the dry run of Apply "could not be had" after a big
   change: taking the build's own heights counted as a change to the plan, so its
   answer was thrown away as soon as it came.

@@ -846,6 +846,14 @@ def ground_at(cfg, body):
     out = []
     with world as s:
         for pt in body.get("points") or []:
+            if pt.get("follow") and pt.get("model"):
+                # a fence panel or a wall: along the ground, tilted with it (as the build lays it)
+                f = s.follow(pt["model"], float(pt["x"]), float(pt["y"]), float(pt.get("gamma") or 0),
+                             skip=pt.get("ref"))
+                if f is not None:
+                    out.append({"z": round(f[0], 3), "on": "terrain", "alpha": f[1], "beta": f[2],
+                                "under": round(f[3], 2)})
+                    continue
             z, on = s.rest(pt.get("kind") or "soldier", float(pt["x"]), float(pt["y"]),
                            None if pt.get("z") is None else float(pt["z"]), pt.get("model"), skip=pt.get("ref"),
                            gamma=float(pt.get("gamma") or 0))

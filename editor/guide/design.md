@@ -36,8 +36,11 @@ player can get through it first time, and an alarm is bad news rather than the e
    what you placed is really there. `test_load` tells you whether it loads and runs, with
    the game's exact words if it stops with a fatal error. They use a test copy of the
    game, never the person's own, and take a minute or so and the person's screen.
-7. **Finish:** objectives, events, `write_texts`, then `check_mission` and
-   `stealth_check` until they are clean, and `test_load` once more.
+7. **Finish:** objectives, events, `write_texts`, an intro (`make_cutscene` with `plays:
+   intro`: the game's missions open on a look at where the player is going, and without
+   one the mission starts with him just standing there), then `check_mission` and
+   `stealth_check` until they are clean, and `test_load` once more. `fix_check` does the
+   fix a row of the check list offers.
 8. **Put it in the game** with `apply_to_game` when the person wants to play it.
 
 ## What makes a place look right
@@ -46,6 +49,12 @@ player can get through it first time, and an alarm is bad news rather than the e
   way round, and buildings that face each other or the road. Nothing stands alone in a
   field without a reason.
 - Fences join up. A gap in a fence is a way in, so make it on purpose or close it.
+- A gate goes in the fence line: `place_object` with the gate (304_01_1) on the line, facing
+  along it. It takes out the panels in its way and fills to the fence on each side.
+- Fence panels and walls lie along the ground, tilted with it, up to about 10 degrees. On
+  steeper ground they are let into it, so run fences along the slope or level it first.
+- Weapons and ammo lie on something: a desk, a crate, a box or a bed, as the game's own do.
+  Place that first, then the pickup at the same spot: it is laid on top.
 - Things stand on level ground. Use `shape_ground` under a building before placing it,
   and check it in 3D: a building on a slope floats on one side and is buried on the other.
 - Clusters, not grids. Put things close together with space between clusters, and leave
