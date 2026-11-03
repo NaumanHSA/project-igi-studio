@@ -2569,6 +2569,8 @@ function capture() {
 
 window.View3D = { open, close, isOpen, follow, update, screenOf, setPlacing, prepare, target: () => O && O.target,
   film, filmStop, filmSeek, filmPlay, capture,
+  // models and textures still on their way
+  loading: () => LOADS.on > 0,
   // for the tests: the gizmo, and where on screen a point of a handle is (move:
   // along the arrow, 0..1; rotate: round the ring, an angle)
   gizmo: () => S && S.giz ? { shown: gizShown(), mode: S.gizMode, selected: selected(), speed: S.speed,

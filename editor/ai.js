@@ -33,7 +33,7 @@ var ATT = [];                 // pictures, map snapshots and sketches for the ne
 // reads what happened.
 var AGENTS = {
   ideas: {
-    label: "Ideas", kinds: ["look", "design"], changes: false,
+    label: "Ideas", kinds: ["look", "design", "see"], changes: false,
     hint: "Looks at the level and suggests missions. Nothing changes.",
     placeholder: "Ask for mission ideas for this level",
     title: "Mission ideas",
@@ -48,7 +48,7 @@ var AGENTS = {
     ]
   },
   mission: {
-    label: "Mission", kinds: ["look", "design", "build", "ground", "texts", "plan"], changes: true,
+    label: "Mission", kinds: ["look", "design", "see", "build", "ground", "texts", "plan", "test"], changes: true,
     hint: "Plans a whole mission, then builds it one area at a time.",
     placeholder: "Describe the mission to plan and build",
     title: "Build a whole mission",
@@ -71,7 +71,7 @@ var AGENTS = {
     ]
   },
   edit: {
-    label: "Edit", kinds: ["look", "design", "build", "ground", "texts", "library"], changes: true,
+    label: "Edit", kinds: ["look", "design", "see", "build", "ground", "texts", "library", "test"], changes: true,
     hint: "Changes the mission as it is, while you watch.",
     placeholder: "Say what to change, add or fix",
     title: "Edit the mission",
@@ -90,7 +90,7 @@ var AGENTS = {
     ]
   },
   workshop: {
-    label: "Workshop", kinds: ["look", "design"], changes: false, drop: /^(check_mission|stealth_check|list_missions|make_campaign|focus_map)$/,
+    label: "Workshop", kinds: ["look", "design", "see"], changes: false, drop: /^(check_mission|stealth_check|list_missions|make_campaign|focus_map)$/,
     hint: "Buildings, characters and objects for your inventory.",
     placeholder: "Describe a building, a character or an object",
     title: "Workshop",
@@ -109,7 +109,7 @@ var AGENTS = {
   }
 };
 AGENTS.review = {
-  label: "Review", kinds: ["look"], changes: false, drop: /^(make_campaign|list_missions)$/,
+  label: "Review", kinds: ["look", "see"], changes: false, drop: /^(make_campaign|list_missions)$/,
   hint: "Plays it on paper and lists what to fix.",
   placeholder: "Ask what would go wrong, or what to check",
   title: "Review the mission",
@@ -130,8 +130,10 @@ function agentOf(d) { return d && AGENTS[d.agent] ? d.agent : d && d.mode === "i
 function AG() { return AGENTS[CHAT.agent] || AGENTS.edit; }
 // the tools an agent is given
 function agentTools(id) {
-  var a = AGENTS[id] || AGENTS.edit, list = api().tools(a.kinds);
-  if (a.kinds.indexOf("plan") >= 0) list = list.concat(PLAN_TOOLS);
+  var a = AGENTS[id] || AGENTS.edit, list = api().tools(a.kinds), A = api();
+  // no pictures for a model that can't look at them
+  var m = CHAT.model === "light" ? (S && S.light) : S;
+  if (m && m.vision === false) list = list.filter(function (t) { return A.kindOf(t.name) !== "see"; });
   return a.drop ? list.filter(function (t) { return !a.drop.test(t.name); }) : list;
 }
 
@@ -198,7 +200,8 @@ var CSS = [
 ".ai-t-h .go:hover{color:var(--ink);border-color:var(--accent)}",
 ".ai-t-err{color:var(--danger);font-size:12px;padding:0 8px 5px 30px}",
 ".ai-t-note{color:var(--warn);font-size:12px;padding:0 8px 5px 30px}",
-".ai-t pre{margin:0;padding:6px 8px;border-top:1px solid var(--line);font:11px/1.4 'IBM Plex Mono',monospace;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}",
+".ai-t-pics{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-top:1px solid var(--line)}.ai-t-pics img{max-width:100%;width:calc(50% - 2px);min-width:120px;flex:1 1 auto;display:block;border-radius:3px}",
+  ".ai-t pre{margin:0;padding:6px 8px;border-top:1px solid var(--line);font:11px/1.4 'IBM Plex Mono',monospace;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}",
 ".ai-err{border:1px solid color-mix(in srgb,var(--danger) 55%,var(--line));background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger);border-radius:6px;padding:7px 9px;font-size:12.5px}",
 ".ai-err .btn{margin-top:6px;font-size:12px;padding:2px 9px}",
 ".ai-note{font-size:12px;color:var(--faint);text-align:center}",
@@ -845,11 +848,14 @@ function planTool(name, a) {
   next.v = (p && p.v || 0) + 1;
   next.stage = name === "update_plan" && building ? (p.stage === "done" ? "done" : "paused") : "proposed";
   if (name === "propose_plan" && p) p.stage = "replaced";
+  // made by an agent from outside: it builds it, on the person's word in its own conversation
+  if (!RUN) next.outside = true;
   CHAT.plan = next;
   add({ k: "plan", v: next.v, note: name === "update_plan" ? String(a.note || "The plan changed").slice(0, 200) : "" });
   paintPlan(); saveSoon();
   return { ok: true, shown: true, areas: next.areas.length, objectives: next.objectives.length, warnings: chk.warn.length ? chk.warn : undefined,
-    next: "The user sees the plan now. Say in one line that it is ready and wait for their answer: they build it, or ask for changes (update_plan)." };
+    next: RUN ? "The user sees the plan now. Say in one line that it is ready and wait for their answer: they build it, or ask for changes (update_plan)." :
+      "The user sees the plan in the studio now. Ask them in your conversation whether to build it, and wait for their answer. Report each area with plan_progress as you build it." };
 }
 // the plan in short, for the model
 function planBrief(p) {
@@ -889,7 +895,7 @@ function paintPlanCard(b, d) {
   if (p.objectives.length) h += '<div class="pl-sub">Objectives</div><ol class="pl-obj">' + p.objectives.map(function (o) { return '<li>' + esc(o.text) + ' <span>(' + esc(o.area) + ')</span></li>'; }).join("") + '</ol>';
   if (p.events.length) h += '<div class="pl-sub">Events</div><ul class="pl-obj">' + p.events.map(function (e) { return '<li>' + esc(e.when) + ': ' + esc(e.then) + '</li>'; }).join("") + '</ul>';
   var acts = "";
-  if (!RUN) {
+  if (!RUN && !p.outside) {
     if (p.stage === "proposed") acts = '<button class="btn primary" data-p="all" title="Build it\nEvery area in turn, then the objectives, events and texts">Build it</button>' +
       '<button class="btn" data-p="step" title="Area by area\nIt stops after each area for you to look">Area by area</button>';
     else if (p.stage === "paused" && s.left) acts = '<button class="btn primary" data-p="all">Build the rest</button><button class="btn" data-p="next">Build the next area</button>';
@@ -1412,7 +1418,8 @@ function toolNode(t) {
     esc(t.label) + '</span>' + (at ? '<button class="go" title="Show it\nThe map goes there and selects it">Show</button>' : '<i></i>') + '</div>' +
     (t.error ? '<div class="ai-t-err">' + esc(t.error) + '</div>' : "") +
     (t.notes && t.notes.length ? '<div class="ai-t-note">' + esc(t.notes.join(" ")) + '</div>' : "") +
-    (t.sub ? '<div class="ai-t-sub">' + esc(t.sub) + '</div>' : "");
+    (t.sub ? '<div class="ai-t-sub">' + esc(t.sub) + '</div>' : "") +
+    (t.thumbs && t.thumbs.length ? '<div class="ai-t-pics">' + t.thumbs.map(function (u) { return '<img src="' + esc(u) + '" alt="What it saw">'; }).join("") + '</div>' : "");
   var h = d.querySelector(".ai-t-h");
   function toggle() {
     var pre = d.querySelector("pre");
@@ -1517,7 +1524,9 @@ function status(t) {
 // ------------------------------------------------------------------ what a step is called
 var LOOKS = { get_overview: "Looked at the mission and the level", check_mission: "Ran the check list", focus_map: "Showed you the map there",
   stealth_check: "Checked how stealthy it is", list_missions: "Looked through your missions", scout: "Asked the scout",
-  list_catalog: "Looked through the catalogue", show_3d: "Opened the 3D view" };
+  list_catalog: "Looked through the catalogue", show_3d: "Opened the 3D view",
+  screenshot_map: "Looked at the map", screenshot_3d: "Looked in 3D", studio_status: "Looked at what is open", list_levels: "Looked through the levels",
+  read_guide: "Read a guide", wait_for_job: "Waited for the build" };
 function label(name, a, r) {
   a = a || {}; r = r || {};
   var where = a.place ? " at " + a.place : "";
@@ -1586,7 +1595,23 @@ function instructions() {
   var team = ORDER.map(function (k) { return AGENTS[k].label + " (" + AGENTS[k].hint.replace(/\.$/, "").toLowerCase() + ")"; }).join("; ");
   var P = [
     "You are the " + ag.label + " agent of the AI designer inside Project IGI Studio, an editor for Project IGI: I'm Going In (2000). The designer is a team of agents, each with its own job: " + team + ". The user picks the agent above the chat; when they ask for another agent's job, say which one does it. You work on the mission open in the editor through tools; each change appears on the user's map as it is made.",
-    "",
+    ""
+  ].concat(knowledge(ag.kinds, ag.drop));
+  P.push.apply(P, ag.prompt);
+  P.push("",
+    "Now: the mission \"" + c.mission + "\" on " + c.levelName + " (level " + c.level + ")" + (c.empty ? ", made from the level's empty map" : "") +
+      (c.setting ? " (" + c.setting.land + "; its sky: " + c.setting.when + ", which a mission can't change: weather, haze and snow or rain can)" : "") + ", " +
+      (c.editable ? "which can be changed" : "a built-in mission, read only") +
+      ". Yours so far: " + c.counts.yours + " things, " + c.counts.objectives + " objectives, " + c.counts.events + " events." +
+      (c.selected ? " The user has selected " + c.selected.name + " (" + c.selected.id + ") at " + c.selected.x + ", " + c.selected.y + "." : "") +
+      (c.group ? " The user has " + c.group + " things selected as a group." : ""));
+  return P.join("\n");
+}
+// What any agent has to know to work in the studio: the designer's, and one from
+// outside (mcp.js). kinds says which tools it has, drop which it was denied.
+function knowledge(kinds, drop) {
+  var has = function (k) { return kinds.indexOf(k) >= 0; };
+  var P = [
     "The game: the player, David Jones, is a lone infiltrator who gets into enemy bases on foot with a few weapons, binoculars and a map computer. A mission is a set of objectives (eliminate a guard or everyone, collect an item, reach an area, hack a terminal, destroy something) in a base held by soldiers who stand guard or patrol walkways, snipers on towers, security cameras and alarm systems that bring reinforcements. A good mission has a clear goal, more than one way in, guards who cover each other, cover to move through, risk that rises near the objective, and a reward for staying unseen.",
     "",
     "The map: metres, x east, y north, z up. Facing is a compass bearing: 0 north, 90 east. Ids: the level's things are L<number>, yours start with p. Use the names the map has for places (find_places).",
@@ -1599,7 +1624,8 @@ function instructions() {
     "- The map computer shows 6 objectives. The level's own objectives stay until removed: for a new mission, remove them (remove_objectives with level_objectives true) and add your own. Give each objective a short text.",
     "- hack targets are the level's own terminals; kill, destroy and collect need targets the game can test (no_task_id means it can't).",
     "- Keep a way on foot from the player start to every objective, and don't wall the player in.",
-    "- Building the mission into the game (Apply) is the user's action. Never say the mission is in the game.",
+    has("test") ? "- A mission is in the game only once apply_to_game has run. Until then it is only in the studio." :
+      "- Building the mission into the game (Apply) is the user's action. Never say the mission is in the game.",
     "",
     "Places the user tags: a message can end with places tagged on the map ([A], [B]...). Then \"here\", \"this area\" and the like mean them: look_around a tagged place first, and keep what you build for an area inside its bounds.",
     ""
@@ -1607,9 +1633,11 @@ function instructions() {
   if (has("design")) P.push("New things for the inventory: design_structure makes a design out of the game's structures (with guards and pickups if it needs them): a guard post, a sniper nest, a checkpoint, a weapons cache, a bunker entrance. design_character makes a character: a guard type with a model of its kind, a weapon and sight of its own. The user sees each in 3D in the chat and adds it to the inventory if they like it" +
     (has("build") ? "; place_design places one" : "") + ". Make designs that look right: parts meet or overlap slightly, stand on the ground (dz 0) unless stacked, face sensibly, and keep to a sensible size (use sizes from list_catalog). New weapon types and new 3D models can't be made: design with what the game has.", "");
   if (has("ground")) P.push("Walkways and ground: add_walkways lays walkway points from the nearest walkway to a place (and round it), so guards can stand and patrol where there were none; put guards there after. shape_ground levels, raises, lowers, smooths or ramps the ground, as high or deep as needed (past 4 m the build rebuilds the terrain there); sculpt_terrain makes big natural shapes.", "");
-  if (!ag.drop || !ag.drop.test("stealth_check")) P.push("Stealth: stealth_check works out the quietest way on foot from the player start to each objective, how much of it the guards and cameras watch, and who watches it. Use it to judge and tune a mission (the user sees the routes on the map), then suggest or make fixes.", "");
+  if (!drop || !drop.test("stealth_check")) P.push("Stealth: stealth_check works out the quietest way on foot from the player start to each objective, how much of it the guards and cameras watch, and who watches it. Use it to judge and tune a mission (the user sees the routes on the map), then suggest or make fixes.", "");
   if (has("build")) P.push("Cutscenes and vehicles: make_cutscene makes an intro (plays as the mission starts, instead of the level's own), an outro (once the mission is won; the mission ends when it does) or a cutscene for an event, out of the mission itself; add_cutscene_shot adds a shot of a thing, the player or a place (a fly-over, orbit, push in, pan, still, crane up, follow a vehicle, over the shoulder) with a line of subtitle. The studio places every camera. Make an intro and an outro when the user asks for cutscenes, or once a mission is finished if they want one. A vehicle that drives: place_object an APC (601_01_1), a T80 tank (614_01_1), a truck (610_01_1) or the limousine (616_01_1), then set_vehicle_route: the game's AI drives it through the points, now, on the alarm (reinforcements) or on an event. A soldier of yours that moves with the story (Priboi on your side, a guard who goes somewhere once something happens): set_orders - he can follow the player, and each step starts on an event (add_event first).", "");
   if (has("texts")) P.push("Texts: write_texts sets the mission's name and one-line description (what the game's mission list shows), the objective texts, the map computer labels of the mission's buildings, and a short briefing shown at the start. Write them the way the game does: terse military orders in plain English, like \"Infiltrate the airbase and locate the flight recorder.\" or \"Destroy the SAM radar.\"; objectives under 60 characters, labels under 20.", "");
+  if (has("see")) P.push("Seeing: screenshot_map shows the map from above with a grid in metres (the same numbers the tools take), and screenshot_3d the real ground and models from any camera. Look before you plan and look after you build: lists of numbers won't tell you that a wall stops short, that a tower stands in a dip, or that a camp looks wrong. Pictures cost more than words, so take the ones you need.", "");
+  if (has("test")) P.push("Into the game: apply_to_game installs the mission in the user's game. A long job gives a job id: wait_for_job follows it.", "");
   if (has("library")) P.push("Versions and campaigns: make_versions makes easy and hard copies of this mission in the user's library (fewer or more guards, sight, time limit, alarm). list_missions lists the user's missions; make_campaign puts several in order under a name and a briefing, for the user to export as one pack.", "");
   P.push(
     "Pictures: a message can come with pictures: a sketch, a screenshot, the map with a grid in metres, or a sketch drawn on the map (its strokes are given as exact coordinates; use those). Turn what they show into " + (has("build") ? "the mission: walls and fences where lines are drawn, guards and objectives where marked" : "what you make") + ". If it is unclear which colour means what, say what you assume.",
@@ -1618,15 +1646,7 @@ function instructions() {
     "",
     "Always: keep messages short and plain, and never use long dashes. When a call fails, read the error and try another way; don't repeat a failing call unchanged.",
     "");
-  P.push.apply(P, ag.prompt);
-  P.push("",
-    "Now: the mission \"" + c.mission + "\" on " + c.levelName + " (level " + c.level + ")" + (c.empty ? ", made from the level's empty map" : "") +
-      (c.setting ? " (" + c.setting.land + "; its sky: " + c.setting.when + ", which a mission can't change: weather, haze and snow or rain can)" : "") + ", " +
-      (c.editable ? "which can be changed" : "a built-in mission, read only") +
-      ". Yours so far: " + c.counts.yours + " things, " + c.counts.objectives + " objectives, " + c.counts.events + " events." +
-      (c.selected ? " The user has selected " + c.selected.name + " (" + c.selected.id + ") at " + c.selected.x + ", " + c.selected.y + "." : "") +
-      (c.group ? " The user has " + c.group + " things selected as a group." : ""));
-  return P.join("\n");
+  return P;
 }
 // what goes to the model when the whole history has to be sent: old tool
 // results cut short, and pictures only with the latest message
@@ -1718,6 +1738,7 @@ function run(tags, item, atts, flags) {
           if (RUN.stop) { CHAT.items.push({ k: "result", id: c.id, output: JSON.stringify({ ok: false, error: "Stopped by the user before this ran." }) }); continue; }
           await step(c);
         }
+        givePictures();
         RUN.steps += turn.calls.length;
         if (RUN.steps >= RUN.max) { add({ k: "note", text: "Stopped after " + RUN.steps + " steps, the most one request may take (Settings). Say \"go on\" to continue." }); break; }
       }
@@ -1813,41 +1834,84 @@ function ask() {
       });
   });
 }
-// one tool call: run in the editor, shown as a row, the map following
-async function step(c) {
-  var A = api(), args = {};
-  try { args = c.args ? JSON.parse(c.args) : {}; } catch (e) { args = null; }
-  var look = c.name === "scout" || PLAN_NAMES.indexOf(c.name) >= 0 || A.isLook(c.name);
+// One tool call, from any agent: run in the editor, shown as a row, the map
+// following. The designer's loop comes here, and an agent from outside (mcp.js).
+async function callShown(name, raw, kinds, follow) {
+  var A = api(), args = {}, text = typeof raw === "string" ? raw : JSON.stringify(raw || {});
+  try { args = text ? JSON.parse(text) : {}; } catch (e) { args = null; }
+  var look = name === "scout" || PLAN_NAMES.indexOf(name) >= 0 || A.isLook(name);
   var grp = CHAT.view[CHAT.view.length - 1];
   if (!grp || grp.k !== "tools") grp = add({ k: "tools", list: [] });
-  var t = { name: c.name, args: c.args, look: look, status: "run", label: label(c.name, args || {}, {}) };
+  var t = { name: name, args: text, look: look, status: "run", label: label(name, args || {}, {}) };
   grp.list.push(t); paintNode(grp); scroll();
-  status(t.label + "…");
+  if (RUN) status(t.label + "\u2026");
   var res;
   if (args == null) res = { ok: false, error: "The arguments were not valid JSON." };
-  else if (c.name === "scout") res = await runScout(String(args.question || ""), t, grp);
-  else if (PLAN_NAMES.indexOf(c.name) >= 0) {
-    if (RUN.kinds.indexOf("plan") < 0) res = { ok: false, error: "Plans are the Mission builder's; this agent has none." };
-    else res = planTool(c.name, args);
-  }
+  else if (name === "scout") res = await runScout(String(args.question || ""), t, grp);
   else {
-    try { res = await Promise.resolve(A.run(c.name, args, RUN.kinds)); }
+    try { res = await Promise.resolve(A.run(name, args, kinds)); }
     catch (e) { res = { ok: false, error: String(e && e.message ? e.message : e) }; }
   }
   if (!res || typeof res !== "object") res = { ok: false, error: "No answer from the tool." };
   t.status = "done"; t.ok = !!res.ok; t.error = res.ok ? null : res.error; t.notes = res.notes || null;
-  t.label = label(c.name, args || {}, res); t.at = res.at || null; t.ids = res.ids || null;
-  var out = JSON.stringify(res);
-  t.result = out.length > 4000 ? out.slice(0, 4000) + "…" : out;
-  if (res.ok && !look) { RUN.changes++; A.show(res.ids || [], res.at, FOLLOW); }
+  t.label = label(name, args || {}, res); t.at = res.at || null; t.ids = res.ids || null;
+  // a picture goes to the model on its own, and the row keeps a small one of it
+  var pics = (res.image ? [res.image] : []).concat(res.images || []), plain = res;
+  if (pics.length) {
+    plain = Object.assign({}, res);
+    delete plain.image; delete plain.images;
+    plain.pictures = pics.map(function (p) { var q = Object.assign({}, p); delete q.url; return q; });
+    t.thumbs = [];
+    for (var i = 0; i < pics.length; i++) {
+      var th = await shrink(pics[i].url, 340, 0.6);
+      if (th) t.thumbs.push(th.url);
+    }
+  }
+  var out = JSON.stringify(plain);
+  t.result = out.length > 4000 ? out.slice(0, 4000) + "\u2026" : out;
+  if (res.ok && !look) A.show(res.ids || [], res.at, follow);
   paintNode(grp); scroll();
   if (res.ok && res.design) {
     var dsg = A.design(res.design.id) || {};
     add({ k: "design", id: res.design.id, kind: res.design.kind, name: res.design.name, summary: res.design.summary, size: res.design.size_m || null,
       description: res.design.description || "", data: dsg.data || null, added: false });
   }
-  CHAT.items.push({ k: "result", id: c.id, output: out.length > 6000 ? out.slice(0, 6000) + "…(cut)" : out });
-  await sleep(look ? 40 : RUN.pace);
+  return { res: res, out: out, look: look, pics: pics };
+}
+async function step(c) {
+  var r = await callShown(c.name, c.args, RUN.kinds, FOLLOW);
+  if (r.res.ok && !r.look) RUN.changes++;
+  CHAT.items.push({ k: "result", id: c.id, output: r.out.length > 6000 ? r.out.slice(0, 6000) + "\u2026(cut)" : r.out });
+  if (r.pics.length) RUN.pics = (RUN.pics || []).concat(r.pics);
+  await sleep(r.look ? 40 : RUN.pace);
+}
+// the pictures the model's tools gave it: after all of that turn's results, where a message may go
+function givePictures() {
+  if (!RUN.pics || !RUN.pics.length) return;
+  CHAT.items.push({ k: "user", text: "The pictures your tools gave you, in the order you asked.", images: RUN.pics.map(function (p) { return { url: p.url }; }) });
+  RUN.pics = [];
+}
+// A call from an agent outside the studio. Its row is in the chat of what is open,
+// where the person can follow it; the agent's own conversation is in its own program.
+var OUTSIDE = { seen: null, shown: false };
+async function outsideCall(c) {
+  var who = c.client || "An agent";
+  if (OUTSIDE.seen !== CHAT.id + who && el.log) {
+    OUTSIDE.seen = CHAT.id + who;
+    add({ k: "note", text: who + " is working here through MCP. Its calls show below; undo works as usual." });
+  }
+  if (!OUTSIDE.shown) { OUTSIDE.shown = true; showTab("ai"); }
+  var r = await callShown(c.name, c.args, api().kinds(), true);
+  saveSoon();
+  return r.res;
+}
+// What an agent from outside is told as it connects.
+function outsideBrief() {
+  var P = ["You are working in Project IGI Studio, an editor for Project IGI: I'm Going In (2000), through its MCP tools. The person has the studio open and watches every change on their screen as you make it, so work in steps they can follow, and talk to them in your own conversation.",
+    "",
+    "Start with studio_status. Before you design a mission, read_guide with topic design. Always look at what you make: screenshot_map and screenshot_3d. Plans show with propose_plan, and wait for the person's word in your conversation before building them.",
+    ""].concat(knowledge(api().kinds(), null));
+  return P.filter(function (l) { return !/^(The scout:|Places the user tags:|Pictures: a message)/.test(l); }).join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 // ------------------------------------------------------------------ keeping it: chat threads
@@ -2031,6 +2095,8 @@ function nameChat() {
 
 window.AIPanel = {
   missionChanged: missionChanged, renderSettings: renderSettings, show: function () { showTab("ai"); },
+  // for an agent from outside (mcp.js)
+  outsideCall: outsideCall, outsideBrief: outsideBrief,
   // for the tests
   // the agent by id, or the old mode names ("build" is Edit)
   send: function (t, agent) { if (agent) { CHAT.agent = agent === "build" ? "edit" : AGENTS[agent] ? agent : CHAT.agent; paintMode(); } el.input.value = t; submit(); },
@@ -2044,6 +2110,13 @@ window.AIPanel = {
       turnOnce({ role: "main", instructions: instr, history: [{ k: "user", text: text }] }).then(function (g) { return g.error ? null : g.text.trim(); });
   }
 };
-function boot() { if (!build()) return; if (api()) missionChanged(); }
+function boot() {
+  // the plan's tools go in the one registry, with the rest
+  if (api()) api().addTools(PLAN_TOOLS.map(function (t) {
+    return Object.assign({ kind: "plan", run: function (a) { return planTool(t.name, a); } }, t);
+  }));
+  if (!build()) return;
+  if (api()) missionChanged();
+}
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

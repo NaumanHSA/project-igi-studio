@@ -3,6 +3,7 @@
   python -m studio setup              find the game and get ready
   python -m studio                    start the server and open the editor
   python -m studio serve --port 8765  the same, on a port of your choosing
+  python -m studio mcp                what an agent's client starts to reach the open studio
   python -m studio build --plan p.json --out missions/plan --game <game>
   python -m studio corpus             capture the game's scripts (needs the ToolKit)
   python -m studio check              our compiler against that corpus
@@ -15,6 +16,7 @@ import runpy, sys
 COMMANDS = {
     "setup": "studio.setup",
     "serve": "studio.server.app",
+    "mcp": "studio.server.mcp_stdio",
     "build": "studio.build.plan",
     "install": "studio.build.migrate",
     "corpus": "studio.qvm.corpus",

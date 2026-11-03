@@ -172,6 +172,8 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
+      // an agent works in this window while the person looks at another
+      backgroundThrottling: false,
     },
   });
   win.once('ready-to-show', () => win.show());

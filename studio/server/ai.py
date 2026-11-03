@@ -724,6 +724,19 @@ def mock(body, emit):
                 pass
     last_text = (items[last_user].get("text") or "").lower() if last_user >= 0 else ""
     agent = body.get("agent") or ""
+    # asked to look: the model gets its pictures in a message after its tool's result
+    if last_text.startswith("the pictures your tools"):
+        got = len(items[last_user].get("images") or [])
+        say("I can see %d picture%s of the map." % (got, "" if got == 1 else "s"))
+        emit({"t": "done", "responseId": None, "usage": {"in": 1, "out": 1, "cached": 0}, "status": "completed"})
+        return
+    if "take a picture" in last_text:
+        if done_calls:
+            say("The picture could not be taken.")
+        else:
+            call("screenshot_map", {})
+        emit({"t": "done", "responseId": None, "usage": {"in": 1, "out": 1, "cached": 0}, "status": "completed"})
+        return
     if agent == "workshop" and "design" not in last_text and "character" not in last_text:
         last_text = "design " + last_text          # the Workshop only designs
     if agent == "review":

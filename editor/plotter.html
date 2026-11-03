@@ -1742,6 +1742,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
           <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>
         <div class="menu" id="helpmenu" role="menu" hidden style="right:0;top:calc(100% + 4px)"></div>
       </div>
+      <button id="btnmcp" class="btn mcp-btn" type="button" hidden title="MCP: let an agent such as Claude Desktop work in the studio"><i class="mcp-dot"></i>MCP</button>
       <button id="btncommunity" class="btn tb-cm" type="button" hidden title="The community: missions others shared - browse them, look at them, pull them; share yours"><span class="gl"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg></span><span class="t">Community</span><span class="n" id="tb-cm-n" hidden></span></button>
       <button id="btnapply" class="btn primary" hidden>Apply to game</button>
     </div>
@@ -1847,6 +1848,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
     <div class="home-brand"><img src="icon.png" alt="" width="32" height="32"><span><b>IGI <em>Studio</em></b><i>Mission studio · Project I.G.I.</i></span></div>
     <span class="grow"></span>
     <button class="btn home-back" id="lib-back" type="button" hidden></button>
+    <button class="btn mcp-btn" id="lib-mcp" type="button" hidden title="MCP: let an agent such as Claude Desktop work in the studio"><i class="mcp-dot"></i>MCP</button>
     <button class="btn tb-cm" id="lib-community" type="button" hidden title="The community: missions others shared"><span class="gl"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z"/></svg></span><span class="t">Community</span></button>
     <button class="home-ico" id="home-cfg" type="button" hidden title="Settings: the game, the AI models, about" aria-label="Settings"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M6.9 1.6h2.2l.4 1.8 1.3.6 1.6-1 1.6 1.6-1 1.6.6 1.3 1.8.4v2.2l-1.8.4-.6 1.3 1 1.6-1.6 1.6-1.6-1-1.3.6-.4 1.8H6.9l-.4-1.8-1.3-.6-1.6 1-1.6-1.6 1-1.6-.6-1.3-1.8-.4V6.9l1.8-.4.6-1.3-1-1.6 1.6-1.6 1.6 1 1.3-.6z"/></svg></button>
     <button class="home-me" id="home-me" type="button" hidden></button>
@@ -16219,13 +16221,31 @@ function drawSketch(){
   });
   ctx.restore();
 }
-function captureMap(){
+// Any part of the map as a picture: radius metres round a point, with some layers
+// on or off for it. The view is moved for the picture and put back at once, so
+// whoever is looking at the map doesn't lose their place.
+var MAP_SHOWS={walkways:"nodes",patrols:"routes",sight:"sight",coverage:"coverage",labels:"labels",grid:"grid",doors:"door",
+  buildings:"building",props:"prop",walls:"wall",pickups:"pickup",guards:"soldier",cameras:"cameras",ground_paint:"groundtex",buildable:"buildable"};
+function mapPicture(x,y,R,a){
+  if(!W||!H)return null;
+  var view0={cx:view.cx,cy:view.cy,k:view.k},lay0={};
+  function set(list,v){(list||[]).forEach(function(n){var k=MAP_SHOWS[n];if(k){if(!(k in lay0))lay0[k]=layers[k];layers[k]=v}})}
+  set(a.show,true);set(a.hide,false);
+  view.cx=x;view.cy=y;view.k=Math.min(W,H)/(2*R);
+  try{draw();return captureMap({square:true,size:Math.max(300,Math.min(1600,+a.size||1000))})}
+  finally{Object.assign(layers,lay0);view.cx=view0.cx;view.cy=view0.cy;view.k=view0.k;draw()}
+}
+// The view as a picture with a grid in metres. opts.square takes the middle
+// square of it, opts.size the longest side in pixels.
+function captureMap(opts){
   if(!W||!H)return null;
   present();
-  var k=Math.min(1,1400/W),cw=Math.round(W*k),ch=Math.round(H*k),c=document.createElement("canvas");
+  opts=opts||{};
+  var sw=opts.square?Math.min(W,H):W,sh=opts.square?Math.min(W,H):H,sx0=(W-sw)/2,sy0=(H-sh)/2;
+  var k=Math.min(1,(opts.size||1400)/Math.max(sw,sh)),cw=Math.round(sw*k),ch=Math.round(sh*k),c=document.createElement("canvas");
   c.width=cw;c.height=ch;
-  var g=c.getContext("2d");g.drawImage(cv,0,0,cw,ch);
-  var a=s2w(0,0),b=s2w(W,H),B={x0:+a[0].toFixed(1),x1:+b[0].toFixed(1),y0:+b[1].toFixed(1),y1:+a[1].toFixed(1)};
+  var g=c.getContext("2d");g.drawImage(cv,sx0*DPR,sy0*DPR,sw*DPR,sh*DPR,0,0,cw,ch);
+  var a=s2w(sx0,sy0),b=s2w(sx0+sw,sy0+sh),B={x0:+a[0].toFixed(1),x1:+b[0].toFixed(1),y0:+b[1].toFixed(1),y1:+a[1].toFixed(1)};
   var span=Math.max(B.x1-B.x0,B.y1-B.y0),G=[5,10,20,25,50,100,200,250,500,1000].filter(function(v){return span/v<=12})[0]||2000;
   function X(x){return (x-B.x0)/(B.x1-B.x0)*cw}
   function Y(y){return (B.y1-y)/(B.y1-B.y0)*ch}
@@ -17458,6 +17478,11 @@ function standZ(x,y){
   if(inb){var f=floorsOf(inb);if(f&&f.length)return f[0].z}
   var g=groundAt(x,y);return g!=null?g:terrainZ(x,y);
 }
+// a build has finished: what the editor shows of it
+function appliedNow(res){
+  if(res.mission)refreshOpen(res.mission);
+  if(res.ok&&res.applied&&M&&res.mission&&res.mission.id===M.id){M.applied=res.applied;renderList();paintStatus();draw()}
+}
 function applyToGame(opts){
   opts=opts||{};
   if(!canEdit())return;
@@ -17491,8 +17516,7 @@ function applyToGame(opts){
     if(poll){clearTimeout(poll);poll=null}
     var bar=$("ap-bar");if(!bar)return;
     var lines=(res.log||[]).slice(),secs=((Date.now()-t0)/1000).toFixed(1);
-    if(res.mission)refreshOpen(res.mission);
-    if(res.ok&&res.applied&&M&&res.mission&&res.mission.id===M.id){M.applied=res.applied;renderList();paintStatus();draw()}
+    appliedNow(res);
     bar.classList.remove("run");
     if(res.error){
       bar.classList.add("fail");
@@ -19083,6 +19107,277 @@ var AIB=(function(){
       here:r1(terrainZ(w.x,w.y))};
   };
 
+  // ---------------------------------------------------------------- seeing it: the map and the 3D view as pictures
+  function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+  H.screenshot_map=function(a){
+    var b=playBounds(),w=(a.x!=null||a.place||a.near_id)?where(a):{x:(b.minX+b.maxX)/2,y:(b.minY+b.maxY)/2};
+    var whole=a.x==null&&!a.place&&!a.near_id,R=clamp(+a.radius||(whole?Math.max(b.maxX-b.minX,b.maxY-b.minY)/2*1.04:150),8,20000);
+    var pic=mapPicture(w.x,w.y,R,a);
+    if(!pic)return fail("The map is not on screen just now.");
+    return {ok:true,centre:[r1(w.x),r1(w.y)],radius_m:r1(R),
+      image:{url:pic.url,bounds:pic.bounds,grid_m:pic.grid,width:pic.w,height:pic.h,how_to_read:"north is up; the white lines are labelled in metres (x east, y north), the same numbers the tools take"}};
+  };
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+  // a picture, smaller and cheaper to send
+  function smaller(url,max,q){
+    return new Promise(function(done,no){
+      var im=new Image();
+      im.onload=function(){
+        var k=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement("canvas");
+        c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
+        c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+        done({url:c.toDataURL("image/jpeg",q||0.85),width:c.width,height:c.height});
+      };
+      im.onerror=function(){no(new Error("The picture could not be read."))};
+      im.src=url;
+    });
+  }
+  // the view has gathered what is round the camera, and its models and textures have come
+  function settled3d(){
+    var t0=Date.now();
+    return sleep(350).then(function wait(){
+      if(!View3D.loading()||Date.now()-t0>12000)return sleep(120);
+      return sleep(150).then(wait);
+    });
+  }
+  H.screenshot_3d=function(a){
+    if(!window.View3D)return fail("The 3D view is still loading. Try again in a moment.");
+    if(!window.MeshSprites||!MeshSprites.ready())return fail("The models are still loading. Try again in a moment.");
+    var hasFrom=Array.isArray(a.from)&&a.from.length===3&&a.from.every(isFinite);
+    var w=(a.x!=null||a.place||a.near_id)?where(a):hasFrom?{x:+a.from[0],y:+a.from[1]}:where(a);
+    var item=a.near_id?byId(a.near_id):null;
+    var g=terrainZ(w.x,w.y);
+    var z=a.z!=null?+a.z:item&&item.z!=null?+item.z+(a.look_up_m!=null?+a.look_up_m:1.5):g;
+    if(z==null)return fail("There is no ground there: it is off the map.");
+    var d=clamp(+a.distance||40,2,1500),up=a.height!=null?+a.height:d*0.45;
+    var R=clamp(hasFrom?Math.hypot(+a.from[0]-w.x,+a.from[1]-w.y)*2.2:d*2.2,60,800);
+    var turns=hasFrom?[null]:a.orbit?[0,90,180,270]:[a.from_bearing!=null?+a.from_bearing:135];
+    var was=View3D.isOpen(),pics=[];
+    if(!was||!a.keep_open)open3dAt(w.x,w.y,R,false);
+    if(!View3D.isOpen())return fail("The 3D view could not open there.");
+    function shot(i){
+      if(i>=turns.length)return Promise.resolve();
+      var b=turns[i],c=hasFrom?[+a.from[0],+a.from[1],+a.from[2]]:
+        [w.x+Math.sin(b*Math.PI/180)*d,w.y+Math.cos(b*Math.PI/180)*d,z+up];
+      // not under the ground: the camera keeps above it, whatever the height asked
+      if(!hasFrom){var gc=terrainZ(c[0],c[1]);if(gc!=null&&c[2]<gc+1.2)c[2]=gc+1.2}
+      View3D.lookFrom(c[0],c[1],c[2],w.x,w.y,z);
+      return settled3d().then(function(){
+        var url=View3D.capture();
+        if(!url)throw new Error("The 3D view could not be captured.");
+        return smaller(url,clamp(+a.size||1100,300,1600));
+      }).then(function(p){
+        p.camera=c.map(r1);p.looking_at=[r1(w.x),r1(w.y),r1(z)];if(b!=null)p.camera_stands_toward_deg=b;
+        pics.push(p);return shot(i+1);
+      });
+    }
+    return shot(0).then(function(){
+      if(!was&&!a.keep_open)View3D.close();
+      return pics.length===1?{ok:true,image:pics[0]}:{ok:true,images:pics};
+    },function(e){if(!was&&!a.keep_open&&View3D.isOpen())View3D.close();throw e});
+  };
+
+  // ---------------------------------------------------------------- the missions themselves
+  function saveOpen(){
+    if(!M||READONLY||!Store||Store.local)return Promise.resolve();
+    if(saveTimer){clearTimeout(saveTimer);saveTimer=null}
+    return Store.save(M.id,{plan:planOf(),name:MISSION}).then(function(s){refreshOpen(s)});
+  }
+  function needServer(){return !Store||Store.local?"This needs the studio's server, which is not running here.":null}
+  H.studio_status=function(){
+    var st=needServer();if(st)return fail(st);
+    return Store.library().then(function(l){
+      var b=M||READONLY?(M?M.base:{level:LV,kind:"as shipped"}):null;
+      return {ok:true,version:(SRV&&SRV.version)||undefined,screen:$("start").hidden?"the map":"the start page",
+        open:b?{id:M?M.id:null,name:MISSION,level:b.level,level_name:levelTitle(b.level),made_from:b.kind,
+          can_change:!!(M&&!READONLY),things:placements.length,objectives:objectives.length,events:events.length,
+          selected:sel&&sel.x!=null?brief(sel):undefined}:null,
+        your_missions:((l&&l.missions)||[]).length,game:(SRV&&SRV.gamePath)||undefined,
+        next:b?(M&&!READONLY?"get_overview, then screenshot_map, tell you the mission.":"This one is read only: create_mission makes one of your own."):
+          "list_levels and list_missions, then create_mission or open_mission."};
+    });
+  };
+  H.list_levels=function(){
+    var st=needServer();if(st)return fail(st);
+    return Store.library().then(function(l){
+      return {ok:true,levels:((l&&l.builtins)||[]).map(function(b){
+        var e=b.environment||{};
+        return {level:b.level,name:b.name,land:e.label||undefined,when:e.when||undefined,description:b.description||undefined,empty_map:!!b.emptyMap}}),
+        note:"A level gives a mission its ground, sky and walkways. create_mission with from empty is that map with nothing built on it; open_mission with level looks at the mission as the game ships it."};
+    });
+  };
+  // the mission's map is up and the loader gone
+  function openedNow(id){
+    return new Promise(function(done){
+      openMission(id,function(){groundReady().then(function(){setTimeout(done,80)})});
+    });
+  }
+  function openedDesc(){
+    return {ok:true,id:M?M.id:null,name:MISSION,level:LV,level_name:levelTitle(LV),can_change:!!(M&&!READONLY),empty_map:MODE==="empty",
+      things:placements.length,objectives:objectives.length,next:"get_overview says what is here; screenshot_map shows it."};
+  }
+  H.create_mission=function(a){
+    var st=needServer();if(st)return fail(st);
+    var name=String(a.name||"").trim().slice(0,40);if(!name)return fail("Give the mission a name.");
+    var lv=parseInt(a.level,10),kind=a.from==="copy"?"copy":"empty";
+    return Store.library().then(function(l){
+      var b=((l&&l.builtins)||[]).filter(function(x){return x.level===lv})[0];
+      if(!b)throw new Error("There is no level "+a.level+". list_levels gives them.");
+      if(kind==="empty"&&!b.emptyMap)throw new Error("Level "+lv+" has no empty map here: use from copy, or another level.");
+      return saveOpen();
+    }).then(function(){
+      return Store.create({name:name,description:a.description?String(a.description).slice(0,300):"",base:{level:lv,kind:kind},from:null});
+    }).then(function(m){
+      $("sheet").hidden=true;
+      return openedNow(m.id);
+    }).then(openedDesc);
+  };
+  H.open_mission=function(a){
+    var st=needServer();if(st)return fail(st);
+    $("sheet").hidden=true;
+    if(a.level!=null&&!a.id){
+      var lv=parseInt(a.level,10);
+      return saveOpen().then(function(){return Store.library()}).then(function(l){
+        if(!((l&&l.builtins)||[]).some(function(x){return x.level===lv}))throw new Error("There is no level "+a.level+". list_levels gives them.");
+        viewBuiltin(lv);
+        return new Promise(function(done){(function wait(n){if(LEVEL&&LEVEL.level===lv&&$("loading").hidden)done();else if(n<400)setTimeout(function(){wait(n+1)},100);else done()})(0)});
+      }).then(openedDesc);
+    }
+    if(!a.id)return fail("Say which: id (from list_missions), or level to look at a built-in one.");
+    if(M&&M.id===a.id){$("start").hidden=true;return openedDesc()}
+    return saveOpen().then(function(){return Store.get(a.id)}).then(function(m){
+      if(!m)throw new Error("There is no mission "+a.id+". list_missions gives them.");
+      return openedNow(a.id);
+    }).then(openedDesc);
+  };
+  H.duplicate_mission=function(a){
+    var st=needServer();if(st)return fail(st);
+    var id=a.id||(M&&M.id);if(!id)return fail("Say which mission: id, from list_missions.");
+    return saveOpen().then(function(){return Store.get(id)}).then(function(m){
+      if(!m)throw new Error("There is no mission "+id+".");
+      return Store.duplicate(id,String(a.name||(m.name+" copy")).slice(0,40));
+    }).then(function(c){return {ok:true,id:c.id,name:c.name,note:"Made, not opened: open_mission opens it."}});
+  };
+  // Delete is for good, so the person answers it, in the studio's own window
+  H.delete_mission=function(a){
+    var st=needServer();if(st)return fail(st);
+    return Store.library().then(function(l){
+      var m=((l&&l.missions)||[]).filter(function(x){return x.id===a.id})[0];
+      if(!m)throw new Error("There is no mission "+a.id+" among the user's. The built-in ones can't be deleted.");
+      deleteDialog(m);
+      return new Promise(function(done){
+        (function wait(){
+          if(!$("sheet").hidden&&$("del-no"))return void setTimeout(wait,300);
+          Store.library().then(function(n){
+            var gone=!((n&&n.missions)||[]).some(function(x){return x.id===a.id});
+            done(gone?{ok:true,deleted:m.name}:{ok:false,error:"The user chose to keep it."});
+          });
+        })();
+      });
+    });
+  };
+  H.read_guide=function(a){
+    var st=needServer();if(st)return fail(st);
+    return fetch("api/mcp/guides").then(function(r){return r.json()}).then(function(j){
+      var g=(j.guides||[]).filter(function(x){return x.name===a.topic})[0];
+      if(!g)return {ok:!a.topic,topics:(j.guides||[]).map(function(x){return {topic:x.name,title:x.title}}),error:a.topic?"No guide "+a.topic+".":undefined};
+      return {ok:true,topic:g.name,text:g.text};
+    });
+  };
+
+  // ---------------------------------------------------------------- going back, and many changes as one
+  H.undo=function(a){
+    if(!editable())return fail(RO);
+    var n=Math.max(1,Math.min(50,parseInt(a.steps,10)||1)),done=0;
+    while(done<n&&undoStack.length){undo();done++}
+    return done?{ok:true,undone:done,left:undoStack.length}:fail("There is nothing to undo.");
+  };
+  H.redo=function(a){
+    if(!editable())return fail(RO);
+    var n=Math.max(1,Math.min(50,parseInt(a.steps,10)||1)),done=0;
+    while(done<n&&redoStack.length){redo();done++}
+    return done?{ok:true,redone:done,left:redoStack.length}:fail("There is nothing to redo.");
+  };
+  var MARKS={};
+  H.checkpoint=function(a){
+    if(!editable())return fail(RO);
+    var name=String(a.name||"").trim().slice(0,60);if(!name)return fail("Give the checkpoint a name.");
+    var k=M.id;(MARKS[k]=MARKS[k]||{})[name]=planState();
+    return {ok:true,saved:name,checkpoints:Object.keys(MARKS[k]),note:"Kept until the studio closes."};
+  };
+  H.restore_checkpoint=function(a){
+    if(!editable())return fail(RO);
+    var k=MARKS[M.id]||{},s=k[a.name];
+    if(!s)return fail("No checkpoint "+a.name+" in this mission. There are: "+(Object.keys(k).join(", ")||"none")+".");
+    undoStack.push(planState());redoStack=[];restoreState(s);lastState=planState();
+    return {ok:true,restored:a.name,things:placements.length,note:"Undo brings back what was there before."};
+  };
+  H.batch=function(a){
+    if(!editable())return fail(RO);
+    var calls=Array.isArray(a.calls)?a.calls:[];
+    if(!calls.length)return fail("Say what to do: calls, a list of {tool, args}.");
+    if(calls.length>100)return fail("At most 100 calls in one batch.");
+    var keepGoing=a.stop_on_error===false,before=planState(),n0=undoStack.length,out=[],bad=0;
+    function one(i){
+      if(i>=calls.length)return Promise.resolve();
+      var c=calls[i]||{},t=BY[c.tool];
+      if(!t||c.tool==="batch"||["see","mission","test"].indexOf(t.kind)>=0||!H[c.tool]){
+        bad++;out.push({tool:c.tool,ok:false,error:t?c.tool+" can't go in a batch.":"There is no tool "+c.tool+"."});
+        return keepGoing?one(i+1):Promise.resolve();
+      }
+      return new Promise(function(ok){ok(H[c.tool](c.args||{}))}).catch(function(e){return fail(e&&e.message?e.message:String(e))}).then(function(r){
+        r=r||fail("No answer from the tool.");
+        if(!r.ok)bad++;
+        var s=Object.assign({tool:c.tool},r);delete s.image;delete s.images;
+        out.push(s);
+        return r.ok||keepGoing?one(i+1):undefined;
+      });
+    }
+    return one(0).then(function(){
+      var ids=[],at=null;
+      out.forEach(function(r){if(r.ids)ids=ids.concat(r.ids);if(r.at)at=r.at});
+      if(a.all_or_nothing&&bad){
+        restoreState(before);lastState=before;undoStack.length=n0;redoStack=[];
+        return {ok:false,error:"One of the calls failed, so none of them were kept.",results:out};
+      }
+      // one undo step, whatever it took
+      if(undoStack.length>n0){undoStack.length=n0;undoStack.push(before)}
+      return {ok:!bad,error:bad?bad+" of "+calls.length+" calls failed; the ones before them were kept (undo takes them all back).":undefined,results:out,ids:ids,at:at};
+    });
+  };
+
+  // ---------------------------------------------------------------- into the game
+  // A job the server is running: its end, or, if that takes longer than a client
+  // will wait for one call, how far it has got and the job to ask again about.
+  function followJob(jid,seconds){
+    var end=Date.now()+clamp(+seconds||45,1,50)*1000;
+    return new Promise(function(done,no){
+      (function tick(){
+        Store.job(jid).then(function(st){
+          if(st.done){
+            var r=st.result||{ok:false,error:"no result"};
+            appliedNow(r);
+            done(Object.assign({},r,{mission:undefined,applied:undefined,log:undefined,job:undefined,log_end:(st.lines||[]).slice(-14)}));
+          }else if(Date.now()>=end)done({ok:true,running:true,job:jid,stage:st.stage,percent:st.pct,detail:st.detail,next:"Not finished yet: wait_for_job with this job."});
+          else setTimeout(tick,400);
+        }).catch(no);
+      })();
+    });
+  }
+  H.wait_for_job=function(a){
+    if(!a.job)return fail("Say which job.");
+    return followJob(String(a.job),a.wait_seconds);
+  };
+  H.apply_to_game=function(a){
+    if(!editable())return fail(RO);
+    var st=needServer();if(st)return fail(st);
+    return saveOpen().then(function(){return Store.applyJob(M.id,null)}).then(function(j){
+      if(!j||!j.job)throw new Error("The server did not start the build.");
+      toast("Applying “"+MISSION+"” to the game");
+      return followJob(j.job,a.wait_seconds);
+    });
+  };
+
   // ---------------------------------------------------------------- the tools as the model sees them
   var XY={x:{type:"number",description:"metres east"},y:{type:"number",description:"metres north"},
     place:{type:"string",description:"a place name from find_places, instead of x and y"},
@@ -19163,24 +19458,68 @@ var AIB=(function(){
       labels:{type:"array",items:{type:"object",properties:{id:{type:"string"},title:{type:"string"},info:{type:"string"}},required:["id","title"]}}})},
     {name:"list_missions",look:true,description:"The user's missions in the library: ids, names, levels, descriptions.",parameters:P({})},
     {name:"make_versions",description:"Make easy, normal and hard copies of this mission in the user's library: easy has a third fewer of the mission's guards, less sight, more time, no fail on alarm, a medipack by the start; hard one more guard for every two, more sight, less time, fail on alarm, fewer medipacks. This mission stays as it is.",parameters:P({versions:{type:"array",items:{type:"string",enum:["easy","normal","hard"]}}})},
-    {name:"make_campaign",look:true,description:"Put several of the user's missions (ids from list_missions) in order under a campaign name and briefing: opens the campaign sheet for the user to check and export as one file.",parameters:P({name:{type:"string"},briefing:{type:"string"},mission_ids:{type:"array",items:{type:"string"}}},["name","mission_ids"])}
+    {name:"make_campaign",look:true,description:"Put several of the user's missions (ids from list_missions) in order under a campaign name and briefing: opens the campaign sheet for the user to check and export as one file.",parameters:P({name:{type:"string"},briefing:{type:"string"},mission_ids:{type:"array",items:{type:"string"}}},["name","mission_ids"])},
+    {name:"screenshot_map",kind:"see",description:"See the map from above, as a picture with a grid in metres whose numbers are the x and y every tool takes. With no point, the whole map; with a point (x and y, place or near_id), radius metres round it. Use it to survey a level before planning and to check what you built: things look right or wrong far more clearly than in lists of numbers.",
+      parameters:P(withXY({radius:{type:"number",description:"metres from the centre to the edge of the picture, default 150"},
+        show:{type:"array",items:{type:"string",enum:Object.keys(MAP_SHOWS)},description:"layers to turn on for this picture: walkways, patrols, sight (guards' sight cones), coverage (what guards and cameras watch)..."},
+        hide:{type:"array",items:{type:"string",enum:Object.keys(MAP_SHOWS)},description:"layers to turn off for this picture"},
+        size:{type:"integer",description:"the picture's side in pixels, default 1000"}}))},
+    {name:"screenshot_3d",kind:"see",description:"See the mission in the studio's 3D view, as the ground and models really stand: is it floating, buried, facing the wrong way, does it look right? Say what to look at (x and y, place or near_id). The camera stands distance metres away, toward from_bearing (default south-east), height metres above it; or give from [x, y, z] for an exact spot, such as eye level. orbit takes four pictures round it.",
+      parameters:P(withXY({z:{type:"number",description:"the height to look at; default the thing's own, or the ground"},
+        distance:{type:"number",description:"metres from what it looks at, default 40"},height:{type:"number",description:"metres above what it looks at, default about half the distance"},
+        from_bearing:{type:"number",description:"compass bearing from what it looks at to the camera, default 135"},orbit:{type:"boolean",description:"four pictures, from the north, east, south and west"},
+        from:{type:"array",items:{type:"number"},description:"[x, y, z]: stand exactly there. The player's eye is 1.7 m above the ground"},
+        keep_open:{type:"boolean",description:"leave the 3D view open for the user to look at"},size:{type:"integer",description:"the picture's longest side in pixels, default 1100"}}))},
+    {name:"studio_status",kind:"mission",anywhere:true,description:"What the studio has open now: the start page or a mission, which one, can it be changed. A good first call.",parameters:P({})},
+    {name:"list_levels",kind:"mission",anywhere:true,description:"The game's 14 levels: name, land, time of day, and whether it has an empty map. Each gives a mission its ground, sky and walkways.",parameters:P({})},
+    {name:"create_mission",kind:"mission",anywhere:true,description:"Make a new mission and open it. from empty (the default) is the level's map with nothing built on it, for a mission from scratch; from copy is the whole level as the game ships it, to change.",
+      parameters:P({name:{type:"string"},level:{type:"integer",description:"1 to 14, from list_levels"},from:{type:"string",enum:["empty","copy"]},description:{type:"string"}},["name","level"])},
+    {name:"open_mission",kind:"mission",anywhere:true,description:"Open a mission on the map: id, one of the user's from list_missions; or level, to look at a built-in one as the game ships it (read only). What was open is saved first.",
+      parameters:P({id:{type:"string"},level:{type:"integer"}})},
+    {name:"duplicate_mission",kind:"mission",anywhere:true,description:"Copy a mission in the library (the open one if no id is given). The copy is not opened.",parameters:P({id:{type:"string"},name:{type:"string"}})},
+    {name:"delete_mission",kind:"mission",anywhere:true,description:"Delete a mission for good: out of the studio and out of the game. The user has to agree in the studio's window, and this waits for their answer.",parameters:P({id:{type:"string"}},["id"])},
+    {name:"read_guide",kind:"look",look:true,anywhere:true,description:"The studio's guides on making missions. With no topic, lists them. design is how to design a good mission here: read it before designing one.",parameters:P({topic:{type:"string"}})},
+    {name:"undo",description:"Take back the last change, or the last steps of them. Any change made by anyone, you or the user.",parameters:P({steps:{type:"integer",description:"how many, default 1"}})},
+    {name:"redo",description:"Bring back what undo took.",parameters:P({steps:{type:"integer",description:"how many, default 1"}})},
+    {name:"checkpoint",description:"Remember the mission as it is now under a name, to come back to with restore_checkpoint. Worth doing before trying something big.",parameters:P({name:{type:"string"}},["name"])},
+    {name:"restore_checkpoint",description:"Put the mission back as it was at a checkpoint (undo brings back what was there).",parameters:P({name:{type:"string"}},["name"])},
+    {name:"batch",description:"Several changes as one call and one undo step: much faster than one at a time for a whole area. calls run in order; it stops at the first that fails unless stop_on_error is false. all_or_nothing keeps none of them if any fails. Not for pictures, tests or opening missions.",
+      parameters:P({calls:{type:"array",items:{type:"object",properties:{tool:{type:"string"},args:{type:"object"}},required:["tool"]}},stop_on_error:{type:"boolean"},all_or_nothing:{type:"boolean"}},["calls"])},
+    {name:"apply_to_game",kind:"test",description:"Build the mission and install it in the user's game, ready to play from its mission list. Takes from seconds to a few minutes: if it isn't done in wait_seconds, you get a job for wait_for_job.",parameters:P({wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}})},
+    {name:"wait_for_job",kind:"test",anywhere:true,description:"How a long job given by apply_to_game or a test is doing: waits up to wait_seconds for its end.",parameters:P({job:{type:"string"},wait_seconds:{type:"integer",description:"at most 50, default 45"}},["job"])},
   ];
-  // Each tool has a kind, and each agent of the AI designer (editor/ai.js) the
-  // kinds it may use: look and design change nothing in the mission; build,
-  // ground and texts do; library makes or gathers missions in the library.
+  // Each tool has a kind, and each agent (the AI designer's, editor/ai.js, or one
+  // from outside, editor/mcp.js) the kinds it may use: look and design change
+  // nothing in the mission; see gives pictures; build, ground and texts change it;
+  // library makes or gathers missions; mission opens and makes them from anywhere,
+  // which only an agent outside a mission's chat has a use for; test goes into the game.
   var KIND={add_walkways:"ground",remove_walkways:"ground",shape_ground:"ground",remove_ground_area:"ground",sculpt_terrain:"ground",
     write_texts:"texts",make_versions:"library",make_campaign:"library"};
-  var BY={};T.forEach(function(t){BY[t.name]=t;t.kind=KIND[t.name]||(t.look?"look":t.design?"design":"build")});
+  var BY={};
+  function enter(t){BY[t.name]=t;t.kind=KIND[t.name]||t.kind||(t.look?"look":t.design?"design":"build")}
+  T.forEach(enter);
+  // what a tool promises, for a client that shows it
+  var GONE=/^(remove_|delete_|restore_|undo$)/;
+  function notes(t){
+    var ro=!!(t.look||t.design||t.kind==="see"||(t.kind==="mission"&&!/^(create|duplicate|delete|open)_/.test(t.name))||t.name==="wait_for_job");
+    return {readOnlyHint:ro,destructiveHint:!ro&&GONE.test(t.name),openWorldHint:false};
+  }
   // what an agent may use: a list of kinds, or the old modes ("build" is all)
   function kindsOf(a){return Array.isArray(a)?a:a==="build"?["look","design","build","ground","texts","library"]:["look","design"]}
   function allowed(t,a){var ks=kindsOf(a);return ks.indexOf(t.kind)>=0||(t.look&&ks.indexOf("look")>=0)}
   return {
     tools:function(a){return T.filter(function(t){return allowed(t,a)}).map(function(t){return {name:t.name,description:t.description,parameters:t.parameters}})},
-    isLook:function(n){return !!(BY[n]&&(BY[n].look||BY[n].design))},
+    // every tool there is, as a client outside the studio gets them
+    catalog:function(){return T.map(function(t){return {name:t.name,description:t.description,parameters:t.parameters,annotations:notes(t)}})},
+    kinds:function(){var k={};T.forEach(function(t){k[t.kind]=1});return Object.keys(k)},
+    // a tool whose code lives elsewhere (the plan's, in editor/ai.js): {name, kind, description, parameters, run}
+    add:function(list){list.forEach(function(t){if(BY[t.name])return;T.push(t);enter(t);H[t.name]=t.run})},
+    isLook:function(n){return !!(BY[n]&&(BY[n].look||BY[n].design||BY[n].kind==="see"))},
     kindOf:function(n){return BY[n]?BY[n].kind:null},
     run:function(name,args,a){
       var t=BY[name];
       if(!t)return fail("There is no tool "+name+".");
+      if(!t.anywhere&&!((M||READONLY)&&LEVEL&&CATALOG&&MODELS))return fail("No mission is open yet. list_missions shows the user's: open_mission opens one, create_mission makes a new one.");
       if(!allowed(t,a))return fail(Array.isArray(a)?"This agent can't use "+name+": it "+(t.look||t.design?"is for another agent":"changes the mission, and this agent changes nothing")+". Say what should be done, and the user can hand it to the agent that does it.":
         "This is Ideas mode: nothing is changed. The user switches to Build to have it built.");
       try{return H[name](args||{})}catch(e){return fail(e&&e.message?e.message:String(e))}
@@ -19240,7 +19579,8 @@ window.StudioCommunity={
 };
 window.StudioAI={
   ready:function(){return !!(LEVEL&&CATALOG&&MODELS)},
-  tools:AIB.tools,run:AIB.run,isLook:AIB.isLook,kindOf:AIB.kindOf,
+  tools:AIB.tools,run:AIB.run,isLook:AIB.isLook,kindOf:AIB.kindOf,catalog:AIB.catalog,kinds:AIB.kinds,addTools:AIB.add,
+  sheet:function(title,html){sheet(title,html)},closeSheet:function(){$("sheet").hidden=true},toast:function(t){toast(t)},
   editable:function(){return !!(M&&!READONLY)},
   readOnly:function(){if(READONLY)readOnlyNotice()},
   missionId:function(){return M?M.id:null},
@@ -19391,6 +19731,8 @@ probeServer().then(function(ok){
   Store=makeStore(ok);
   // the community goes through the studio's server: none, no community
   $("btncommunity").hidden=$("lib-community").hidden=!!Store.local;
+  $("btnmcp").hidden=$("lib-mcp").hidden=!!Store.local;
+  if(!Store.local&&window.StudioMCP)StudioMCP.start();
   paintDock();
   loadGroups();
   // not set up yet: the setup is the first and only thing on screen
@@ -19402,4 +19744,5 @@ probeServer().then(function(ok){
 </script>
 <script src="ai.js"></script>
 <script src="community.js"></script>
+<script src="mcp.js"></script>
 

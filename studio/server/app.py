@@ -72,9 +72,13 @@ from studio.build import slots as SL
 from studio.extract import model3d as M3
 from studio.server import ai as AI
 from studio.server import community as CM
+from studio.server import mcp as MCP
 from urllib.parse import urlparse, parse_qs
 from studio import paths
 from studio.qvm import source as qvm_source
+
+LISTENER = MCP.Listener()
+
 
 def DEFAULTS():
     return {"gamePath": str(paths.setting("gamePath") or ""), "slot": paths.slot(),
@@ -1038,6 +1042,45 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             return self._json({"ok": False, "error": "%s: %s" % (type(e).__name__, e)}, 500)
 
+    # the MCP switch, and the road between an agent's calls and this window (mcp.py)
+    def _mcp_get(self):
+        u = urlparse(self.path)
+        if u.path == "/api/mcp/status":
+            return self._json(LISTENER.status())
+        if u.path == "/api/mcp/connect":
+            return self._json({**MCP.connect_info(), **LISTENER.status()})
+        if u.path == "/api/mcp/guides":
+            return self._json({"ok": True, "guides": MCP.guides()})
+        if u.path == "/api/mcp/next":
+            q = parse_qs(u.query)
+            call = LISTENER.bridge.next((q.get("gen") or [""])[0], min(25.0, float((q.get("wait") or ["20"])[0])))
+            try:
+                return self._json({"call": call})
+            except OSError:
+                if call:
+                    LISTENER.bridge.give_back(call)
+                raise
+        return self._json({"ok": False, "error": "no such route"}, 404)
+
+    def _mcp_post(self):
+        path = urlparse(self.path).path
+        b = self._body()
+        if path == "/api/mcp/start":
+            ok = LISTENER.start()
+            return self._json({"ok": ok, **LISTENER.status()})
+        if path == "/api/mcp/stop":
+            LISTENER.stop()
+            return self._json({"ok": True, **LISTENER.status()})
+        if path == "/api/mcp/hello":
+            LISTENER.bridge.hello(str(b.get("gen") or ""), b.get("tools"), b.get("instructions"))
+            return self._json({"ok": True, **LISTENER.status()})
+        if path == "/api/mcp/result":
+            LISTENER.bridge.result(int(b.get("id")), b.get("result"))
+            return self._json({"ok": True})
+        if path == "/api/mcp/claude-desktop":
+            return self._json(MCP.add_to_claude_desktop())
+        return self._json({"ok": False, "error": "no such route"}, 404)
+
     def _thread_route(self):
         """(mission id, thread id or None) for /api/missions/<id>/ai[/<thread>]."""
         m = re.match(r"^/api/missions/([a-z0-9-]+)/ai(?:/([a-z0-9-]+))?/?(?:\?.*)?$", self.path)
@@ -1232,6 +1275,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._guard(lambda: self._json({"ok": True, **mission_heights(load_config(), mid)}))
         if mid and not action:
             return self._guard(lambda: self._json({"ok": True, "mission": load_in_game(mid)}))
+        if self.path.startswith("/api/mcp/"):
+            return self._guard(self._mcp_get)
         jm = re.match(r"^/api/jobs/([a-z0-9]+)$", self.path)
         if jm:
             job = JOBS.get(jm.group(1))
@@ -1297,6 +1342,8 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if self.path.startswith("/api/community/"):
                 return self._guard(lambda: self._community("POST"))
+            if self.path.startswith("/api/mcp/"):
+                return self._guard(self._mcp_post)
             if self.path.startswith("/api/ai/chat"):
                 return self._ai_chat()
             if self.path.startswith("/api/ai/settings"):
@@ -1739,6 +1786,9 @@ def main():
         save_config(cfg)
     st = game_state(cfg)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    # left on when the studio last closed: on again, unless a test home says otherwise
+    if MCP.connection().get("on"):
+        LISTENER.start()
     port = srv.server_address[1]          # the one the system chose when asked for 0
     print("Project IGI Studio")
     print("  serving %s" % EDITOR)
