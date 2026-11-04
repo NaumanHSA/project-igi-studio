@@ -35,7 +35,8 @@ def needed(game):
 #: does, and never change by themselves, nor because of the studio. The
 #: studio adds each mission's text to objectives.res and messages.res, so
 #: those are left out: a game that has had a mission applied is still the same
-#: build.
+#: build. It adds a mission's name to missions.res too, which is fingerprinted
+#: without them (_hash_of).
 STUDIO_WRITES = ("objectives.res", "messages.res")
 
 
@@ -64,12 +65,23 @@ def _hash(p):
     return h.hexdigest()
 
 
+def _hash_of(p):
+    """A file's hash; a missions.res as it shipped, whatever missions were added to it."""
+    if p.name.lower() != "missions.res":
+        return _hash(p)
+    from studio.build import lang
+    try:
+        return hashlib.sha256(lang.as_shipped(p)).hexdigest()
+    except (OSError, ValueError):
+        return _hash(p)
+
+
 def fingerprint(game):
     """(short id, {relative path: hash}) over the files a mission is built from."""
     game = pathlib.Path(game)
     parts = {}
     for p in fingerprint_files(game):
-        parts[str(p.relative_to(game)).replace("\\", "/").lower()] = _hash(p)
+        parts[str(p.relative_to(game)).replace("\\", "/").lower()] = _hash_of(p)
     joined = "\n".join("%s %s" % (k, parts[k]) for k in sorted(parts))
     return hashlib.sha256(joined.encode()).hexdigest()[:16], parts
 

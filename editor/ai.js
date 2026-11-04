@@ -155,6 +155,9 @@ var CSS = [
 ".rtabs::after{content:\"\";flex:1}",
 ".rtabs .tab{transform:none;border-right:1px solid var(--line);border-left:none;border-radius:5px 0 0 5px;margin-right:0;margin-left:-1px}",
 ".rtabs .tab svg{transform:none}",
+".tab-n{min-width:15px;padding:3px 2px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);color:var(--ink);font:600 9.5px/1 \"IBM Plex Mono\",monospace;letter-spacing:0;text-align:center}",
+".tab-n[hidden]{display:none}",
+".tab[aria-selected=\"true\"] .tab-n{background:transparent;border-color:currentColor;color:inherit}",
 ".aipanel{flex:none;width:var(--aw,384px);background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;position:relative}",
 ".aipanel[hidden]{display:none}",
 ".ai-head{display:flex;align-items:center;gap:6px;padding:8px 10px 7px;border-bottom:1px solid var(--line)}",
@@ -331,6 +334,7 @@ var CSS = [
 var IC = {
   spark: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 9.4 6.1 14 7.5 9.4 8.9 8 13.5 6.6 8.9 2 7.5 6.6 6.1z"/><path d="M13 1.5v3M11.5 3h3"/></svg>',
   sel: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5 12.5 7 8.3 8.3 6.8 12.8z"/></svg>',
+  log: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5h8M5.5 8h8M5.5 12.5h8M2.5 3.5h.01M2.5 8h.01M2.5 12.5h.01"/></svg>',
   gear: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/></svg>',
   plus: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>',
   tag: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5V2.5H5M11 2.5h2.5V5M13.5 11v2.5H11M5 13.5H2.5V11"/><circle cx="8" cy="8" r="1.6"/></svg>',
@@ -386,9 +390,11 @@ function build() {
   tabs.setAttribute("role", "tablist");
   tabs.setAttribute("aria-label", "Right panels");
   tabs.innerHTML =
-    '<button class="tab" role="tab" id="tab-sel" aria-controls="insp" title="Selection\nWhat you picked on the map, and the change log">' + IC.sel + 'Selection</button>' +
-    '<button class="tab" role="tab" id="tab-ai" aria-controls="panel-ai" title="AI designer\nIdeas for missions, and building them while you watch">' + IC.spark + 'AI designer</button>';
-  panel.parentNode.insertBefore(tabs, panel.nextSibling);
+    '<button class="tab" role="tab" id="tab-sel" aria-controls="insp" title="Selection\nWhat you picked on the map">' + IC.sel + 'Selection</button>' +
+    '<button class="tab" role="tab" id="tab-ai" aria-controls="panel-ai" title="AI designer\nIdeas for missions, and building them while you watch">' + IC.spark + 'AI designer</button>' +
+    '<button class="tab" role="tab" id="tab-log" aria-controls="panel-log" title="Change log\nWhat is not in the game yet">' + IC.log + 'Changes<span class="tab-n" id="tab-log-n" hidden></span></button>';
+  var logPanel = $("panel-log");       // beside the others on this wall; the tabs stay at the wall
+  panel.parentNode.insertBefore(tabs, (logPanel || panel).nextSibling);
   el = { panel: panel, rail: rail, log: $("ai-log"), input: $("ai-in"), send: $("ai-send"), status: $("ai-status"),
     statusT: $("ai-status-t"), chip: $("ai-model-chip"), usage: $("ai-usage"), hint: $("ai-mode-hint"), tags: $("ai-tags"), tagBtn: $("ai-tag"),
     atts: $("ai-atts"), threads: $("ai-threads"), mmenu: $("ai-mmenu"), threadBtn: $("ai-thread"), threadT: $("ai-thread-t"), tbarT: $("ai-tbar-t") };
@@ -416,6 +422,7 @@ function build() {
   if (window.StudioUI) StudioUI.resizable(panel, "l", "--aw", 300, 760);
   $("tab-sel").addEventListener("click", function () { showTab("sel"); });
   $("tab-ai").addEventListener("click", function () { showTab("ai"); });
+  $("tab-log").addEventListener("click", function () { showTab("log"); });
   $("ai-cfg").addEventListener("click", function () { if (api()) api().openSettings("ai"); });
   $("ai-new").addEventListener("click", newChat);
   panel.querySelectorAll("[data-agent]").forEach(function (b) {
@@ -436,12 +443,14 @@ function build() {
 }
 function grow() { var t = el.input; t.style.height = "auto"; t.style.height = Math.max(68, Math.min(240, t.scrollHeight + 2)) + "px"; }
 function showTab(t) {
-  TAB = t === "ai" ? "ai" : "sel";
+  TAB = t === "ai" || t === "log" ? t : "sel";
   setPref("rtab", TAB);
   el.panel.hidden = TAB !== "ai";
-  el.rail.style.display = TAB === "ai" ? "none" : "";
+  el.rail.style.display = TAB === "sel" ? "" : "none";
+  if ($("panel-log")) $("panel-log").hidden = TAB !== "log";
   $("tab-sel").setAttribute("aria-selected", String(TAB === "sel"));
   $("tab-ai").setAttribute("aria-selected", String(TAB === "ai"));
+  $("tab-log").setAttribute("aria-selected", String(TAB === "log"));
   window.dispatchEvent(new Event("resize"));
   if (TAB === "ai") { loadSettings(); render(); setTimeout(function () { if (el.input && !RUN) el.input.focus(); }, 30); }
 }

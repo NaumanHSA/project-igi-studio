@@ -89,7 +89,9 @@ map. All 13 empty maps compile.
 - **Creating a slot:** on its first Apply, a mission gets the slot after the
   last one in the game (`level15`, `level16`, …; with 16 there, 17). The slot
   is a copy of the base level's folder, about 250–300 MB. Its `mission.qvm`
-  names it in the game's mission list with your name and description, and its
+  names it in the game's mission list with your name and description (the
+  mission's `Mission <n> Name` and `Desc` in `language/<lang>/missions.res`, as
+  the game's own missions have theirs; the box holds about 120 characters), and its
   cover is the base mission's. If that first Apply fails, the new slot is taken
   out again, so the game never lists a bare copy of the base level.
 - **In the game:** the library's first list is every mission the game holds
@@ -450,7 +452,12 @@ Every part's panel has one line: which system it is on, defaulting to the
 nearest. Buttons, sirens and lights mount on walls the way cameras do, at their
 own heights (a button at hand height, a siren high up).
 
-A guard's panel has the same line — **Answers alarm** — and a tick that makes
+A guard's panel has the same line — **Answers alarm**, which also has *None: he
+answers no alarm*, with **Take him off the alarm** under it. Off it, he carries on
+as he was when one rings: his script no longer has `SetAlarmControlID`, which is all
+that ties a guard to an alarm (`alarmId: "none"` in the plan; a level's guard has
+the call taken out of his own script). Several guards selected have **Remove patrols**
+and **Take off the alarm** in the panel and on the right click. The tick makes
 him a **reinforcement**: he is not on the map until that alarm rings, and comes
 back as many times as you say. That is the game's own `GuardGenerator` with the
 alarm as its expression, which is how levels 5 and 8 call in their squads.
@@ -542,13 +549,14 @@ their own, all remembered by the browser.
 The right edge has tabs too: **Selection** (below) and the **AI designer**
 (see *AI designer*), which takes the right panel's place while it is open.
 
-**The right panel** has two parts:
+**The right wall** has three tabs, one panel open at a time:
 
 - **Selection:** the selected object's name and tag, 3D preview, details,
   position, rotation buttons and settings. Its actions (drop onto the ground,
   undo changes, remove) sit together at the bottom.
-- **Change log:** docked underneath. It lists every change that is **not in
-  the game yet**, grouped and colour-coded: **Added**, **Changed**,
+- **AI designer:** below.
+- **Changes:** the change log, with how many changes on the tab. It lists every
+  change that is **not in the game yet**, grouped and colour-coded: **Added**, **Changed**,
   **Removed**, **Navigation**, **Objectives** and **Ground**.
   - **After Apply** the log starts again: what the game now has is part of
     the level (a note says how many changes are in the game, and when they
@@ -791,7 +799,12 @@ range does not pile up.
   panel (or under the pointer there) is drawn on the map, so the ground stays
   readable; the brush's layers show as a green (raised) or blue (lowered)
   wash while the Brush is open.
-- **Areas** can be dragged to move them, and have *Size*, *Turn* (rotation),
+- **Sliders.** Every number in the panel has one, with the number beside it for
+  an exact value. The map follows the drag, and a whole drag is one undo. A wide
+  range gives more of the slider to small values (a cube curve on *By* and the sizes:
+  20 m of 600 is a third of the way); the height of a level or a ramp reaches 80 m either
+  way from the ground under the area.
+- **Areas** can be dragged to move them, and have *Width*, *Length*, *Turn* (rotation),
   *Shape* and *Edge*. The edge is automatic: about 2.5 m of run for every
   metre of height, up to 150 m, eased with a smootherstep and wandering a
   little (value noise, the same in the editor and the build), so an area
@@ -809,7 +822,8 @@ range does not pile up.
   move or remove it first if the ground there has to change. Carrying things
   up and down with the ground was tried and left crates half in the air and a
   button mounted on one hanging. Guards are not in it: they stand on the
-  navmesh, and the nodes on shaped ground move with it. Nor is the player
+  navmesh, and the nodes on shaped ground move with it, the mission's own walkways
+  included (they keep the links they were laid with). Nor is the player
   start: it is set down on the shaped ground by the build every time, so it is
   on the slope of a mountain put over it, and back on the ground when the
   mountain goes. Your own buildings level their ground with their own pad.
@@ -1437,6 +1451,9 @@ section: which leaves it opens, and whether it stays pressed.
 - **A gate on its own:** the inventory has it beside the gateway, *Gate on its
   own*: both leaves and the switch that opens them, with no fence panels, for a
   gap you have walled already or a wall of another kind.
+- **A gate in a fence.** Put on a fence line of yours, a gate takes out the panels
+  in its way and fills the fence up to each post, so no panel is left across half
+  the opening.
 - **A gate is a whole gateway.** A gate in the game is one leaf, half a way in.
   Placing one (304_01_1, or `place_object` with that model) lays the whole
   thing: both leaves meeting in the middle and sliding back behind their posts,
@@ -1934,6 +1951,18 @@ it out of what the game has, as a card in the chat with its 3D model turning:
 - New weapon types and new 3D models can't be made: the game defines its
   weapons for every mission at once, and models come from its files.
 
+## Agents from outside (MCP)
+
+**MCP**, in the top bar, opens the panel that lets an agent in another program
+(Claude Desktop, Claude Code, Cursor) work in the open studio: **Start** and
+**Stop**, whether one is connected, **Add to Claude Desktop**, and what to copy for
+anything else. It works through the same tools as the AI designer, so it is the
+same ordinary change: undo, the change log, saving, the 3D view. Its calls show in
+the AI designer's panel, in a chat in its name that stays with the mission. Only a
+program on this PC can connect, and it can't touch the community account, the
+sign-in, the API keys or the settings. How it is built is
+[docs/mcp.md](mcp.md); the manual has how to use it.
+
 ## A draft from a description
 
 *A draft from a description…* (Design menu): write the mission in plain
@@ -2220,7 +2249,9 @@ Check mission…** shows the same list at any time. It has three groups:
   moved onto a building's walkways), go under the other two groups.
 - **Worth a look:** buildings that overlap others, stand on steep ground or
   lie outside the mapped ground; objects hovering over bare ground; objects
-  placed twice.
+  placed twice; pickups left on the bare ground (the fix puts a box under them);
+  a fence panel left across a gateway (the fix takes it out); a mission that
+  starts with no intro (the fix makes one).
 - **Good to know:** which model families Apply will copy in from other levels,
   and how many MB that adds (`/api/missions/<id>/check`, which reads only the
   archives' name chunks).
@@ -2312,7 +2343,8 @@ left round the Map / 3D switch, but the left never below what it holds, so the
 switch moves over rather than under it; under 1240 px the studio's name goes,
 its mark stays. On the right: Help, **Community** (a key of its own, a globe;
 a gold count when missions of yours have a newer version there; its word goes
-under 1320 px) and **Apply to game**.
+under 1320 px), **MCP** (below, [Agents from outside](#agents-from-outside-mcp)) and
+**Apply to game**.
 
 The **mission's name** is in the top bar as it is, with a pencil: the pencil
 (or a double-click on the name) makes it a box to type in; Enter or clicking

@@ -18,7 +18,7 @@
 #   import protect
 #   protect.assert_writable(path)          raises ProtectedPath if it is not a custom slot
 #   protect.assert_deletable_slot(dir)     ... and it must be a whole slot we made
-#   protect.assert_language_file(path)     objectives.res / messages.res of a working game
+#   protect.assert_language_file(path)     objectives.res / messages.res / missions.res of a working game
 #   protect.assert_config_file(path)       the connected game's config.qvm, nothing else
 #   protect.assert_mission_link(path)      a built-in mission's mission.qvm, for its next-mission link
 import json, os, pathlib, re
@@ -102,16 +102,17 @@ def assert_writable(path, what="write to"):
 def assert_language_file(path):
     """The one exception outside mission slots: a working game's objectives.res or
     messages.res, which a mission's own strings are added to under its MS<slot>_
-    prefix (studio/build/lang.py - it never changes another key). The original
-    install is still refused."""
+    prefix, and missions.res, which has its name and description under Mission <slot>
+    (studio/build/lang.py - it never changes another key). The original install is
+    still refused."""
     p = pathlib.Path(path).resolve()
     for root in pristine_roots():
         if p == root or root in p.parents:
             raise ProtectedPath("refusing to write %s: that is the original game install" % p)
-    if (p.name.lower() not in ("objectives.res", "messages.res") or p.parent.parent.name.lower() != "language"
+    if (p.name.lower() not in ("objectives.res", "messages.res", "missions.res") or p.parent.parent.name.lower() != "language"
             or not (p.parent.parent.parent / "missions" / "location0").is_dir()):
-        raise ProtectedPath("refusing to write %s: only a game's language/<lang>/objectives.res "
-                            "or messages.res takes mission strings" % p)
+        raise ProtectedPath("refusing to write %s: only a game's language/<lang>/objectives.res, "
+                            "messages.res or missions.res takes mission strings" % p)
     return p
 
 
@@ -240,14 +241,15 @@ if __name__ == "__main__":
         except ProtectedPath as e:
             print("WRONGLY REFUSED:", p, e)
             bad += 1
-    for p in (game / "language" / "USA" / "objectives.res", game / "language" / "english" / "messages.res"):
+    for p in (game / "language" / "USA" / "objectives.res", game / "language" / "english" / "messages.res",
+              game / "language" / "USA" / "missions.res"):
         try:
             assert_language_file(p)
         except ProtectedPath as e:
             print("WRONGLY REFUSED:", p, e)
             bad += 1
-    for p in (paths.pristine() / "language" / "USA" / "objectives.res", game / "language" / "USA" / "missions.res",
-              game / "IGI.exe"):
+    for p in (paths.pristine() / "language" / "USA" / "objectives.res", paths.pristine() / "language" / "USA" / "missions.res",
+              game / "language" / "USA" / "menusystem.res", game / "IGI.exe"):
         try:
             assert_language_file(p)
             print("NOT REFUSED:", p)

@@ -20,6 +20,7 @@ from studio.build.objects import set_soldier_team
 from studio.build import taskargs as TASKARGS
 from studio.build import limits as LIMITS
 from studio.build import splice as SPLICE
+from studio.build import own_things as OWN
 from studio.extract import motion as MOTION_X
 # This module is a script: it does its work as it is read, the way it always
 # has. Run it (python -m studio.build.plan), do not import it. The guard below
@@ -55,6 +56,9 @@ EMPTY = BASE.get("kind") == "empty"
 MODE = plan.get("mode", "modify")
 NAME = plan.get("name", "Untitled")
 PLACE = plan.get("placements", [])
+# How far each of a building's own things stands from it, before anything here moves
+# either of them (studio/build/own_things.py)
+OWN_OFFSETS = OWN.offsets(PLACE)
 
 meta_path = DATA / ("level%d.json" % LV)
 if not meta_path.exists():
@@ -73,6 +77,13 @@ if EMPTY:
 
 errors, warnings = [], []
 report = []                     # what the build did, printed with the plan at the end
+
+# The level's player stays, whatever the plan says: with none the game crashes as the
+# mission loads (0xC0000005, 2026-11-04: a box selected round everything, then removed).
+_player_refs = [r for r in plan.get("removeRefs") or [] if str(r).split("@")[0] == "HumanPlayer"]
+if _player_refs:
+    plan["removeRefs"] = [r for r in plan["removeRefs"] if r not in _player_refs]
+    warnings.append("the player start can't be taken out of a mission: it stays where it is")
 
 # ---------------------------------------------------------------- id allocation
 used = set(meta.get("usedIds", []))
@@ -111,6 +122,9 @@ alarm_kit = [p for p in PLACE if p.get("type") in ("switch", "siren", "alarmligh
 ALARM_IDS = {}                  # plan key ("own:<uid>") -> AlarmControl task id
 ALARM_TRIGGER = {}              # plan key -> the terms that raise it
 ALARM_SILENCE = {}              # plan key -> the buttons that also switch it off
+
+
+NO_ALARM = "none"               # a guard's alarmId when he is to answer no alarm at all
 
 
 def alarm_ctl_id(key):
@@ -393,6 +407,7 @@ SCULPT = FL.sculpt_cells(plan.get("sculpt"))   # the big shapes, on the terrain'
 KEEP = []
 KEEP_TYPES = ("building", "prop", "explodable", "vehicle", "pickup", "fence")
 NODE_SHIFTS = []        # (graph, node id, x, y, new z): navmesh nodes on shaped ground
+_OWN_NODES_ON, _GROUND_NOW = [], None   # the mission's own walkways on shaped ground: below, once buildings can be asked
 NODE_ON_GROUND = 0.75
 BASE_HMP = GAME / "missions" / "location0" / ("level%d" % LV) / "terrain" / "terrain.hmp"
 
@@ -636,6 +651,9 @@ if TERR0 is not None and _surface is not None and _surface.terrain is not None a
                             _nodes_on.append((_gid, _n, g0))
         # from here on every height is the new ground's: the rebuilt mesh (if
         # any) with the height maps over it
+        # the mission's own walkways, as the level's ground was under them (the height maps below change it)
+        _OWN_NODES_ON = [(_pn, _terr.z(_pn["x"], _pn["y"])) for _pn in plan.get("nodes", []) or []
+                         if _pn.get("z") is not None and _in_shaped(_pn["x"], _pn["y"])]
         _after = MESH["terrain"] if MESH else _terr
         FL.register(_after, FLAT_PATCHES)
         _surface.terrain = _after
@@ -663,6 +681,7 @@ if TERR0 is not None and _surface is not None and _surface.terrain is not None a
             g1 = _after.z(_n["x"], _n["y"])
             if g1 is not None and abs(g1 - g0) >= 0.03:
                 NODE_SHIFTS.append((str(_gid), int(_n["id"]), _n["x"], _n["y"], round(_n["z"] + g1 - g0, 3)))
+        _GROUND_NOW = _after
         # A player start that stood on the level's ground stands on the shaped
         # ground: set down on it again (_snap_edit, "settle"), whether or not the
         # plan moved it - so a start under a mountain is on its slope, and one
@@ -780,6 +799,20 @@ def inside(o, x, y, z, margin=0.3):
         return False
     mx, my = NT.to_model(o, x, y)
     return NT.inside(sz.get("body") or [], mx, my, margin)
+
+
+def container_of(x, y, z):
+    """The smallest building a point is inside - not a crate or a desk."""
+    best, area = None, 1e18
+    for o in list(objects) + WORLD:
+        sz = _sizes.get(o.get("model")) or {}
+        if o.get("cutscene") or not sz.get("body") or sz.get("h", 0) < 2.2:
+            continue
+        if o.get("type") != "building" and not template_for(o.get("model")):
+            continue
+        if inside(o, x, y, z, margin=0.0) and sz["w"] * sz["d"] < area:
+            best, area = o, sz["w"] * sz["d"]
+    return best
 
 
 # 1. what the plan builds and moves is set down on the level first
@@ -1021,26 +1054,20 @@ if lifted:
     report.append("%d guard(s) already in the level now stand on the floor of the building they are in" % lifted)
 floors_to_surface()     # floors added for guards just now
 
-# What came with a building - its doors, its lift, the things inside it - keeps
-# its place: the building may have been set down on the ground or lifted onto
-# levelled ground since, and its own things go with it rather than staying where
-# the plan first put them.
+# What came with a building - its doors, its lift, the things inside it - stays
+# where it is in the building: the building may have been set down on the ground or
+# lifted onto levelled ground, and its own things go with it. Where it is in the
+# building is what the plan has, so one moved on its own stays where it was moved.
 _by_uid = {p.get("uid"): p for p in PLACE if p.get("uid")}
 _moved_doors = 0
 for _d in PLACE:
-    _sl, _of = _d.get("slot"), _d.get("of")
-    if not (isinstance(_sl, dict) and _of and _of in _by_uid):
+    _off, _b = OWN_OFFSETS.get(_d.get("uid")), _by_uid.get(_d.get("of"))
+    if _off is None or _b is None:
         continue
-    _b = _by_uid[_of]
-    _g = float(_b.get("gamma") or 0)
-    _c, _s2 = math.cos(_g), math.sin(_g)
-    _x = round(float(_b["x"]) + _sl.get("dx", 0) * _c - _sl.get("dy", 0) * _s2, 3)
-    _y = round(float(_b["y"]) + _sl.get("dx", 0) * _s2 + _sl.get("dy", 0) * _c, 3)
-    _z = round(float(_b["z"]) + _sl.get("dz", 0), 3)
+    _x, _y, _z, _g = OWN.place(_off, _b)
     if abs(_x - float(_d["x"])) > 0.01 or abs(_y - float(_d["y"])) > 0.01 or abs(_z - float(_d["z"])) > 0.01:
         _moved_doors += 1
-    _d["x"], _d["y"], _d["z"] = _x, _y, _z
-    _d["gamma"] = round((_g + _sl.get("dh", 0)) % (2 * math.pi), 5)
+    _d["x"], _d["y"], _d["z"], _d["gamma"] = _x, _y, _z, _g
 if _moved_doors:
     report.append("%d thing(s) of a building's own moved with it" % _moved_doors)
 
@@ -1413,6 +1440,21 @@ def _link_ok(a, b):
     return _surface is None or _surface.blocked(a, b, strict=True) is None
 
 
+def _ground_for_node(pn, g0):
+    """The height of the ground a walkway of the mission's should stand on instead of
+    where it was laid, or None: it is not under a hill raised over it nor over a pit
+    dug under it, or it is indoors, where the floors decide."""
+    g1 = _GROUND_NOW.z(pn["x"], pn["y"]) if _GROUND_NOW is not None else None
+    if g0 is None or g1 is None or abs(g1 - g0) < 0.03:
+        return None
+    buried = pn["z"] < g1 - NODE_ON_GROUND
+    over_a_pit = g1 < g0 and g1 + NODE_ON_GROUND < pn["z"] <= g0 + NODE_ON_GROUND
+    if (buried or over_a_pit) and container_of(pn["x"], pn["y"], pn["z"]) is None:
+        return round(g1, 3)
+    return None
+
+
+_own_g0 = {id(_pn): g0 for _pn, g0 in _OWN_NODES_ON}
 for pn in plan_nodes:
     gid = str(pn.get("graph"))
     if edit_graph(gid, "new node %s" % pn.get("uid")) is None:
@@ -1429,11 +1471,43 @@ for pn in plan_nodes:
             report.append("new node %s at %.1f, %.1f: nothing within %.0f m it can link to without a wall between "
                           "- joined below" % (pn.get("uid"), here[0], here[1], float(pn.get("link", 15.0))))
         else:
-            nid, linked = g.add_node(here, origin_of(gid), float(pn.get("link", 15.0)), link_ok=_link_ok)
+            try:
+                nid, linked = g.add_node(here, origin_of(gid), float(pn.get("link", 15.0)), link_ok=_link_ok)
+            except GE.GraphError:
+                # the level's own beside it have gone up with the ground: with them, it links
+                _up = _ground_for_node(pn, _own_g0.get(id(pn)))
+                if _up is None:
+                    raise
+                pn["z"] = _up
+                nid, linked = g.add_node((pn["x"], pn["y"], _up), origin_of(gid), float(pn.get("link", 15.0)), link_ok=_link_ok)
+                report.append("walkway point %s laid on the shaped ground, beside the level's" % pn.get("uid"))
         node_ids[pn.get("uid")] = nid
         pn["_id"], pn["_linked"] = nid, linked
     except GE.GraphError as e:
         errors.append("new node at %.1f, %.1f: %s" % (pn["x"], pn["y"], e))
+
+# The mission's own walkways on ground it has shaped stand on the ground: not left
+# under a hill raised over them, nor in the air over a pit. An empty map has no others,
+# and a raised hill left its guards 18 m over the only walkways they had, which Apply
+# refuses (2026-11-04). They link as they were laid, as the level's own keep their
+# links when they move with the ground: on a steep hill neighbours are too far apart in
+# height to be linked afresh. Worked out each build from where they were laid, so a hill
+# taken away again leaves them where they were. Indoors, the floors decide.
+_followed = 0
+for _pn, g0 in _OWN_NODES_ON:
+    _up = _ground_for_node(_pn, g0)
+    if _up is None or _pn.get("uid") not in node_ids:
+        continue
+    _gid = str(_pn.get("graph"))
+    try:
+        edited_graphs[_gid].move_node(node_ids[_pn["uid"]], (_pn["x"], _pn["y"], _up), origin_of(_gid))
+    except GE.GraphError as e:
+        warnings.append("a walkway point at %.1f, %.1f could not follow the ground: %s" % (_pn["x"], _pn["y"], e))
+        continue
+    _pn["z"] = _up
+    _followed += 1
+if _followed:
+    report.append("%d walkway point(s) of yours follow the shaped ground" % _followed)
 
 
 # Interiors: the template's nodes and links, then its doorways joined to the yard
@@ -2281,6 +2355,24 @@ for s in soldiers:
         s["graph"] = job[0]
 
 
+# A soldier whose graph has no nodes left stops the game as the mission loads ("HumanAI
+# #3892 couldn't find closest node in graph #3891"). Graphs lose their nodes with the
+# buildings they are in, and the soldiers of a level's own cutscenes are in no list of
+# guards, so nothing here knew they were on one (level 13's shelter, 2026-11-04). Any
+# graph a soldier names keeps a point; if he was taken out too, it does no harm.
+_walked = {m.group(1) for m in re.finditer(r'Task_New\(-?\d+, "HumanAI", "(?:[^"\\]|\\.)*", "[^"]*", (\d+)\)', src)}
+_walked |= {str(s.get("graph")) for s in soldiers}
+for _gid, _g in edited_graphs.items():
+    if _g.nodes or _gid not in _walked:
+        continue
+    try:
+        _was = GE.Graph(str(BASE_GRAPHS / ("graph%s.dat" % _gid))).nodes
+    except (OSError, GE.GraphError):
+        _was = []
+    if _was:
+        _g.nodes.append(dict(_was[0]))
+        report.append("graph %s keeps one walkway point: soldiers of the level's still name it" % _gid)
+
 _edited_tables = {gid: g.build_table() for gid, g in edited_graphs.items()}
 
 
@@ -2391,6 +2483,13 @@ def nearest_node(gid, here):
     return best
 
 
+def _on_the_ground(x, y, z):
+    """Is this point on the ground as the mission has shaped it?"""
+    t = _surface.terrain if _surface is not None else None
+    g = t.z(x, y) if t is not None else None
+    return g is not None and abs(z - g) <= 1.0
+
+
 for s in soldiers + EDIT_SOLDIERS:
     if s.get("arriveOn") or s.get("x") is None:
         continue                    # one that arrives on an event is put there by the event
@@ -2414,7 +2513,10 @@ for s in soldiers + EDIT_SOLDIERS:
         gid, near = best[0], best[1]
         s["graph"] = gid
         warnings.append("%s had no walkways of his own - given graph %s, %.0f m away" % (who, gid, near[0]))
-    if near[1] > GUARD_STEP:
+    # up a hill to a walkway further up it is a walk, not another floor
+    _w = node_world(gid, near[2])
+    _slope = near[1] > GUARD_STEP and _on_the_ground(*here) and _on_the_ground(*_w)
+    if near[1] > GUARD_STEP and not _slope:
         errors.append("%s stands %.1f m below or above his walkways (graph %s, the nearest point is "
                       "%.0f m away): in the game he walks to them and ends up in the air. Lay walkways "
                       "where he stands, or put him where they are." % (who, near[1], gid, near[0]))
@@ -2484,20 +2586,6 @@ def alarm_control_near(x, y, reach=80.0):
 
 def is_tower(o):
     return "TOWER" in ("%s %s" % (o.get("modelName") or "", o.get("name") or "")).upper()
-
-
-def container_of(x, y, z):
-    """The smallest building a point is inside - not a crate or a desk."""
-    best, area = None, 1e18
-    for o in list(objects) + WORLD:
-        sz = _sizes.get(o.get("model")) or {}
-        if o.get("cutscene") or not sz.get("body") or sz.get("h", 0) < 2.2:
-            continue
-        if o.get("type") != "building" and not template_for(o.get("model")):
-            continue
-        if inside(o, x, y, z, margin=0.0) and sz["w"] * sz["d"] < area:
-            best, area = o, sz["w"] * sz["d"]
-    return best
 
 
 def exit_node(gid, x, y, z):
@@ -2718,8 +2806,9 @@ def level_guard_orders(e, seg):
     aid, gid = int(am.group(1)), str(e.get("graph") or am.group(2))
     cur = ai_scripts.get(aid)
     # what he does from the start: the patrol his script walks when idle
-    idle = cur if isinstance(cur, int) else None
-    if idle is None and not (aid in ai_scripts and cur is None):
+    _given = cur["idle"] if isinstance(cur, dict) and "idle" in cur else cur
+    idle = _given if isinstance(_given, int) else None
+    if idle is None and not (aid in ai_scripts and _given is None):
         ip = (_by_ref.get(e["ref"]) or {}).get("idlePath")
         if isinstance(ip, int) and re.search(r'Task_New\(%d, "PatrolPath"' % ip, seg):
             idle = ip
@@ -2818,13 +2907,14 @@ for s in soldiers:
         cmds.append('Task_New(-1, "PatrolPathCommand", "Quit script, stops script. Takes no parameters", 7, 0)')
         kids.append('Task_New(%d, "PatrolPath", "", ' % pid + EOL + (", " + EOL).join(cmds) + ")")
     s["_aid"] = aid
-    out_node = exit_node(gid, s["x"], s["y"], s["z"])
+    _no_alarm = s.get("alarmId") == NO_ALARM     # he answers none: nothing to run out on, nothing to listen to
+    out_node = None if _no_alarm else exit_node(gid, s["x"], s["y"], s["z"])
     apid = take_id() if out_node is not None else None
     if apid:
         kids.append(alarm_path_task(apid, out_node))
         reactions.append("%s runs out on the alarm: node %d, then %d" % ((s.get("name") or "guard",) + tuple(out_node)))
     ai_scripts[aid] = {"idle": pid if route else None, "alarm": apid,
-                       "control": alarm_ctl_id(s.get("alarmId")) or alarm_control_near(s["x"], s["y"]),
+                       "control": None if _no_alarm else alarm_ctl_id(s.get("alarmId")) or alarm_control_near(s["x"], s["y"]),
                        "sees": s.get("sees"), "fov": s.get("fov")}
     _code, _words = orders_code(s, str(gid), pid if route else None, kids)
     if _code:
@@ -4537,10 +4627,20 @@ for _vid, _how in (plan.get("levelVehicles") or {}).items():
         GONE_CAMS.append(({"car": "Car", "heli": "Heli", "plane": "Plane", "train": "Train"}.get(_mv[0]["kind"], "Train")
                           if _mv else "Train", int(_vid)))
         report.append("the level's %s %d left out" % (_mv[0]["kind"] if _mv else "vehicle", int(_vid)))
+# what stands inside something else that is going goes with it: not a thing not found
+_going = sorted((m.start(), task_end(out_src, m.start()), r) for r in plan.get("removeRefs", []) or []
+                for m in [find_ref(out_src, r)] if m)
+_went_with, _upto = set(), -1
+for _a, _b, _r in _going:
+    if _b <= _upto:
+        _went_with.add(_r)
+    else:
+        _upto = _b
 for r in plan.get("removeRefs", []) or []:
     m = find_ref(out_src, r)
     if not m:
-        warnings.append("could not find %s to remove - skipped" % r)
+        if r not in _went_with:
+            warnings.append("could not find %s to remove - skipped" % r)
         continue
     out_src = cut_task(out_src, m.start(), task_end(out_src, m.start()))
     dropped += 1
@@ -4667,12 +4767,16 @@ for e in EDITS:
                 else:
                     seg = cut_task(seg, pm.start(), p1)
                     if am:
-                        ai_scripts[int(am.group(1))] = None         # standing guard now
+                        # standing guard now, still on the alarm he answered
+                        _was = re.search(r"SetAlarmControlID\((\d+)\)", script_text(int(am.group(1))) or "")
+                        ai_scripts[int(am.group(1))] = {"idle": None, "control": int(_was.group(1)) if _was else None}
             elif route and am:
                 pid_new = take_id()
                 seg = (seg[:am.end()] + ", " + EOL + 'Task_New(%d, "PatrolPath", "", ' % pid_new + EOL
                        + patrol_commands(route, 7) + ")" + seg[am.end():])
-                ai_scripts[int(am.group(1))] = pid_new           # its script must now patrol
+                # its script must now patrol, still on the alarm he answered
+                _was = re.search(r"SetAlarmControlID\((\d+)\)", script_text(int(am.group(1))) or "")
+                ai_scripts[int(am.group(1))] = {"idle": pid_new, "control": int(_was.group(1)) if _was else None}
         if e.get("start") == "follow" or e.get("orders"):
             seg = level_guard_orders(e, seg)
     out_src = out_src[:s0] + seg + out_src[s1:]
@@ -5365,6 +5469,9 @@ if _tex or (OUT / "textures" / TEX.STAGE_LIST).exists():
 
 # The last word: a problem found after the checks above is not let through either (the map
 # computer's markers once were, and the game stopped with "QTaskList is full").
+if not re.search(r'Task_New\(-?\d+, "HumanPlayer"', out_src):
+    errors.append("the mission has no player, and the game crashes loading one without: "
+                  "take him out of the plan's removals")
 if errors:
     print("PLAN REJECTED - %d problem(s):" % len(errors))
     for e in errors:
@@ -5458,6 +5565,21 @@ def _with_sight(text, sees, fov):
     return text[:m.end()] + block + add + "\n" + text[j - 1:]
 
 
+def _with_alarm(text, control):
+    """His script answering another alarm, or none (control None): the only thing
+    that ties a guard to an alarm is this call in its CREATE handler."""
+    m = re.search(r"AIEVENT_CREATE\s*\)\s*\{", text or "")
+    if not m:
+        return None
+    depth, j = 1, m.end()
+    while j < len(text) and depth:
+        depth += {"{": 1, "}": -1}.get(text[j], 0)
+        j += 1
+    block = re.sub(r"\s*AIFunction_SetAlarmControlID\([^)]*\);", "", text[m.end():j - 1]).rstrip()
+    add = "\n\tAIFunction_SetAlarmControlID(%d);" % control if control else ""
+    return text[:m.end()] + block + add + "\n" + text[j - 1:]
+
+
 _level_ai = {aid for aid, _g in _soldier_ai.values()}
 for _e in EDITS:
     if _e.get("type") != "soldier" or not (_e.get("sees") or _e.get("fov")):
@@ -5482,6 +5604,33 @@ for _e in EDITS:
     reactions.append("%s sees %s, %s wide" % (_e.get("name") or "a guard",
                                                 "%d m" % _e["sees"] if _e.get("sees") else "as his type",
                                                 "%d°" % _e["fov"] if _e.get("fov") else "as his type"))
+# A level guard put on another alarm, or taken off his. (Automatic has no word here:
+# he stays on the one the level gave him.)
+for _e in EDITS:
+    if _e.get("type") != "soldier" or not _e.get("alarmId"):
+        continue
+    _o = _world_by_ref.get(_e["ref"]) or {}
+    if _o.get("id", -1) not in _soldier_ai:
+        continue
+    _ctl = None if _e["alarmId"] == NO_ALARM else alarm_ctl_id(_e["alarmId"])
+    if _ctl is None and _e["alarmId"] != NO_ALARM:
+        continue                # a system no longer in the mission
+    _aid = _soldier_ai[_o["id"]][0]
+    _cur = ai_scripts.get(_aid)
+    if _cur is not None and not (isinstance(_cur, dict) and "raw" in _cur):
+        _cur = dict(_cur) if isinstance(_cur, dict) else {"idle": _cur}
+        _cur["control"] = _ctl
+        if _ctl is None:
+            _cur["alarm"] = None
+        ai_scripts[_aid] = _cur
+    else:
+        _txt = _with_alarm(_cur["raw"] if isinstance(_cur, dict) else script_text(_aid), _ctl)
+        if _txt is None:
+            warnings.append("%s: his script has a shape this editor does not change - he stays on his alarm"
+                            % (_e.get("name") or "a guard"))
+            continue
+        ai_scripts[_aid] = {"raw": _txt}
+    reactions.append("%s %s" % (_e.get("name") or "a guard", "answers no alarm" if _ctl is None else "answers alarm %d" % _ctl))
 try:
     _prev_own = set(json.load(open(SLOT_DIR / "ai" / "_mission_studio.json")).get("aiScripts", [])) \
         if SLOT_DIR is not None else set()

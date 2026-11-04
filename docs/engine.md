@@ -18,6 +18,10 @@ by debugging a crash or a broken mission.
 | Win conditions go **object → StatusMessage → LevelFlow** | Untested path; no shipped level does it differently |
 | A static object's yaw is the **last number before the model id** | Buildings face the wrong way |
 | The mission list **follows each `DefineMission`'s next mission from mission 1**, up to `GOActiveMission` | A mission the chain does not reach never appears; a link to a mission that is not there crashes the main menu (`Config_FillMissionPictureBox` walks the whole chain unchecked). The game ships level 14 leading to none |
+| A mission's name and description in `DefineMission` are **keys into `language/<lang>/missions.res`** (`LOCAL:<lang>/Mission 1 Name`), not words | Words are looked up as a key and shown as `RM: <words>`; 80 characters or more overrun the lookup's buffer, and the game crashes on opening the mission list, on any level, before any mission loads. The keys must be in `missions.res`: `messages.res` is not searched |
+| The mission list's description box holds **5 lines, about 120 characters**, and its list about 30 | Nothing breaks: a longer description spills out of the box and a longer name past the list's edge |
+| A level must keep its **HumanPlayer** | With none the game crashes as the mission loads (0xC0000005) |
+| Every **graph a HumanAI names needs a node**, the soldiers of the level's own cutscenes included | `HumanAI #n couldn't find closest node in graph #m`, and the mission stops loading |
 | Soldiers stand on **navmesh nodes**, not on collision meshes | A guard in a building with no nodes stands in its foundation |
 | Guards walk graph links **straight, through anything** | A building or fence placed across links is walked through |
 | Which patrol path a guard walks is set by **his AI script** | Alarm paths shown as his patrol |

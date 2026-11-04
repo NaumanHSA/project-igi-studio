@@ -24,7 +24,24 @@ TEXT = 25                    # bright green pixels that make it text
 CHANGED = 6.0                # how different two screens are, 0..255, for the level to have replaced the loading screen
 JUMP = 5.0                   # how different two moments 0.1 s apart are, for the tour's camera to have cut
 WIDTH, HEIGHT = 1024, 768
+ACCESS_VIOLATION = 0xC0000005
+# where it was when it failed: said with the failure, as it says where to look
+WHERE = {"menu": "on the game's menus, before it started to load the mission: so look at what the mission list "
+                 "reads (the mission's name, description and picture), not at what is on the map",
+         "loading": "while the mission was loading",
+         "running": "while the mission was running"}
 _one_at_a_time = threading.Lock()
+
+
+def how_it_ended(code):
+    """In words, what the game's exit code says."""
+    if code == ACCESS_VIOLATION:
+        return "The game crashed (access violation, 0xC0000005)."
+    return "The game closed by itself (exit code %s)." % code
+
+
+def _said(text, where):
+    return "%s It happened %s." % (str(text).strip().rstrip("."), WHERE[where]) if where in WHERE else text
 
 
 def copy_path(cfg):
@@ -89,6 +106,7 @@ class Game:
         self.exe = pathlib.Path(copy) / "IGI.exe"
         self.proc = subprocess.Popen([str(self.exe), "Window"], cwd=str(copy), creationflags=0x00000008 | 0x00000200)
         self.pid = None
+        self.where = "menu"
 
     def alive(self):
         pids = G.pids_of(self.exe)
@@ -98,8 +116,11 @@ class Game:
     def fatal(self):
         """What it is showing or has done that means it failed, or None."""
         if not self.alive():
-            code = self.proc.poll()
-            return "The game closed by itself (exit code %s)." % code
+            try:
+                code = self.proc.wait(timeout=3)     # just gone: its code comes a moment later
+            except subprocess.TimeoutExpired:
+                code = None
+            return how_it_ended(code)
         for d in G.dialogs_of(self.pid):
             if d.get("text"):
                 return d["text"].strip()
@@ -164,6 +185,10 @@ class Game:
     def close(self):
         if self.alive():
             G.end(self.pid)
+            # gone before anything else is asked of it: the next test finds no game running
+            end = time.time() + 6
+            while time.time() < end and self.alive():
+                time.sleep(0.1)
 
 
 def _until(game, test, seconds):
@@ -208,6 +233,7 @@ def enter_mission(game, say):
             game.press(G.ESCAPE)
             continue
         say("STAGE the mission is loading in the game")
+        game.where = "loading"
         time.sleep(0.4)                 # the loading screen, once it has faded in
         loading = game.sig()
         end = time.time() + 180
@@ -223,6 +249,7 @@ def enter_mission(game, say):
             time.sleep(0.15)
         else:
             return False, None, "The mission was still loading after 3 minutes."
+        game.where = "menu"
         say("the game came back to its main menu: trying again")
     return False, None, "The game's menu could not be got past."
 
@@ -262,11 +289,13 @@ def _run(mid, store, cfg, options, say):
         ok, fatal, why = enter_mission(game, say)
         if not ok:
             c = game.picture() if game.alive() else None
-            res = {"ok": False, "stage": "game", "loaded": False, "error": why, "fatal": fatal}
+            res = {"ok": False, "stage": "game", "loaded": False, "error": _said(why, game.where) if fatal else why, "fatal": fatal,
+                   "where": game.where}
             if c:
                 res["images"] = [_pic(c, what="the game when it stopped")]
             return res
         started = time.time()
+        game.where = "running"
         fatal = None
         if tour:
             say("STAGE the game's camera is going round the mission")
@@ -305,7 +334,8 @@ def _run(mid, store, cfg, options, say):
             c = game.picture() if game.alive() else None
             if c:
                 pics.append(_pic(c, what="the game when it stopped"))
-            return {"ok": False, "stage": "game", "loaded": True, "error": fatal, "fatal": fatal, "images": pics,
+            return {"ok": False, "stage": "game", "loaded": True, "error": _said(fatal, "running"), "fatal": fatal,
+                    "where": "running", "images": pics,
                     "seconds_run": int(time.time() - started)}
         return {"ok": True, "loaded": True, "slot": built.get("slot"), "seconds_run": int(time.time() - started),
                 "seconds_total": int(time.time() - t0), "images": pics,

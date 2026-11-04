@@ -62,20 +62,16 @@ body{margin:0;background:var(--ground);color:var(--ink);overflow:hidden;
 .rail{width:206px;flex:none;background:var(--surface);border-right:1px solid var(--line);
   overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:15px}
 .rail.right{border-right:none;border-left:1px solid var(--line);width:var(--rw,292px);padding:0;gap:0;overflow:hidden;position:relative}
-/* ---- right panel: the selection on top, the change log docked under it ---- */
+/* ---- right panel: what is selected. The changes have a panel of their own, on the same wall ---- */
 .rsec-sel{flex:1 1 auto;min-height:0;overflow-y:auto;padding:12px 12px 14px}
 .rsec-t{margin:0 0 8px}
-.rsec-log{flex:none;display:flex;flex-direction:column;max-height:42%;min-height:0;border-top:1px solid var(--line);background:var(--sunken)}
-.rsec-log[data-open="false"] .log,.rsec-log[data-open="false"] #phint{display:none}
-.logh{display:flex;align-items:center;gap:7px;width:100%;padding:9px 12px;border:none;background:transparent;color:var(--muted);cursor:pointer;text-align:left}
-.logh svg{width:11px;height:11px;flex:none;fill:none;stroke:currentColor;stroke-width:2;transition:transform .15s}
-.logh[aria-expanded="false"] svg{transform:rotate(-90deg)}
-.logh:hover{color:var(--ink)}
-.logh:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.logpanel{flex:none;width:var(--lgw,300px);background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;position:relative}
+.logpanel[hidden]{display:none}
+.logh{flex:none;display:flex;align-items:center;gap:7px;padding:12px 12px 9px;color:var(--muted)}
 .logn{margin-left:auto;min-width:22px;padding:0 6px;border-radius:9px;background:var(--surface);border:1px solid var(--line);
   font:11px/17px "IBM Plex Mono",monospace;text-align:center;color:var(--ink)}
-.log{overflow-y:auto;min-height:0;padding:0 8px 4px}
-.rsec-log #phint{margin:0;padding:6px 12px 10px;border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.log{flex:1 1 auto;overflow-y:auto;min-height:0;padding:0 8px 8px}
+#phint{margin:14px 0 0}
 .lg-cat{--cat:var(--ok);margin:0 0 6px}
 .lg-ch{display:flex;align-items:center;gap:7px;width:100%;padding:4px 4px;border:none;background:transparent;cursor:pointer;
   font-family:"Barlow Condensed",sans-serif;font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:11.5px;color:var(--cat)}
@@ -1160,10 +1156,12 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .gd-seg:hover{color:var(--ink)}
 .gd-seg.on{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);position:relative}
 .gd-seg:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.gd-f{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
-.gd-f input{width:58px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:3px 5px;font:12px "IBM Plex Mono",monospace}
-.gd-f input.wide{width:86px}
-.gd-f i{font-style:normal;color:var(--faint)}
+/* a slider, and the number beside it for an exact value */
+.gd-s{display:grid;grid-template-columns:54px minmax(70px,1fr) 66px 12px;align-items:center;gap:6px;width:100%;color:var(--muted);font-size:12px}
+.gd-sl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gd-sr{width:100%;min-width:0;margin:0}
+.gd-s input[type=number]{width:100%;min-width:0;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:3px 4px;font:12px "IBM Plex Mono",monospace}
+.gd-s i{font-style:normal;color:var(--faint)}
 .gd-lh{display:flex;align-items:center;gap:6px;margin:14px 0 6px;font:600 10.5px "Barlow Condensed",sans-serif;letter-spacing:.09em;
   text-transform:uppercase;color:var(--faint)}
 .gd-lh .n{font:600 10px "IBM Plex Mono",monospace;color:var(--muted);background:var(--sunken);border-radius:8px;padding:0 6px}
@@ -1181,7 +1179,7 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .gd-main .t{display:flex;flex-direction:column;min-width:0;line-height:1.3}
 .gd-main .t b{font-weight:500;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gd-main .t i{font-style:normal;font:11px "IBM Plex Mono",monospace;color:var(--muted)}
-.gd-edit{padding:4px 10px 10px 42px;display:grid;gap:8px}
+.gd-edit{padding:4px 10px 10px 10px;display:grid;gap:8px}
 .gd-edit .ln{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .gd-note{margin:0;padding:7px 9px;border-left:2px solid var(--ok);background:var(--surface);border-radius:0 4px 4px 0;
   color:var(--muted);font-size:11.5px;line-height:1.45}
@@ -1557,7 +1555,7 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .cam-f i{font-style:normal;font-size:10.5px;color:var(--faint)}
 
 @media (max-width:900px){
-  .rail{width:150px;padding:10px 8px}.rail.right{width:220px;padding:0}.panel{width:220px}
+  .rail{width:150px;padding:10px 8px}.rail.right{width:220px;padding:0}.panel{width:220px}.logpanel{width:220px}
   .modes{grid-template-columns:1fr}
 }
 
@@ -1829,15 +1827,11 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
 
     <aside class="rail right">
       <section class="rsec cmp-info" id="cmpinfo" aria-label="Community mission" hidden></section>
-      <section class="rsec rsec-sel" aria-label="Selection"><div class="lbl rsec-t">Selection</div><div id="insp"></div></section>
-      <section class="rsec rsec-log" id="logsec" data-open="true" aria-label="Change log">
-        <button class="logh" id="logtoggle" type="button" aria-expanded="true" aria-controls="plist">
-          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
-          <span class="lbl">Change log</span><span class="logn" id="pcount">0</span>
-        </button>
-        <div class="log" id="plist"></div>
-        <p class="hint" id="phint"></p>
-      </section>
+      <section class="rsec rsec-sel" aria-label="Selection"><div class="lbl rsec-t">Selection</div><div id="insp"></div><p class="hint" id="phint"></p></section>
+    </aside>
+    <aside class="logpanel" id="panel-log" role="tabpanel" aria-label="Changes" hidden>
+      <div class="logh"><span class="lbl">Change log</span><span class="logn" id="pcount">0</span></div>
+      <div class="log" id="plist"></div>
     </aside>
   </div>
 </div>
@@ -2270,6 +2264,22 @@ function drawCameraGhost(){
   ctx.beginPath();ctx.roundRect(lx,p[1]+12,w+14,20,4);ctx.fill();ctx.stroke();
   ctx.fillStyle=css("--ink");ctx.fillText(label,lx+7,p[1]+26);ctx.restore();
 }
+// a guard on no alarm: he carries on as he was when one rings, and comes for no one
+var NO_ALARM="none";
+function offAlarm(list){
+  var l=list.filter(function(o){return o.type==="soldier"&&o.alarmId!==NO_ALARM});
+  lastChangeAt=0;
+  l.forEach(function(o){var f={alarmId:NO_ALARM};if(o.own)f.reinforce=0;setProp(o,f)});
+  if(!$("panel-sec").hidden)renderSecurity();
+  return l.length;
+}
+function removePatrols(list){
+  var l=list.filter(function(o){return o.type==="soldier"&&(o.patrol||[]).length});
+  lastChangeAt=0;
+  l.forEach(function(o){setPatrol(o,[])});
+  patrolMode=false;
+  return l.length;
+}
 // which alarm this part belongs to, and for a guard whether he answers one
 function alarmSection(o){
   var sys=alarmSystems(),cur=o.alarmId||"",ro=!canEditQuiet();
@@ -2286,8 +2296,13 @@ function alarmSection(o){
   var h='<div class="lbl" style="margin-top:12px">Alarm</div>'+
     '<div class="field" style="margin-top:5px"><span class="lbl">'+what+'</span><select id="al-sys"'+(ro?' disabled':'')+'>'+
     '<option value=""'+(cur?'':' selected')+'>'+(o.type==="soldier"||o.type==="camera"?"Automatic: the nearest one":"None: it does nothing")+'</option>'+
+    (o.type==="soldier"?'<option value="'+NO_ALARM+'"'+(cur===NO_ALARM?' selected':'')+'>None: he answers no alarm</option>':'')+
     sys.map(function(a){return '<option value="'+esc(a.key)+'"'+(cur===a.key?' selected':'')+'>'+esc(a.name)+'</option>'}).join("")+
     '</select></div>';
+  if(o.type==="soldier"&&cur!==NO_ALARM&&!ro)
+    h+='<button class="btn" id="al-off" style="width:100%;margin-top:6px" title="Take him off the alarm\nWhen it rings he carries on as he was">Take him off the alarm</button>';
+  if(o.type==="soldier"&&cur===NO_ALARM)
+    h+='<p class="hint" style="margin:5px 0 0">When an alarm rings he carries on as he was.</p>';
   if(o.type==="soldier"&&o.own){
     h+='<div class="field" style="margin-top:7px"><span class="lbl">Arrives</span><select id="al-arrive"'+(ro?' disabled':'')+'>'+
       '<option value="">At the start</option>'+events.map(function(v,i){
@@ -2295,7 +2310,7 @@ function alarmSection(o){
       (o.arriveOn?'<div class="field"><span class="lbl">How many times he comes back</span>'+
         '<input type="number" id="al-atimes" min="1" max="20" value="'+(o.arriveTimes||1)+'"'+(ro?' disabled':'')+'></div>':'');
   }
-  if(o.type==="soldier"&&!o.arriveOn)
+  if(o.type==="soldier"&&!o.arriveOn&&cur!==NO_ALARM)
     h+='<label class="sg-t"><input type="checkbox" id="al-reinf"'+(o.reinforce?' checked':'')+(ro?' disabled':'')+
        '> He is a reinforcement: he appears when it rings</label>'+
        (o.reinforce?'<div class="field"><span class="lbl">How many times he comes back</span>'+
@@ -2307,8 +2322,11 @@ function alarmSection(o){
 }
 function bindAlarmSection(o){
   if($("al-sys"))$("al-sys").addEventListener("change",function(){
-    setProp(o,{alarmId:$("al-sys").value||null});renderSide();renderSecurity();draw();
+    if($("al-sys").value===NO_ALARM)offAlarm([o]);
+    else setProp(o,{alarmId:$("al-sys").value||null});
+    renderSide();renderSecurity();draw();
   });
+  if($("al-off"))$("al-off").addEventListener("click",function(){offAlarm([o]);renderSide();renderSecurity();draw()});
   if($("al-hack"))$("al-hack").addEventListener("change",function(){
     var v=parseFloat($("al-hack").value);if(isNaN(v))return;
     setProp(o,{hackTime:Math.max(0,Math.min(60,v))});
@@ -2436,6 +2454,20 @@ var GRAPH_MAX=999;              // studio/build/graphs.py grow(): 1000 slots, id
 // the walkway point a guard walks to when the mission starts: the nearest to
 // him, height and all (plan.py nearest_node) - a guard on a barracks' ground
 // floor walks to one on his floor, not to the one above his head
+// A walkway of the mission's own on ground it has shaped stands on that ground, not
+// under a hill raised over it or in the air over a pit (plan.py _ground_for_node)
+function walkZ(n){
+  if(!TERR||!TERR.h0)return n.z;
+  var g0=zOn(TERR.h0,n.x,n.y),g1=zOn(TERR.h,n.x,n.y);
+  if(g0==null||g1==null||Math.abs(g1-g0)<0.03)return n.z;
+  var buried=n.z<g1-0.75,overPit=g1<g0&&g1+0.75<n.z&&n.z<=g0+0.75;
+  return (buried||overPit)&&!buildingAt(n.x,n.y,n.z)?+g1.toFixed(3):n.z;
+}
+// Up a hill to a walkway further up it is a walk, not another floor: both on the ground
+function aWalkUpTheSlope(p,n){
+  function on(x,y,z){var g=TERR?zOn(TERR.h,x,y):null;return g!=null&&Math.abs(z-g)<=1.5}
+  return on(p.x,p.y,p.z)&&on(n.x,n.y,n.z);
+}
 function guardWalkway(p,gid){
   var best=null,gone=buriedLevelNodes();
   function look(n){
@@ -2444,7 +2476,7 @@ function guardWalkway(p,gid){
     if(!best||d3<best.d3)best={d:d,dz:dz,d3:d3,n:n};
   }
   nodesOf(gid).forEach(function(n){if(!gone[gid+":"+n.id])look(n)});
-  navNodes.forEach(function(n){if(String(n.graph)===gid)look(n)});
+  navNodes.forEach(function(n){if(String(n.graph)===gid)look({x:n.x,y:n.y,z:walkZ(n)})});
   interiors().forEach(function(it){if(String(it.gid)===gid)it.nodes.forEach(look)});
   return best;
 }
@@ -2866,6 +2898,7 @@ function setZ(o,z){
   var dz=z-o.z,riders=Math.abs(dz)>0.005?ridersOf(o,true):[];
   if(o.own)o.z=z;else editShipped(o,{x:o.x,y:o.y,z:z});
   carry(riders,0,0,dz);
+  reslot(o);
   syncDoorsOf(o);                       // its doors stay in its doorways
   touch();if(sel===o)renderSide();draw();
 }
@@ -2897,7 +2930,7 @@ function ridersOf(o,withWall){
 function carry(list,dx,dy,dz){
   list.forEach(function(q){
     var f={x:+(q.x+dx).toFixed(3),y:+(q.y+dy).toFixed(3),z:+(q.z+dz).toFixed(3)};
-    if(q.own){q.x=f.x;q.y=f.y;q.z=f.z}else editShipped(q,f);
+    if(q.own){q.x=f.x;q.y=f.y;q.z=f.z;reslot(q)}else editShipped(q,f);
   });
 }
 // Heights as the build will have them (serve.py mission_heights: a dry run of
@@ -4967,13 +5000,14 @@ function addTheDoors(b){
 // The doors a building brought stay in its doorways: when it is moved, turned,
 // or set down on the ground (its own height settled, or the build's), they go
 // with it. They are still ordinary placements - one can be taken out or moved
-// on its own, and then it keeps where it is put.
+// on its own, and then it keeps where it is put (reslot), and goes on going with
+// the building from there.
 function syncDoorsOf(b){
   if(!b||!b.own||!b.uid)return 0;
   var c=Math.cos(b.gamma||0),sn=Math.sin(b.gamma||0),n=0;
   placements.forEach(function(p){
     var sl=p.slot;
-    if(!sl||p.of!==b.uid||p.loose||p===b)return;
+    if(!sl||p.of!==b.uid||p===b)return;
     p.x=+(b.x+sl.dx*c-sl.dy*sn).toFixed(3);
     p.y=+(b.y+sl.dx*sn+sl.dy*c).toFixed(3);
     p.z=+(b.z+sl.dz).toFixed(3);
@@ -4981,6 +5015,21 @@ function syncDoorsOf(b){
     n++;
   });
   return n;
+}
+// One of a building's own things has moved on its own: its place in the building
+// is where it stands now. Nothing changes if it stands where its slot says.
+function reslot(o){
+  if(!o||!o.slot||!o.of)return;
+  var b=null;
+  for(var i=0;i<placements.length;i++)if(placements[i].uid===o.of){b=placements[i];break}
+  if(!b||b===o)return;
+  var g=b.gamma||0,c=Math.cos(g),sn=Math.sin(g),sl=o.slot,tau=Math.PI*2;
+  var off=Math.abs(b.x+sl.dx*c-sl.dy*sn-o.x)>0.012||Math.abs(b.y+sl.dx*sn+sl.dy*c-o.y)>0.012||Math.abs(b.z+sl.dz-o.z)>0.012;
+  var turn=(((o.gamma||0)-g-(sl.dh||0))%tau+tau)%tau;
+  if(!off&&Math.min(turn,tau-turn)<0.01)return;
+  var ex=o.x-b.x,ey=o.y-b.y;
+  o.slot=Object.assign({},sl,{dx:+(ex*c+ey*sn).toFixed(3),dy:+(-ex*sn+ey*c).toFixed(3),dz:+(o.z-b.z).toFixed(3),
+    dh:+((((o.gamma||0)-g)%tau+tau)%tau).toFixed(5)});
 }
 // A gate of the game's is one leaf, half a gateway: placing one lays the whole
 // thing - both leaves meeting in the middle and sliding back behind their
@@ -5451,6 +5500,7 @@ function removeSel(){
     return;
   }
   if(sel&&!sel.own&&sel.fixed){toast("The level's "+displayName(sel).toLowerCase()+" stays: its gunner works it");return}
+  if(sel&&!sel.own&&sel.type==="player"){toast("The player start can't be removed: move it instead");return}
   if(sel&&!sel.own&&sel.ref){
     if(removeRefs.indexOf(sel.ref)<0)removeRefs.push(sel.ref);
     sel=null;patrolMode=false;touch();renderSide();draw();
@@ -5743,6 +5793,7 @@ function setProp(o,fields){
   }
   else editShipped(o,fields);
   if(riders.length)carry(riders,d[0],d[1],d[2]);
+  if(o.own)reslot(o);
   syncDoorsOf(o);                       // its doors stay in its doorways
   touch();
 }
@@ -5751,6 +5802,8 @@ function setProp(o,fields){
 // the level's things move once selected - not its doors, nor what it fixes in
 // place (a machine gun its gunner works)
 function canMove(o){return !!o&&(o.own||(!!o.ref&&o.type!=="door"&&!o.fixed))}
+// the player start moves, never goes: the game crashes loading a mission with no player
+function canRemove(o){return !!o&&(o.own||(!!o.ref&&!o.fixed&&o.type!=="player"))}
 
 function optionList(items,current,groupKey){
   var h="",groups={};
@@ -5834,7 +5887,7 @@ function patrolSection(o){
   var pm=patrolMode&&!ORDERPICK;
   h+='<div style="display:flex;gap:6px;margin-top:5px"><button class="btn '+(pm?"on":"")+'" id="ipat" style="flex:1">'+
      (pm?"Done (click nodes on the plan)":"Edit patrol route")+'</button>'+
-     (stops.length?'<button class="btn" id="iclr" title="Remove every stop">Clear</button>':'')+'</div>';
+     (stops.length&&canEditQuiet()?'<button class="btn danger" id="iclr" title="Remove his whole patrol\nEvery stop goes, and he stands where he is. Ctrl+Z brings them back">Remove patrol</button>':'')+'</div>';
   if(stops.length){
     h+='<div style="display:flex;flex-direction:column;gap:3px;margin-top:7px">';
     stops.forEach(function(n,i){
@@ -6201,7 +6254,7 @@ function objectInspector(el){
   if(o._orig)acts+='<button class="btn act" id="ireset">'+IC.undo+'Undo changes to this object</button>';
   if(groupable(o)&&o.type!=="navnode")
     acts+='<button class="btn act ro-ok" id="iitem" title="Add to your items\nKeep it in the inventory, to place in any mission">'+IC.save+'Add to your items…</button>';
-  if((own||(o.ref&&!o.fixed))&&!READONLY)
+  if(canRemove(o)&&!READONLY)
     acts+='<button class="btn act danger" id="idel" title="Delete">'+IC.trash+(own?'Remove':'Remove from mission')+'</button>';
   if(acts)h+='<div class="ins-acts">'+acts+'</div>';
   if(READONLY)
@@ -6469,25 +6522,40 @@ function appliedState(){
   var ix=appliedIndex();
   if(APPLIED_ST.ver===planVer&&APPLIED_ST.ix===ix)return APPLIED_ST;
   var st={ver:planVer,ix:ix,placements:{},edits:{},removeRefs:{},nodes:{},nodeEdits:{},objectives:{},ground:{},brush:false,sculpt:false,paint:false,settings:false,events:{},
-    levelScenes:{},levelVehicles:{},cutscenes:{},n:0};
+    levelScenes:{},levelVehicles:{},cutscenes:{},n:0,total:0,gone:0,flips:0};
   if(ix){
     var cur=planOf();
-    function mark(list,key,into,idx){list.forEach(function(q){var k=key(q);if(k!=null&&idx[k]===JSON.stringify(q)){into[k]=1;st.n++}})}
+    // every list counted the one way: how many there are, how many the game has as
+    // they are (n), and how many it has that are gone from the plan
+    function mark(list,key,into,idx){
+      var seen={};
+      list.forEach(function(q){var k=key(q);st.total++;if(k==null)return;seen[k]=1;if(idx[k]===JSON.stringify(q)){into[k]=1;st.n++}});
+      Object.keys(idx).forEach(function(k){if(!seen[k])st.gone++});
+    }
+    function one(has,same,had){if(has){st.total++;if(same)st.n++}else if(had)st.gone++}
     mark(cur.placements,function(q){return q.uid},st.placements,ix.placements);
     mark(cur.edits,function(e){return e.ref},st.edits,ix.edits);
-    cur.removeRefs.forEach(function(r){if(ix.removeRefs[r]){st.removeRefs[r]=1;st.n++}});
+    cur.removeRefs.forEach(function(r){st.total++;if(ix.removeRefs[r]){st.removeRefs[r]=1;st.n++}});
+    Object.keys(ix.removeRefs).forEach(function(r){if(cur.removeRefs.indexOf(r)<0)st.gone++});
     mark(cur.nodes,function(n){return n.uid},st.nodes,ix.nodes);
     mark(cur.nodeEdits,function(e){return editKey(e.graph,e.id)},st.nodeEdits,ix.nodeEdits);
     mark(cur.objectives,function(o){return o.uid},st.objectives,ix.objectives);
     mark(cur.ground,function(g){return g.uid},st.ground,ix.ground);
-    if(cur.brush.length&&JSON.stringify(cur.brush)===ix.brush){st.brush=true;st.n++}
-    if(cur.sculpt.length&&JSON.stringify(cur.sculpt)===ix.sculpt){st.sculpt=true;st.n++}
-    if(cur.paint.length&&JSON.stringify(cur.paint)===ix.paint){st.paint=true;st.n++}
-    if(Object.keys(cur.settings).length&&JSON.stringify(cur.settings)===ix.settings){st.settings=true;st.n++}
+    st.brush=!!cur.brush.length&&JSON.stringify(cur.brush)===ix.brush;one(cur.brush.length,st.brush,ix.brush!=="[]");
+    st.sculpt=!!cur.sculpt.length&&JSON.stringify(cur.sculpt)===ix.sculpt;one(cur.sculpt.length,st.sculpt,ix.sculpt!=="[]");
+    st.paint=!!cur.paint.length&&JSON.stringify(cur.paint)===ix.paint;one(cur.paint.length,st.paint,ix.paint!=="[]");
+    st.settings=!!Object.keys(cur.settings).length&&JSON.stringify(cur.settings)===ix.settings;one(Object.keys(cur.settings).length,st.settings,ix.settings!=="{}");
     mark(cur.events,function(v){return v.uid},st.events,ix.events);
     mark(cur.cutscenes,function(c){return c.uid},st.cutscenes,ix.cutscenes);
     ["levelScenes","levelVehicles"].forEach(function(k){
-      Object.keys(cur[k]).forEach(function(id){if(ix[k][id]===cur[k][id]){st[k][id]=1;st.n++}})});
+      Object.keys(cur[k]).forEach(function(id){st.total++;if(JSON.stringify(ix[k][id])===JSON.stringify(cur[k][id])){st[k][id]=1;st.n++}});
+      Object.keys(ix[k]).forEach(function(id){if(!(id in cur[k]))st.gone++});
+    });
+    // what is one thing whichever way it goes
+    if(!!ix.src.failOnAlarm!==!!cur.failOnAlarm)st.flips++;
+    if(!!ix.src.objBase!==!!cur.objBase)st.flips++;
+    if(JSON.stringify(ix.src.textures||[])!==JSON.stringify(cur.textures||[]))st.flips++;
+    if(JSON.stringify(ix.src.removals||[])!==JSON.stringify(cur.removals||[]))st.flips++;
   }
   return APPLIED_ST=st;
 }
@@ -6585,9 +6653,9 @@ function renderList(){
   }
   cutscenes.forEach(function(c){
     if(AS.cutscenes[c.uid])return;
-    var pr=cutProblem(c);
-    rows.added.push({thumb:function(){return iconSwatch("dot",pr?css("--danger"):css("--accent"),18)},
-      name:(c.name||"Cutscene"),meta:pr||((c.where||"intro")+" · "+fmtSecs(cutLength(c))),bad:!!pr,
+    var pr=cutProblem(c),inG=!!(IX&&IX.cutscenes&&IX.cutscenes[c.uid]);
+    (inG?rows.edited:rows.added).push({thumb:function(){return iconSwatch("dot",pr?css("--danger"):css("--accent"),18)},
+      name:(c.name||"Cutscene"),meta:pr||((inG?"changed since the last Apply · ":"")+(c.where||"intro")+" · "+fmtSecs(cutLength(c))),bad:!!pr,
       go:function(){showPanel("cut");OWNOPEN[c.uid]=true;renderCutscenes();draw()},
       undo:canEditQuiet()?function(){cutscenes=cutscenes.filter(function(x){return x!==c});touch();renderCutscenes();renderList();draw()}:null,
       undoTip:"Remove it",undoIcon:IC.trash});
@@ -6704,6 +6772,8 @@ function renderList(){
   }
   wrap.scrollTop=keep;
   $("pcount").textContent=shown;
+  var tabN=$("tab-log-n");
+  if(tabN){tabN.textContent=shown;tabN.hidden=!shown}
   $("phint").textContent=navTool()
     ?"Click the plan to add a node. Dashed lines preview the links it gets; red means nothing is close enough on that floor."
     :placements.length||navNodes.length
@@ -8772,7 +8842,8 @@ function partBar(anchor,o,sys){
         if(act==="show")jumpTo(o.x,o.y,Math.max(view.k,4));
         renderSide();renderSecurity();draw();
       }else if(act==="off"){
-        setProp(o,{alarmId:null});
+        // a guard with no word on it answers the nearest: off means off
+        if(o.type==="soldier")offAlarm([o]);else setProp(o,{alarmId:null});
         toast(displayName(o)+" is off "+sys.name);
         renderSide();renderSecurity();draw();
       }else if(act==="del"){
@@ -9171,6 +9242,8 @@ function groupMenuItems(){
     ed?{label:"Rotate 90°",kbd:"T",act:function(){rotateGroup(90)}}:null,
     ed?{label:"Rotate 180°",act:function(){rotateGroup(180)}}:null,
     ed?{label:"Drop onto the ground",kbd:"G",act:dropGroup}:null,
+    ed&&list.some(function(o){return o.type==="soldier"&&(o.patrol||[]).length})?{label:"Remove their patrols",act:function(){removePatrols(multi);renderSide();draw()}}:null,
+    ed&&list.some(function(o){return o.type==="soldier"&&o.alarmId!==NO_ALARM})?{label:"Take them off the alarm",act:function(){offAlarm(multi);renderSide();draw()}}:null,
     ed?{label:"Duplicate",kbd:"Ctrl+D",act:duplicateGroup}:null,
     {label:"Copy",kbd:"Ctrl+C",act:copyGroup},
     {label:"Add to your items…",act:saveGroupDialog},
@@ -9200,26 +9273,33 @@ function placeMember(o,x,y,gamma){
   if(o.own){
     Object.keys(f).forEach(function(k){o[k]=f[k]});
     if(o.type==="soldier"&&!(o.patrol||[]).length)o.graph=guardGraph(o.x,o.y,o.z);
+    reslot(o);
     syncDoorsOf(o);                     // its doors and lift stay with it
   }else editShipped(o,f);
 }
+// who moves on their own in a group: what came with a building goes with it, when
+// the building is in the group too (moved as well, it moved twice)
+function groupMovers(list){
+  var has={};list.forEach(function(o){if(o.uid)has[o.uid]=1});
+  return list.filter(function(o){return !(o.slot&&o.of&&has[o.of])});
+}
 function moveGroup(dx,dy,list){
   if(!canEdit())return;
-  (list||groupList()).forEach(function(o){placeMember(o,o.x+dx,o.y+dy,null)});
+  groupMovers(list||groupList()).forEach(function(o){placeMember(o,o.x+dx,o.y+dy,null)});
   touch();
 }
 var groupSettleT=0;
 function settleGroup(list){
   clearTimeout(groupSettleT);
   groupSettleT=setTimeout(function(){
-    list.forEach(function(o){if(o.type!=="navnode")settle(o,false)});
+    groupMovers(list).forEach(function(o){if(o.type!=="navnode")settle(o,false)});
   },250);
 }
 function rotateGroup(deg){
   var list=groupList();if(list.length<2||!canEdit())return false;
   lastChangeAt=0;
   var c=groupCentre(list),a=deg*Math.PI/180,cs=Math.cos(a),sn=Math.sin(a);
-  list.forEach(function(o){
+  groupMovers(list).forEach(function(o){
     var dx=o.x-c.x,dy=o.y-c.y;
     if(drives(o))o.drive.stops=(o.drive.stops||[]).map(function(s){var ex=s[0]-c.x,ey=s[1]-c.y;
       return [+(c.x+ex*cs-ey*sn).toFixed(2),+(c.y+ex*sn+ey*cs).toFixed(2)]});
@@ -9231,6 +9311,11 @@ function rotateGroup(deg){
 function deleteGroup(){
   var list=groupList();if(list.length<2||!canEdit())return false;
   lastChangeAt=0;
+  var stays=list.filter(function(o){return !canRemove(o)});
+  if(stays.length){
+    toast(stays.map(displayName).join(", ")+" stay"+(stays.length>1?"":"s")+": "+(stays.some(function(o){return o.type==="player"})?"a mission needs its player":"a gun works only with its gunner"));
+    list=list.filter(canRemove);
+  }
   var gone=new Set(list),refs={};
   list.forEach(function(o){
     if(o.type==="navnode")refs["n:"+o.uid]=1;
@@ -9247,10 +9332,10 @@ function deleteGroup(){
 function dropGroup(){
   var list=groupList().filter(function(o){return o.type!=="navnode"});
   if(!list.length||!canEdit())return false;
-  list.forEach(function(o){
+  groupMovers(list).forEach(function(o){
     if(!o.own)editShipped(o,{settle:true});
     else if(SRV)settle(o,false);
-    else{var gz=groundAt(o.x,o.y);if(gz!=null)o.z=+gz.toFixed(3)}
+    else{var gz=groundAt(o.x,o.y);if(gz!=null){o.z=+gz.toFixed(3);syncDoorsOf(o)}}
   });
   touch();renderSide();draw();
   toast(list.length+" set down on the ground");
@@ -9750,7 +9835,7 @@ function pasteData(d,x,y,gamma){
   // what names an alarm system or an event this mission does not have: automatic
   // again (the nearest system), or at the start
   out.forEach(function(o){
-    if(o.alarmId&&!alarmByKey(o.alarmId))o.alarmId=null;
+    if(o.alarmId&&o.alarmId!==NO_ALARM&&!alarmByKey(o.alarmId))o.alarmId=null;
     // an alarm part with none joins the nearest system, as one placed by hand does
     if(!o.alarmId&&!o.gate&&/^(camera|switch|siren|alarmlight)$/.test(o.type)&&o.alarm!==false){var na=nearestAlarm(o.x,o.y);if(na)o.alarmId=na.key}
     if(o.arriveOn&&!events.some(function(v){return v.uid===o.arriveOn})){delete o.arriveOn;delete o.arriveTimes}
@@ -9895,6 +9980,8 @@ function groupInspector(el){
   var list=multi,kinds={};
   list.forEach(function(o){var k=o.type==="navnode"?"new node":o.type==="soldier"?"guard":o.type==="pickup"?"pickup":"object";kinds[k]=(kinds[k]||0)+1});
   var ro=READONLY;
+  var onRoute=list.filter(function(o){return o.type==="soldier"&&(o.patrol||[]).length}).length;
+  var onAlarm=list.filter(function(o){return o.type==="soldier"&&o.alarmId!==NO_ALARM}).length;
   var h='<dl class="kv"><dt>group</dt><dd>'+list.length+' selected</dd><dt>of</dt><dd>'+
     esc(Object.keys(kinds).map(function(k){return kinds[k]+" "+k+(kinds[k]===1?"":"s")}).join(", "))+'</dd></dl>'+
     (ro?'':rotButtons("data-g-rot"))+
@@ -9902,6 +9989,8 @@ function groupInspector(el){
     // the whole selection as one item of the inventory: a compound, its fence, towers and guards
     '<button class="btn act ro-ok" data-g="save" title="Add to your items\nKeep them all as one item in the inventory, to place in any mission">'+IC.save+'Add to your items…</button>'+
     (ro?'':'<button class="btn act" data-g="drop" title="G">'+IC.ground+'Drop onto the ground</button>')+
+    (ro||!onRoute?'':'<button class="btn act" data-g="nopatrol" title="Every stop goes, and they stand where they are">Remove patrols ('+onRoute+')</button>')+
+    (ro||!onAlarm?'':'<button class="btn act" data-g="noalarm" title="When an alarm rings they carry on as they were">Take off the alarm ('+onAlarm+')</button>')+
     '<div class="btnrow" style="margin:0">'+
     (ro?'':'<button class="btn" data-g="dup" title="Ctrl+D">'+IC.dup+'Duplicate</button>')+
     '<button class="btn ro-ok" data-g="copy" title="Ctrl+C">'+IC.copy+'Copy</button></div>'+
@@ -9925,6 +10014,8 @@ function groupInspector(el){
   el.querySelectorAll("[data-g]").forEach(function(b){
     b.addEventListener("click",function(){
       var a=b.getAttribute("data-g");
+      if(a==="nopatrol"){var np=removePatrols(multi);renderSide();draw();toast(np+" guard"+(np===1?"":"s")+" now stand"+(np===1?"s":"")+" guard. Ctrl+Z brings the patrols back");return}
+      if(a==="noalarm"){var na=offAlarm(multi);renderSide();draw();toast(na+" guard"+(na===1?"":"s")+" off the alarm. Ctrl+Z puts them back");return}
       if(a==="rot15")rotateGroup(15);else if(a==="rot-15")rotateGroup(-15);else if(a==="rot90")rotateGroup(90);
       else if(a==="drop")dropGroup();else if(a==="dup")duplicateGroup();else if(a==="copy")copyGroup();
       else if(a==="save")saveGroupDialog();else if(a==="del")deleteGroup();
@@ -10688,7 +10779,16 @@ function removeArea(a){
   areaChanged();
 }
 function groundSel(){return groundEdits.filter(function(a){return a.uid===GSEL})[0]||null}
-function areaChanged(){lastChangeAt=0;touch();applyGround();renderGround();renderList();buildGroundBar();draw()}
+function areaChanged(){if(!GSLIDE.on)lastChangeAt=0;touch();applyGround();renderGround();renderList();buildGroundBar();draw()}
+// A slider of the ground panel at work: the map follows it, and the panel, which
+// would draw a new slider under the mouse, waits until it is let go
+var GSLIDE={on:false,raf:0,focus:null};
+// A wide range is spread out at its low end (curve): a metre matters at 3 m, not at 300
+function slideT(v,lo,hi,c){return Math.round(1000*Math.pow(Math.max(0,Math.min(1,(v-lo)/(hi-lo))),1/c))}
+function slideV(t,lo,hi,c,step){
+  var v=lo+(hi-lo)*Math.pow(t/1000,c),dp=String(step).indexOf(".")<0?0:String(step).split(".")[1].length;
+  return +(Math.round(v/step)*step).toFixed(dp);
+}
 function areaText(a){
   if(a.mode==="level")return "level "+(a.height!=null?a.height.toFixed(1)+" m":"?");
   if(a.mode==="raise"||a.mode==="lower")return (a.mode==="raise"?"raise ":"lower ")+Math.abs(a.delta||0).toFixed(1)+" m";
@@ -11146,11 +11246,15 @@ function rowTitle(a){
   return "Ramp, "+(a.z1-a.z0>=0?"up ":"down ")+Math.abs(a.z1-a.z0).toFixed(1)+" m";
 }
 function renderGround(){
-  var p=$("groundpop");if(!p||p.hidden)return;
+  var p=$("groundpop");if(!p||p.hidden||GSLIDE.on)return;
   var mode=GMODE.mode,tdef=GTOOLS.filter(function(t){return t[0]===mode})[0];
-  function fld(id,label,v,unit,min,max,step,ph,cls){
-    return '<label class="gd-f">'+(label?'<span>'+label+'</span>':'')+'<input type="number" id="'+id+'"'+(cls?' class="'+cls+'"':'')+
-      ' value="'+v+'" min="'+min+'" max="'+max+'" step="'+step+'"'+(ph?' placeholder="'+ph+'"':'')+'><i>'+unit+'</i></label>';
+  // lo..hi is the slider's reach; min..max what the number may be typed as
+  function sld(id,label,v,unit,lo,hi,min,max,step,curve,ph,at){
+    curve=curve||1;
+    return '<div class="gd-s"><span class="gd-sl" title="'+esc(label)+'">'+label+'</span>'+
+      '<input type="range" class="gd-sr" data-num="'+id+'" data-lo="'+lo+'" data-hi="'+hi+'" data-c="'+curve+'" data-st="'+step+'" min="0" max="1000" step="1"'+
+      ' value="'+slideT(at!=null?at:v===""||v==null?lo:+v,lo,hi,curve)+'" aria-label="'+esc(label)+'">'+
+      '<input type="number" id="'+id+'" value="'+v+'" min="'+min+'" max="'+max+'" step="'+step+'" aria-label="'+esc(label)+', exact"'+(ph?' placeholder="'+ph+'"':'')+'><i>'+unit+'</i></div>';
   }
   function shapeBtns(prefix,round){
     return '<span class="grp"><span>Shape</span>'+
@@ -11169,7 +11273,7 @@ function renderGround(){
         return '<button type="button" class="gd-mat'+(PM.mat===mt.m?' on':'')+'" data-mat="'+mt.m+'" title="'+esc(mt.name)+'"><i style="background:'+c+'"></i>'+esc(mt.name)+'</button>'}).join("")+
         '<button type="button" class="gd-mat'+(PM.mat<0?' on':'')+'" data-mat="-1" title="Take paint off"><i class="erase"></i>Erase</button></div>':
         '<p class="gd-note warn">This level\'s ground materials are not loaded (turn on Ground textures once).</p>')+
-      '<div class="gd-opts">'+fld("gd-psize","Size",PM.size,"m",0.5,20,0.5)+'</div>'+
+      '<div class="gd-opts">'+sld("gd-psize","Size",PM.size,"m",0.5,20,0.5,20,0.5)+'</div>'+
       '<p class="gd-hint" style="margin-top:6px">The game paints its ground in 1 m squares; a painted square takes the material the level uses for it, with its own textures. To be confirmed in game.</p>';
   }else if(mode==="brush"){
     var B=GMODE.brush,stamp=isStamp(B.op);
@@ -11184,11 +11288,11 @@ function renderGround(){
       h+='<div class="gd-opts"><span class="grp" id="gd-bpre"><span>Size</span>'+["small","medium","high"].map(function(k){
           return '<button type="button" class="gd-seg" data-pre="'+k+'" title="'+pr[k][0]+' m across the middle, '+pr[k][1]+' m high">'+
             (k==="high"?(B.op==="valley"||B.op==="crater"?"Deep":"High"):k==="medium"?"Mid":"Small")+'</button>'}).join("")+'</span></div>'+
-        '<div class="gd-opts">'+fld("gd-bsize","Radius",B.size,"m",6,600,1)+fld("gd-bh",B.op==="valley"||B.op==="crater"?"Depth":"Height",B.height,"m",0.5,SHAPE_MAX,0.5)+'</div>'+
-        (B.op!=="valley"?'<div class="gd-opts">'+fld("gd-brough","Rough",Math.round((B.rough==null?0.5:B.rough)*100),"%",0,100,5)+'</div>':'');
+        '<div class="gd-opts">'+sld("gd-bsize","Radius",B.size,"m",6,600,6,600,1,2)+sld("gd-bh",B.op==="valley"||B.op==="crater"?"Depth":"Height",B.height,"m",0.5,SHAPE_MAX,0.5,SHAPE_MAX,0.5,3)+'</div>'+
+        (B.op!=="valley"?'<div class="gd-opts">'+sld("gd-brough","Rough",Math.round((B.rough==null?0.5:B.rough)*100),"%",0,100,0,100,5)+'</div>':'');
     }else{
-      h+='<div class="gd-opts">'+fld("gd-bsize","Size",B.size,"m",1,600,0.5)+
-        (B.op==="erase"||B.op==="smooth"?'':fld("gd-bstr","Strength",B.strength,"m",0.1,40,0.1))+'</div>'+
+      h+='<div class="gd-opts">'+sld("gd-bsize","Size",B.size,"m",1,600,1,600,0.5,3)+
+        (B.op==="erase"||B.op==="smooth"?'':sld("gd-bstr","Strength",B.strength,"m",0.1,40,0.1,40,0.1,2))+'</div>'+
         '<div class="gd-opts"><span class="grp" id="gd-bedge"><span>Edge</span>'+[["soft","Soft"],["linear","Even"],["hard","Hard"]].map(function(e){
           return '<button type="button" class="gd-seg'+((B.edge||"soft")===e[0]?' on':'')+'" data-edge="'+e[0]+'">'+e[1]+'</button>'}).join("")+'</span></div>';
     }
@@ -11197,9 +11301,9 @@ function renderGround(){
       "Fine: 1 m detail. Past 10 m wide the brush shapes the terrain itself instead.")+'</p>';
   }else{
     h+='<p class="gd-hint">'+(mode==="ramp"?"Drag from the bottom of the slope to the top.":"Drag on the map to mark the ground, or click for a 12 m patch.")+'</p>'+
-      '<div class="gd-opts">'+(mode!=="ramp"?shapeBtns("nshape",GMODE.round):fld("gd-rw","Width",GMODE.rampWidth,"m",2,40,0.5))+
-      (mode==="raise"||mode==="lower"?fld("gd-by","By",GMODE.by,"m",0.1,SHAPE_MAX,0.1):"")+
-      (mode==="smooth"?fld("gd-sm","Strength",GMODE.smooth,"m",1,20,0.5):"")+'</div>';
+      '<div class="gd-opts">'+(mode!=="ramp"?shapeBtns("nshape",GMODE.round):sld("gd-rw","Width",GMODE.rampWidth,"m",2,40,2,40,0.5))+
+      (mode==="raise"||mode==="lower"?sld("gd-by","By",GMODE.by,"m",0.1,SHAPE_MAX,0.1,SHAPE_MAX,0.1,3):"")+
+      (mode==="smooth"?sld("gd-sm","Strength",GMODE.smooth,"m",1,20,1,20,0.5):"")+'</div>';
   }
   h+='</div>';
   // the areas: one card each, the selected one open
@@ -11236,15 +11340,22 @@ function renderGround(){
       '<button type="button" class="gd-ib danger" data-act="del" title="Remove it" aria-label="Remove it">'+gpi("trash")+'</button></div>';
     if(on){
       h+='<div class="gd-edit">';
-      if(a.mode==="level")h+='<div class="ln">'+fld("gd-h","Height",a.height!=null?a.height.toFixed(1):"","m",-99999,99999,0.1,"","wide")+
-        '<button type="button" class="gd-ib" id="gd-match" title="Match the ground under it" aria-label="Match the ground under it">'+gpi("match")+'</button></div>';
-      else if(a.mode==="raise"||a.mode==="lower")h+='<div class="ln">'+fld("gd-d","By",Math.abs(a.delta||0).toFixed(1),"m",0,SHAPE_MAX,0.1)+'</div>';
+      // a height's slider reaches 80 m either way from the ground under the area, which does not move with it
+      var gz0=a.mode==="level"||a.mode==="ramp"?areaMedian(a):null;
+      if(gz0==null)gz0=a.mode==="level"?(a.height||0):a.mode==="ramp"?(a.z0+a.z1)/2:0;
+      gz0=Math.round(gz0);
+      if(a.mode==="level")h+='<div class="ln">'+sld("gd-h","Height",a.height!=null?a.height.toFixed(1):"","m",gz0-80,gz0+80,-99999,99999,0.1)+
+        '<button type="button" class="btn" id="gd-match" title="Match the ground under it">'+gpi("match")+'Match the ground</button></div>';
+      else if(a.mode==="raise"||a.mode==="lower")h+='<div class="ln">'+sld("gd-d","By",Math.abs(a.delta||0).toFixed(1),"m",0,SHAPE_MAX,0,SHAPE_MAX,0.1,3)+'</div>';
       else if(a.mode==="remove")h+='<p class="gd-hint">The ground at its edge, drawn in across it. For a mountain in a range, where the ground round it is high too, Level it to a height instead.</p>';
-      else if(a.mode==="smooth")h+='<div class="ln">'+fld("gd-str","Strength",a.strength||4,"m",1,20,0.5)+'</div>';
-      else if(a.mode==="ramp")h+='<div class="ln">'+fld("gd-z0","From",a.z0.toFixed(1),"m",-99999,99999,0.1,"","wide")+fld("gd-z1","To",a.z1.toFixed(1),"m",-99999,99999,0.1,"","wide")+'</div>';
-      h+='<div class="ln">'+fld("gd-w",a.mode==="ramp"?"Length":"Size",a.w.toFixed(1),"×",1.5,2000,0.5)+fld("gd-hh","",a.h.toFixed(1),"m",1.5,2000,0.5)+'</div>'+
-        '<div class="ln">'+fld("gd-ang","Turn",Math.round((a.angle||0)*180/Math.PI),"°",-360,360,5)+
-        fld("gd-ablend","Edge",a.auto!==false?"":a.blend,"m",0,300,0.5,"auto")+'</div>'+
+      else if(a.mode==="smooth")h+='<div class="ln">'+sld("gd-str","Strength",a.strength||4,"m",1,20,1,20,0.5)+'</div>';
+      else if(a.mode==="ramp")h+='<div class="ln">'+sld("gd-z0","From",a.z0.toFixed(1),"m",gz0-80,gz0+80,-99999,99999,0.1)+sld("gd-z1","To",a.z1.toFixed(1),"m",gz0-80,gz0+80,-99999,99999,0.1)+'</div>';
+      var turnDeg=Math.round((a.angle||0)*180/Math.PI);turnDeg=((turnDeg+180)%360+360)%360-180;
+      h+='<div class="ln">'+sld("gd-w",a.mode==="ramp"?"Length":"Width",a.w.toFixed(1),"m",1.5,600,1.5,2000,0.5,3)+
+        sld("gd-hh",a.mode==="ramp"?"Width":"Length",a.h.toFixed(1),"m",1.5,600,1.5,2000,0.5,3)+'</div>'+
+        '<div class="ln">'+sld("gd-ang","Turn",turnDeg,"°",-180,180,-360,360,5)+
+        sld("gd-ablend","Edge",a.auto!==false?"":a.blend,"m",0,60,0,300,0.5,2,"auto",a.blend||0)+
+        (a.auto!==false?'':'<button type="button" class="btn" id="gd-ablend-auto" title="Let the studio choose the edge">Automatic edge</button>')+'</div>'+
         (a.mode!=="ramp"?'<div class="ln gd-opts" style="margin:0">'+shapeBtns("ashape",a.round)+'</div>':'');
       if(st.big)h+='<p class="gd-note">'+(st.need>GROUND_MAX+0.05?'It moves the ground '+st.need.toFixed(1)+' m':
         'With the areas before it, the ground here moves '+st.over.toFixed(1)+' m')+': past what a height map can, so the build rebuilds the terrain itself there.</p>';
@@ -11287,6 +11398,23 @@ function renderGround(){
 
   function on(id,ev,fn){var el=$(id);if(el)el.addEventListener(ev,fn)}
   function val(id,min,max){var v=parseFloat($(id).value);return isNaN(v)?null:Math.max(min,Math.min(max,v))}
+  // each slider speaks through its number, so a field has one way of being changed
+  p.querySelectorAll(".gd-sr").forEach(function(r){
+    var id=r.getAttribute("data-num"),num=$(id),lo=+r.getAttribute("data-lo"),hi=+r.getAttribute("data-hi"),c=+r.getAttribute("data-c"),st=+r.getAttribute("data-st");
+    function push(){num.value=slideV(+r.value,lo,hi,c,st);num.dispatchEvent(new Event("change"))}
+    r.addEventListener("input",function(){
+      if(!GSLIDE.on){GSLIDE.on=true;lastChangeAt=0}
+      num.value=slideV(+r.value,lo,hi,c,st);
+      if(!GSLIDE.raf)GSLIDE.raf=requestAnimationFrame(function(){GSLIDE.raf=0;if(GSLIDE.on)push()});
+    });
+    r.addEventListener("change",function(){
+      if(GSLIDE.raf){cancelAnimationFrame(GSLIDE.raf);GSLIDE.raf=0}
+      GSLIDE.on=true;push();GSLIDE.on=false;GSLIDE.focus=id;
+      renderGround();
+    });
+    num.addEventListener("input",function(){var v=parseFloat(num.value);if(!isNaN(v))r.value=slideT(v,lo,hi,c)});
+  });
+  if(GSLIDE.focus){var fr=p.querySelector('.gd-sr[data-num="'+GSLIDE.focus+'"]');GSLIDE.focus=null;if(fr)fr.focus()}
   on("gd-x","click",function(){toggleGroundPanel(false)});
   on("gd-all","click",function(){GROUND_SHOW_ALL=!GROUND_SHOW_ALL;renderGround()});
   p.querySelectorAll("[data-nshape]").forEach(function(b2){
@@ -11363,6 +11491,7 @@ function renderGround(){
     areaChanged();
   });
   on("gd-match","click",function(){a.height=areaMedian(a);areaChanged()});
+  on("gd-ablend-auto","click",function(){a.auto=true;areaChanged()});
   p.querySelectorAll("[data-ashape]").forEach(function(b2){
     b2.addEventListener("click",function(){a.round=b2.getAttribute("data-ashape")==="round";areaChanged()});
   });
@@ -11859,8 +11988,8 @@ function nav3d(o,R,who){
   });
   navNodes.forEach(function(pn){
     if(!near(pn))return;
-    nodes.push([pn.x,pn.y,pn.z,1]);
-    nodeLinks(pn).forEach(function(n){links.push([pn.x,pn.y,pn.z,n.x,n.y,n.z,1])});
+    nodes.push([pn.x,pn.y,walkZ(pn),1]);
+    nodeLinks(pn).forEach(function(n){links.push([pn.x,pn.y,walkZ(pn),n.x,n.y,n.own?walkZ(n):n.z,1])});
   });
   var route=null,tr=who.type==="soldier"?trackFor(who):null;
   if(tr){
@@ -15006,6 +15135,7 @@ function openMission(id,after){
 function loadPlanState(p){
     ccwLying(p);
     placements=(p.placements||[]).map(function(q){if(!q.uid)q.uid=uid();q.own=true;q.patrol=q.patrol||[];return q});
+    placements.forEach(reslot);         // one moved before the slot followed: the game has it back where it was, and Apply will say so
     groundEdits=(p.ground||[]).map(function(a){if(!a.uid)a.uid=uid();return a});GSEL=null;
     groundBrush={};(p.brush||[]).forEach(function(r){if(r&&r[2])groundBrush[r[0]+","+r[1]]=r[2]});GBRUSH_CV=null;
     groundSculpt={};(p.sculpt||[]).forEach(function(r){if(r&&r[2])groundSculpt[r[0]+","+r[1]]=r[2]/100});GSCULPT_CV=null;TBUDGET=null;
@@ -15014,7 +15144,8 @@ function loadPlanState(p){
     navNodes=(p.nodes||[]).map(function(n){return {uid:n.uid||uid(),own:true,type:"navnode",graph:String(n.graph),x:n.x,y:n.y,z:n.z}});
     nodeEdits={};(p.nodeEdits||[]).forEach(function(e){nodeEdits[editKey(e.graph,e.id)]=e});
     edits={};(p.edits||[]).forEach(function(e){if(e.ref)edits[e.ref]=e});
-    removeRefs=(p.removeRefs||[]).slice();
+    // (one an earlier studio let go: the build keeps him, and so does the map)
+    removeRefs=(p.removeRefs||[]).filter(function(r){return String(r).split("@")[0]!=="HumanPlayer"});
     MTEX=(p.textures||[]).filter(function(x){return x&&x.name&&x.png}).map(function(x){
       return {name:x.name,format:x.format||null,png:/^data:/.test(x.png)?x.png:"data:image/png;base64,"+x.png}});
     objectives=(p.objectives||[]).map(function(o){o=JSON.parse(JSON.stringify(o));if(!o.uid)o.uid=uid();return o});
@@ -15167,15 +15298,9 @@ function pendingGroup(g){
   return true;
 }
 function pendingChanges(){
-  var AS=appliedState(),IX=AS.ix;
-  if(!IX)return null;
-  var total=placements.length+Object.keys(edits).length+removeRefs.length+navNodes.length+Object.keys(nodeEdits).length+
-    objectives.length+groundEdits.length+(hasBrush()?1:0)+(hasSculpt()?1:0)+(hasPaint()?1:0)+(settingsText()?1:0)+events.length;
-  var gone=Object.keys(IX.placementObj).filter(function(u){return !placements.some(function(q){return q.uid===u})}).length+
-    Object.keys(IX.groundObj).filter(function(u){return !groundEdits.some(function(g){return g.uid===u})}).length+
-    (IX.settings!=="{}"&&!settingsText()?1:0)+(!!IX.src.failOnAlarm!==!!failOnAlarm?1:0)+
-    Object.keys(IX.eventObj).filter(function(u){return !events.some(function(v){return v.uid===u})}).length;
-  return total-AS.n+gone;
+  var AS=appliedState();
+  if(!AS.ix)return null;
+  return AS.total-AS.n+AS.gone+AS.flips;
 }
 function paintStatus(){
   $("lvchip").textContent=M?baseLabel(M.base):CMVIEW?"community · level "+LV:READONLY?"built-in · level "+LV:"";
@@ -15314,10 +15439,12 @@ function bind(){
       }else if(mouse.drag.type==="camera"){
         var cmt=camMount(w[0],w[1],mouse.drag.turn||0),cd=mouse.drag;
         cd.x=+cmt.x.toFixed(3);cd.y=+cmt.y.toFixed(3);cd.z=+cmt.z.toFixed(3);cd.gamma=cmt.gamma;cd.mount=cmt.on||"";
+        reslot(cd);
       }else{
-        var rs2=mouse.drag.type==="navnode"?[]:ridersOf(mouse.drag,true);
-        carry(rs2,w[0]-mouse.drag.x,w[1]-mouse.drag.y,0);
+        var rs2=mouse.drag.type==="navnode"?[]:ridersOf(mouse.drag,true),ddx=w[0]-mouse.drag.x,ddy=w[1]-mouse.drag.y;
         mouse.drag.x=w[0];mouse.drag.y=w[1];delete mouse.drag.exact;
+        carry(rs2,ddx,ddy,0);
+        reslot(mouse.drag);
         syncDoorsOf(mouse.drag);        // a building's doors and lift come along
         if(mouse.drag.type==="navnode"){settleZ(mouse.drag);rehome(mouse.drag)}
       }
@@ -15489,6 +15616,8 @@ function bind(){
       else{
         sel=pickNavNode(mouse.x,mouse.y)||pickGraphNode(mouse.x,mouse.y)||pick(mouse.x,mouse.y);
         multi=[];
+        // clicked on the map with the change log open: what was clicked is what you want to see
+        if(sel&&$("tab-log")&&$("tab-log").getAttribute("aria-selected")==="true")$("tab-sel").click();
         renderSide();draw();
       }
     }
@@ -15677,6 +15806,17 @@ function duplicateDialog(m){
   }
   $("dup-go").addEventListener("click",go);
   $("dup-name").addEventListener("keydown",function(e){if(e.key==="Enter")go()});
+}
+// The description as the box in the game's mission list can show it (slots.py,
+// in_game_description): any longer spills out of the box, so the build cuts it to this.
+var DESCRIPTION_MAX=120;
+function inGameDescription(text){
+  var s=String(text==null?"":text).replace(/["\\\r\n\t]/g," ").trim();
+  if(s.length<=DESCRIPTION_MAX)return s;
+  var cut=s.slice(0,DESCRIPTION_MAX-2);
+  if(cut.slice(DESCRIPTION_MAX>>1).indexOf(" ")>=0)cut=cut.slice(0,cut.lastIndexOf(" "));
+  else cut=cut.slice(0,-1);
+  return cut.replace(/[ ,;:-]+$/,"")+"...";
 }
 function renameDialog(m){
   sheet("Name & description",
@@ -15883,7 +16023,8 @@ function mapMenuItems(sx,sy){
       {label:canMove(o)&&canEditQuiet()?"View and place in 3D":"View in 3D",kbd:"V",act:function(){sel=o;multi=[];renderSide();open3d(o)}},
       canMove(o)?{label:"Rotate 90°",kbd:"R ×6",act:function(){setProp(o,{gamma:+(((o.gamma||0)+Math.PI/2)%(Math.PI*2)).toFixed(5)});sel=o;renderSide();draw()}}:null,
       soldier?{label:"Edit patrol route",act:function(){sel=o;patrolMode=true;renderSide();draw()}}:null,
-      soldier&&(o.patrol||[]).length?{label:"Clear patrol (stand guard)",act:function(){setPatrol(o,[]);sel=o;renderSide();draw()}}:null,
+      soldier&&(o.patrol||[]).length?{label:"Remove his patrol (he stands guard)",act:function(){setPatrol(o,[]);sel=o;renderSide();draw()}}:null,
+      soldier&&o.alarmId!==NO_ALARM&&canEditQuiet()?{label:"Take him off the alarm",act:function(){offAlarm([o]);sel=o;renderSide();draw()}}:null,
       soldier?{label:"Change type",sub:((CATALOG&&CATALOG.enemies)||[]).map(function(e){
         return {label:e.label+(e.id===o.ai?"  ✓":""),act:function(){setProp(o,{ai:e.id});sel=o;renderSide();draw()}}})}:null,
       soldier?{label:"Change weapon",sub:weaponSubmenu(0,0,function(x){return x.group!=="ammo"&&x.group!=="items"},
@@ -15892,8 +16033,8 @@ function mapMenuItems(sx,sy){
         function(x){if(o.own)setProp(o,{pickupId:x.id,name:x.label});else setProp(o,{model:x.id});sel=o;renderSide();draw()})}:null,
       o._orig?{label:"Undo changes",act:function(){resetShipped(o);touch();renderSide();draw()}}:null,
       "-",
-      (o.own||(o.ref&&!o.fixed))?{label:o.own?"Remove":"Remove from mission",danger:true,kbd:"Del",act:function(){sel=o;removeSel()}}
-                    :{label:"Can't be removed (no task reference)",disabled:true}];
+      canRemove(o)?{label:o.own?"Remove":"Remove from mission",danger:true,kbd:"Del",act:function(){sel=o;removeSel()}}
+                    :{label:o.type==="player"?"The player start can't be removed":"Can't be removed (no task reference)",disabled:true}];
   }
   var ground=groundAt(wx,wy);
   return [{head:"At "+num(wx)+", "+num(wy)},
@@ -16640,7 +16781,7 @@ function closeFenceGaps(){
     if(has.has(p))return;               // not where a run starts
     for(var n=0;q&&n<300;n++){
       var e=end(p,"b"),st=end(q,"a");
-      q.x=+(q.x+e[0]-st[0]).toFixed(3);q.y=+(q.y+e[1]-st[1]).toFixed(3);moved++;
+      q.x=+(q.x+e[0]-st[0]).toFixed(3);q.y=+(q.y+e[1]-st[1]).toFixed(3);reslot(q);moved++;
       p=q;q=next.get(p);
     }
   });
@@ -16859,7 +17000,9 @@ function localChecks(){
         "Walkways tool, or the AI designer's add_walkways");
       return;
     }
-    if(near.dz>SAME_FLOOR)
+    // the build knows the ground exactly: its dry run, when there is one of this plan, has the last word (and its own row)
+    if(near.dz>SAME_FLOOR&&buildVerdict()){}
+    else if(near.dz>SAME_FLOOR&&!aWalkUpTheSlope(p,near.n))
       add("error","Guards",displayName(p)+" stands "+near.dz.toFixed(1)+" m "+(near.n.z>p.z?"below":"above")+" his walkways (graph "+g+
         "): in the game he walks to them and ends up in the air. Lay walkways where he stands, or put him where they are",p,null,
         "the nearest walkway point is "+Math.round(near.d)+" m away");
@@ -17043,7 +17186,16 @@ function pendingSummary(){
   var ga=groundEdits.filter(function(a){return !AS.ground[a.uid]}).length;
   if(ga)out.push({cat:"added",n:ga,text:ga+" ground area"+(ga>1?"s":"")+" new or changed"});
   if(hasBrush()&&!AS.brush)out.push({cat:"added",n:1,text:"brush strokes changed"});
+  if(hasSculpt()&&!AS.sculpt)out.push({cat:"added",n:1,text:"big ground shapes changed"});
   if(hasPaint()&&!AS.paint)out.push({cat:"added",n:1,text:"painted ground changed"});
+  var cs=cutscenes.filter(function(c){return !AS.cutscenes[c.uid]}).length;
+  if(cs)out.push({cat:"obj",n:cs,text:cs+" cutscene"+(cs>1?"s":"")+" new or changed"});
+  var lsc=Object.keys(levelScenes).filter(function(k){return !AS.levelScenes[k]}).length+Object.keys(levelVehicles).filter(function(k){return !AS.levelVehicles[k]}).length;
+  if(lsc)out.push({cat:"edited",n:lsc,text:lsc+" of the level's scenes and vehicles changed"});
+  // the rest of what the game has and the plan no longer does
+  var others=AS.gone-gone;
+  if(others>0)out.push({cat:"removed",n:others,text:others+" more taken out"});
+  if(!out.length&&pendingChanges())out.push({cat:"edited",n:1,text:"the mission's settings changed"});
   return out;
 }
 function changeSummary(){
@@ -17078,6 +17230,11 @@ function showChecks(thenApply){
   var title=(thenApply?"Before applying “":"Check “")+MISSION+"”";
   sheet(title,'<p class="empty">Checking the mission…</p>');
   serverCheckRes().then(function(res){
+    // the studio's own reading of a guard on his walkways is a near one, and it stops
+    // Apply: before saying so, what the build says of this plan
+    var doubt=!buildVerdict()&&localChecks().some(function(r){return r.level==="error"&&/his walkways/.test(r.text)});
+    return doubt?freshVerdict(90000).then(function(){return res}):res;
+  }).then(function(res){
     var all=allChecks(res),AS=appliedState(),inGameN=AS.ix?AS.n:0;
     // what is already in the game was looked at when it went in: errors always show,
     // the rest only for what this Apply adds or changes
@@ -17111,7 +17268,7 @@ function showChecks(thenApply){
       h+='<div class="lbl ck-h">'+(AS.ix?"New since the last Apply":"What goes into the game")+'</div>';
       h+=sum.length?'<ul class="ck-sumlist">'+sum.map(function(r){
           return '<li class="'+esc(r.cat)+'">'+esc(r.text)+'</li>'}).join("")+'</ul>'
-        :'<p class="hint">Nothing changed yet: the mission is built exactly as the level ships.</p>';
+        :'<p class="hint">'+(AS.ix?'Nothing new.':'Nothing changed yet: the mission is built exactly as the level ships.')+'</p>';
       if(AS.ix&&inGameN)h+='<p class="hint" style="margin:4px 0 0">'+inGameN+' change'+(inGameN>1?'s are':' is')+' already in the game and stay'+(inGameN>1?'':'s')+' as they are.</p>';
       h+='<p class="hint" style="margin:6px 0 2px">Built from '+esc(baseLabel(M.base).toLowerCase())+
         (M&&M.slot?', into mission '+M.slot:', into a new mission slot')+'. The level itself is never touched.</p>';
@@ -18310,7 +18467,7 @@ var AIB=(function(){
     var t={id:idOf(o),type:o.type,name:displayName(o),x:r1(o.x),y:r1(o.y),z:r1(o.z)};
     if(o.own)t.yours=true;
     if(from)t.dist=r1(Math.hypot(o.x-from.x,o.y-from.y));
-    if(o.type==="soldier"){t.ai=o.ai;t.weapon=o.weapon;t.facing=bearing(o);if((o.patrol||[]).length||(o.patrolCmds||[]).length)t.patrols=true;if(o.arriveOn)t.arrives_on_event=true;if(o.start==="follow")t.follows_you=true;if(ordersOf(o).length)t.order_steps=ordersOf(o).length}
+    if(o.type==="soldier"){t.ai=o.ai;t.weapon=o.weapon;t.facing=bearing(o);if((o.patrol||[]).length||(o.patrolCmds||[]).length)t.patrols=true;if(o.arriveOn)t.arrives_on_event=true;if(o.alarmId===NO_ALARM)t.answers_no_alarm=true;if(o.start==="follow")t.follows_you=true;if(ordersOf(o).length)t.order_steps=ordersOf(o).length}
     else if(o.type==="pickup")t.item=o.pickupId||o.model;
     else if(o.type==="building"||o.type==="prop"||o.type==="door"){
       t.model=o.model;var s=MODELS&&MODELS.sizes&&MODELS.sizes[o.model];
@@ -18584,6 +18741,11 @@ var AIB=(function(){
     if(a.facing_deg!=null||a.face_toward)f.gamma=facingArg(a,o.x,o.y,o.gamma||0);
     if(a.side!=null){var sd={enemy:1,friend:0,own_side:2}[a.side];if(sd==null)return fail("side is enemy, friend or own_side.");f.team=sd}
     if(a.model){if(!MODELS[a.model])return fail("No model "+a.model+". list_catalog with kind guards gives them.");f.model=a.model}
+    if(a.alarm!=null){
+      if(a.alarm==="none"){f.alarmId=NO_ALARM;if(o.own)f.reinforce=0}
+      else if(a.alarm==="auto")f.alarmId=null;
+      else{var asys=alarmByKey(a.alarm);if(!asys)return fail("No alarm "+a.alarm+". get_overview lists them; none and auto are the others.");f.alarmId=asys.key}
+    }
     setProp(o,f);
     if(f.sees===null)delete o.sees;if(f.fov===null)delete o.fov;
     changed();
@@ -18808,6 +18970,7 @@ var AIB=(function(){
     var o=byId(a.id);if(!o)return fail("Nothing has the id "+a.id+".");
     if(o.type==="player")return fail("The player start can't be removed; move it with set_player_start.");
     var nm=displayName(o),at={x:o.x,y:o.y};
+    if(!o.own&&o.fixed)return fail(nm+" stays: its gunner works it.");
     if(o.type==="navnode"){dropNavNodes([o]);return {ok:true,removed:"a walkway point",at:at}}
     if(o.own)placements=placements.filter(function(p){return p!==o});
     else if(o.ref){if(removeRefs.indexOf(o.ref)<0)removeRefs.push(o.ref)}
@@ -18964,7 +19127,9 @@ var AIB=(function(){
     if(a.name){MISSION=String(a.name).slice(0,60);showName()}
     if(a.description!=null&&Store&&M){M.description=String(a.description).slice(0,300);Store.save(M.id,{description:M.description}).catch(function(){})}
     changed();
-    return {ok:true,name:MISSION,description:(M&&M.description)||""};
+    var said=(M&&M.description)||"",shown=inGameDescription(said),res={ok:true,name:MISSION,description:said};
+    if(shown!==said.trim())res.note="The box in the game's mission list holds "+DESCRIPTION_MAX+" characters, so it shows: "+shown+" (shorter words of your own read better.)";
+    return res;
   };
   // ---------------------------------------------------------------- designing
   H.design_structure=function(a){
@@ -19254,7 +19419,7 @@ var AIB=(function(){
     if(!editable())return fail(RO);
     var wrote=[],notes=[];
     if(a.name){MISSION=String(a.name).slice(0,40);showName();wrote.push("name")}
-    if(a.description!=null&&M){M.description=String(a.description).slice(0,80);if(Store)Store.save(M.id,{description:M.description}).catch(function(){});wrote.push("description")}
+    if(a.description!=null&&M){M.description=String(a.description).slice(0,DESCRIPTION_MAX);if(Store)Store.save(M.id,{description:M.description}).catch(function(){});wrote.push("description")}
     (a.objectives||[]).forEach(function(o){
       var ob=objectives[(+o.number||0)-1];
       if(!ob){notes.push("There is no objective "+o.number+".");return}
@@ -19576,7 +19741,7 @@ var AIB=(function(){
     if(!editable())return fail(RO);
     var l=groupList(),n=l.length;
     if(!n)return fail("Nothing that can be moved is selected: select_things first.");
-    var c=groupCentre(l),ok=true;
+    var c=groupCentre(l),ok=true,stayed=[];
     if(a.action==="move"){
       var dx=+a.dx||0,dy=+a.dy||0;
       if(a.x!=null&&a.y!=null){dx=+a.x-c.x;dy=+a.y-c.y}
@@ -19590,11 +19755,12 @@ var AIB=(function(){
       ok=duplicateGroup();
     }else if(a.action==="remove"){
       if(n<2)return fail("One thing goes with remove_item.");
+      stayed=l.filter(function(o){return !canRemove(o)}).map(displayName);
       ok=deleteGroup();
     }else return fail("action is move, rotate, drop, duplicate, copy or remove.");
     if(ok===false)return fail("That could not be done to them.");
     var now=selected();
-    return {ok:true,action:a.action,things:now.length,ids:now.slice(0,80).map(idOf).filter(Boolean),at:now.length?{x:r1(groupCentre(now).x),y:r1(groupCentre(now).y)}:{x:r1(c.x),y:r1(c.y)}};
+    return {ok:true,action:a.action,things:now.length,stayed:stayed.length?stayed:undefined,ids:now.slice(0,80).map(idOf).filter(Boolean),at:now.length?{x:r1(groupCentre(now).x),y:r1(groupCentre(now).y)}:{x:r1(c.x),y:r1(c.y)}};
   };
   H.paste_copied=function(a){
     if(!editable())return fail(RO);
@@ -19956,7 +20122,7 @@ var AIB=(function(){
       weapon:{type:"string",description:"a weapon id to give them instead of the type's own"},positions:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...] exact spots"},
       floor:{type:"string",description:"ground, top, or metres above the building's base, for spots inside a building"},name:{type:"string"},
       sees_m:{type:"number",description:"how far they see, 10 to 200"},view_deg:{type:"number",description:"how wide they look, 20 to 360"}}),FACE))},
-    {name:"edit_guard",description:"Change a guard (yours or the level's): type, weapon, sight, name, facing, model, and side: enemy, friend (fights for the player) or own_side (fights both).",parameters:P(Object.assign({id:{type:"string"},type:{type:"string"},weapon:{type:"string"},sees_m:{type:"number"},view_deg:{type:"number"},name:{type:"string"}},FACE),["id"])},
+    {name:"edit_guard",description:"Change a guard (yours or the level's): type, weapon, sight, name, facing, model, side (enemy, friend who fights for the player, or own_side who fights both), and alarm: the key of the alarm he answers, none (he carries on as he was when one rings) or auto (the nearest).",parameters:P(Object.assign({id:{type:"string"},type:{type:"string"},weapon:{type:"string"},sees_m:{type:"number"},view_deg:{type:"number"},name:{type:"string"},alarm:{type:"string"}},FACE),["id"])},
     {name:"set_patrol",description:"A guard's patrol: he walks through these points in order and around again, each snapped to the nearest point of his walkway graph. No points: he stands still.",parameters:P({guard_id:{type:"string"},points:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]"},places:{type:"array",items:{type:"string"},description:"place names, instead of points"}},["guard_id"])},
     {name:"place_object",description:"Placing a gate (304_01_1) lays a whole gateway: both leaves, the switch that opens them and a fence panel each side (one_leaf true for a single leaf). A building of the game's brings the doors it has, and a door model becomes a door that opens. Place a structure or prop by its model id (list_catalog kind structures), checked the way a placement by hand is. Anything placed on the ground gets level ground under it, smoothed for 5 m round it, at one height with what stands within 5 m. map_label names it on the map computer.",parameters:P(Object.assign(withXY({model:{type:"string"},name:{type:"string"},force:{type:"boolean",description:"place it even where the check says no"},one_leaf:{type:"boolean",description:"a gate: one leaf only, not the whole gateway"},floor:{type:"string",description:"a door inside a building: which floor (\"top\", or metres above its base)"},map_label:{type:"string"},map_info:{type:"string"}}),FACE),["model"])},
     {name:"place_fence",description:"A straight run of fence (chain link) or wall panels from one point to another.",parameters:P({from:{type:"array",items:{type:"number"}},to:{type:"array",items:{type:"number"}},kind:{type:"string",enum:["fence","wall"]},model:{type:"string",description:"a panel model instead"}},["from","to"])},
@@ -19965,7 +20131,7 @@ var AIB=(function(){
     {name:"place_camera",description:"A security camera, mounted on the nearest wall within 4 m facing out (else on its own 3 m post). It raises the nearest alarm when it sees the player.",parameters:P(Object.assign(withXY({sweep:{type:"boolean",description:"sweeps side to side (default) or fixed"},range_m:{type:"number"},raises_alarm:{type:"boolean"}}),FACE))},
     {name:"place_alarm_part",description:"Alarm hardware: a button (raises and silences the alarm), a siren, a flashing light (these join the nearest alarm system, or the one given), or a new alarm system for a part of the map that has none.",parameters:P(withXY({kind:{type:"string",enum:["button","siren","light","system"]},alarm:{type:"string",description:"an alarm key from get_overview"},name:{type:"string"}}),["kind"])},
     {name:"move_item",description:"Move or turn a thing, yours or the level's (not doors). z is set from the ground unless given.",parameters:P(Object.assign(withXY({id:{type:"string"},z:{type:"number"}}),FACE),["id"])},
-    {name:"remove_item",description:"Remove a thing, yours or the level's (the level's comes back if the mission is rebuilt without the removal). Not the player start.",parameters:P({id:{type:"string"}},["id"])},
+    {name:"remove_item",description:"Remove a thing, yours or the level's (the level's comes back if the mission is rebuilt without the removal). Not the player start: a mission can't run without it, and removing a selection leaves it too.",parameters:P({id:{type:"string"}},["id"])},
     {name:"add_objective",description:"An objective: kill (target_id a guard), killAll, collect (target_id a pickup that is a weapon or item), reach (an area: point or place, radius), hack (target_id one of the level's terminals), destroy (target_id a vehicle, camera or explosive). text is what the objectives page says.",parameters:P(withXY({kind:{type:"string",enum:["kill","killAll","collect","reach","hack","destroy"]},target_id:{type:"string"},radius:{type:"number"},text:{type:"string"}}),["kind"])},
     {name:"remove_objectives",description:"Remove objectives by number (1 first), and/or all the level's own ones.",parameters:P({numbers:{type:"array",items:{type:"integer"}},level_objectives:{type:"boolean"}})},
     {name:"add_event",description:"When something happens, something else happens, once. when.kind: area (the player reaches it: point or place, radius), switch, dead (a guard), hacked (a terminal), picked (an item), destroyed, seen (a camera sees the player), alarm, time (seconds after the start), after (seconds after an earlier event, by number). then: message (text, seconds), alarm (raise one), guards (your guards, by id, arrive then), doors (the level's doors open), fail (the mission fails, text). then may be empty for an event soldiers' steps start on (set_orders).",parameters:P({name:{type:"string"},
@@ -19984,7 +20150,7 @@ var AIB=(function(){
       parameters:P({vehicle_id:{type:"string"},points:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]"},places:{type:"array",items:{type:"string"}},
         loop:{type:"boolean"},speed_kmh:{type:"number"},fires:{type:"boolean"},starts:{type:"string",enum:["now","alarm","event"]},event_number:{type:"integer"},alarm:{type:"string"}},["vehicle_id"])},
     {name:"set_settings",description:"Time limit (seconds, 0 for none; the mission fails at zero), rain or snow and how heavy (intensity 0 to 1), haze (0 clear to 1 thick, null as the level), and whether the mission fails when an alarm goes off.",parameters:P({time_limit_s:{type:"number"},show_timer:{type:"boolean"},weather:{type:"string",enum:["level","clear","rain","snow"]},intensity:{type:"number"},haze:{type:["number","null"]},fail_on_alarm:{type:"boolean"}})},
-    {name:"set_mission_info",description:"The mission's name and a one or two sentence description.",parameters:P({name:{type:"string"},description:{type:"string"}})},
+    {name:"set_mission_info",description:"The mission's name and a one or two sentence description, for the game's mission list. A name of up to 30 characters fits the list, and the box under the picture holds 120 characters of description: a longer one is cut there.",parameters:P({name:{type:"string"},description:{type:"string"}})},
     {name:"set_player_start",description:"Where the player begins, and which way he faces.",parameters:P(Object.assign(withXY({}),FACE))},
     {name:"design_structure",design:true,description:"Design something new for the user's inventory out of parts the game has: a guard post, a sniper nest, a checkpoint, a weapons cache, a bunker entrance. Parts are structures by model id, placed relative to its centre (dx east, dy north, dz up, metres; facing as a bearing); it can include guards and pickups. It is not placed: the user sees it in 3D in the chat and adds it to the inventory, or you place it with place_design. Works in Ideas mode too.",parameters:P({
       name:{type:"string"},description:{type:"string"},
@@ -20007,11 +20173,11 @@ var AIB=(function(){
       height_m:{type:"number",description:"its height (or depth, for a crater or valley)"},rough:{type:"number",description:"0 smooth to 1 craggy"},
       along:{type:"array",items:{type:"array",items:{type:"number"}},description:"[[x, y], ...]: a range or a valley along this line"}}),["shape"])},
     {name:"stealth_check",look:true,description:"How stealthy the mission is: the quietest way on foot from the player start to each objective, how many metres of it guards and cameras watch, the watched stretches, and who watches it most. Draws the routes on the user's map. Takes a few seconds.",parameters:P({})},
-    {name:"write_texts",description:"Write the mission's texts in the game's style: name, description (the game's mission list line, under 60 characters), objective texts by number (under 60 characters), map computer labels of your own buildings (title under 20, info under 40), and a briefing of one to three short lines shown as messages at the start.",parameters:P({
+    {name:"write_texts",description:"Write the mission's texts in the game's style: name (up to 30 characters fits the game's mission list), description (the box under its picture, up to 120 characters), objective texts by number (under 60 characters), map computer labels of your own buildings (title under 20, info under 40), and a briefing of one to three short lines shown as messages at the start.",parameters:P({
       name:{type:"string"},description:{type:"string"},briefing:{type:"string",description:"one to three short lines, one per line"},
       objectives:{type:"array",items:{type:"object",properties:{number:{type:"integer"},text:{type:"string"}},required:["number","text"]}},
       labels:{type:"array",items:{type:"object",properties:{id:{type:"string"},title:{type:"string"},info:{type:"string"}},required:["id","title"]}}})},
-    {name:"list_missions",look:true,description:"The user's missions in the library: ids, names, levels, descriptions.",parameters:P({})},
+    {name:"list_missions",look:true,anywhere:true,description:"The user's missions in the library: ids, names, levels, descriptions.",parameters:P({})},
     {name:"make_versions",description:"Make easy, normal and hard copies of this mission in the user's library: easy has a third fewer of the mission's guards, less sight, more time, no fail on alarm, a medipack by the start; hard one more guard for every two, more sight, less time, fail on alarm, fewer medipacks. This mission stays as it is.",parameters:P({versions:{type:"array",items:{type:"string",enum:["easy","normal","hard"]}}})},
     {name:"make_campaign",look:true,description:"Put several of the user's missions (ids from list_missions) in order under a campaign name and briefing: opens the campaign sheet for the user to check and export as one file.",parameters:P({name:{type:"string"},briefing:{type:"string"},mission_ids:{type:"array",items:{type:"string"}}},["name","mission_ids"])},
     {name:"screenshot_map",kind:"see",description:"See the map from above, as a picture with a grid in metres whose numbers are the x and y every tool takes. With no point, the whole map; with a point (x and y, place or near_id), radius metres round it. Use it to survey a level before planning and to check what you built: things look right or wrong far more clearly than in lists of numbers.",
@@ -20277,17 +20443,10 @@ function resizable(el,edge,prop,min,max){
 }
 document.querySelectorAll(".workspace > .panel").forEach(function(el){resizable(el,"r","--lw",220,560)});
 resizable(document.querySelector(".rail.right"),"l0","--rw",240,560);
+resizable($("panel-log"),"l","--lgw",240,560);
 window.StudioUI={resizable:resizable};
 
 /* ---------------- boot ---------------- */
-(function(){
-  var sec=$("logsec"),b=$("logtoggle"),open=true;
-  try{open=localStorage.getItem("plotter:logsec")!=="0"}catch(e){}
-  function set(v){open=v;sec.setAttribute("data-open",String(v));b.setAttribute("aria-expanded",String(v));
-    try{localStorage.setItem("plotter:logsec",v?"1":"0")}catch(e){}}
-  set(open);
-  b.addEventListener("click",function(){set(!open);resize()});
-})();
 if(window.MapFX)MapFX.init(cv.parentElement,cv);
 themeUI(document);
 bind();buildPalette();showPanel(PANEL);resize();renderSide();

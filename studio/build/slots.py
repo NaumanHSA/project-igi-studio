@@ -90,6 +90,30 @@ def next_after(game, n):
     return min((s["level"] for s in list_slots(game) if s["level"] > n), default=None)
 
 
+# A mission's name and description are not what DefineMission holds: it holds a key the
+# game looks up in missions.res, and any other words it shows as "RM: <the words>". The
+# lookup builds its name in a buffer of its own, so a sentence given as a key runs over
+# it, and the game crashes on opening its mission list, on any level (2026-11-04: 79
+# characters loaded, 80 and up crashed). So: keys, as the game's own missions have.
+NAME_MAX = 40
+# what the box under the picture holds: 5 lines of about 25. A long one spills out of it.
+DESCRIPTION_MAX = 120
+
+
+def in_game_description(text):
+    """The description as the game's mission list can show it: cut on a word, with
+    three dots if it had to be (the studio keeps the whole of it)."""
+    s = _q(text, 1000)
+    if len(s) <= DESCRIPTION_MAX:
+        return s
+    cut = s[:DESCRIPTION_MAX - 2]
+    if " " in cut[DESCRIPTION_MAX // 2:]:
+        cut = cut[:cut.rfind(" ")]
+    else:
+        cut = cut[:-1]
+    return cut.rstrip(" ,;:-") + "..."
+
+
 def _q(s, limit):
     """A string safe inside a QSC literal."""
     s = re.sub(r'["\\\r\n\t]', " ", str(s or "")).strip()
@@ -101,8 +125,9 @@ R_DEFINE = re.compile(r'DefineMission\((\d+),\s*"((?:[^"\\]|\\.)*)",\s*"((?:[^"\
 
 
 def read_definition(game, n):
-    """How the game lists slot n, read from its mission.qvm: {"number", "name",
-    "description", "next" (a mission number or None), "base"}, or None."""
+    """How the game lists slot n: {"number", "name", "description", "next" (a mission
+    number or None), "base", "keyed"}, or None. keyed: its words are where the game looks
+    for them, in missions.res (older ones are in its mission.qvm)."""
     f = slot_dir(game, n) / "mission.qvm"
     try:
         m = R_DEFINE.search(QR.decompile(QR.parse(f)))
@@ -111,13 +136,22 @@ def read_definition(game, n):
     if not m:
         return None
     nxt = m.group(4)
-    return {"number": int(m.group(1)), "name": m.group(2), "description": m.group(3),
-            "next": int(nxt) if nxt.isdigit() else None, "base": int(m.group(5))}
+    name, description, number = m.group(2), m.group(3), int(m.group(1))
+    keyed = False
+    if number >= protect.FIRST_CUSTOM:
+        from studio.build import lang
+        if (name, description) == lang.mission_keys(number):
+            texts = lang.mission_texts(game, number)
+            keyed = texts is not None           # (not found: its words have gone, relink puts them back)
+            name, description = texts or ("", "")
+    return {"number": number, "name": name, "description": description,
+            "next": int(nxt) if nxt.isdigit() else None, "base": int(m.group(5)), "keyed": keyed}
 
 
 def write_definition(game, n, base_level, name, description):
     """mission.qvm: how the game's mission list shows this slot, and the mission
-    finishing it leads on to (the next one in the game, if there is one). Its
+    finishing it leads on to (the next one in the game, if there is one). Its name and
+    description go in missions.res, under the keys it names. Its
     picture is the one the mission has of its own in the game's list
     (covers.py, mission<n>.spr), else its base level's: the list shows the
     picture DefineMission names, and a slot with a picture of its own showed its
@@ -125,28 +159,35 @@ def write_definition(game, n, base_level, name, description):
     d = protect.assert_writable(slot_dir(game, n))
     nxt = next_after(game, n)
     from studio.build import covers         # it reads the game's menu files
+    from studio.build import lang
     pic = n if covers.has_cover(game, n) else base_level
+    key_name, key_description = lang.mission_keys(n)
+    lang.set_mission_texts(game, n, _q(name, NAME_MAX) or "Mission %d" % n, in_game_description(description))
     src = ('DefineMission(%d, "%s", "%s", "", %s, "missions/location0/level%d", '
            '"missions/location0/common", "missions/location0/level%d", "location0", "level%d", "mission%d.spr");\r\n'
-           % (n, _q(name, 40) or "Mission %d" % n, _q(description, 120),
+           % (n, key_name, key_description,
               nxt if nxt is not None else "MISSION_NEXT_MISSION_UNDEFINED", n, n, base_level, pic))
-    data = QW.compile_text(src.encode("latin1", "replace").decode("latin1"))
+    data = QW.compile_text(src)
     if not (d / "mission.qvm").exists() or (d / "mission.qvm").read_bytes() != data:
         (d / "mission.qvm").write_bytes(data)
 
 
 def relink(game, log=print):
     """Each mission the studio made leads on to the next one in the game. Run
-    after a slot is added, taken out or moved. Slots it did not make are left
-    as they are."""
+    after a slot is added, taken out or moved, and when the studio starts. Slots it
+    did not make are left as they are. One an older studio wrote with its words in
+    mission.qvm moves them to missions.res here: they showed as "RM: ...", and a long
+    description crashed the game's mission list."""
     changed = []
     for s in list_slots(game):
         if not s["custom"] or not s["marker"]:
             continue
         d = read_definition(game, s["level"])
-        if d is None or d["next"] == next_after(game, s["level"]):
+        if d is None or (d["next"] == next_after(game, s["level"]) and d["keyed"]):
             continue
-        write_definition(game, s["level"], d["base"], d["name"], d["description"])
+        whole = s["marker"].get("mission") if isinstance(s["marker"].get("mission"), dict) else {}
+        write_definition(game, s["level"], d["base"], d["name"] or whole.get("name") or s["marker"].get("name"),
+                         whole.get("description") or d["description"])
         changed.append(s["level"])
     if changed:
         log("%s %s now lead%s on to the next one in the game"
@@ -254,7 +295,7 @@ def delete_slot(game, n, log=print):
         shutil.rmtree(paths.backups() / kind / ("level%d" % n), ignore_errors=True)
     try:
         from studio.build import lang as lang_res
-        if lang_res.set_mission_strings(game, n, {}, log=lambda x: None):
+        if lang_res.set_mission_strings(game, n, {}, log=lambda x: None) + lang_res.set_mission_texts(game, n):
             log("removed mission %d's strings from the language files" % n)
     except (OSError, ValueError) as e:
         log("mission %d's strings stay in the language files: %s" % (n, e))
@@ -280,6 +321,7 @@ def discard_slot(game, n, log=print):
         shutil.rmtree(paths.backups() / kind / ("level%d" % n), ignore_errors=True)
     from studio.build import lang
     lang.set_mission_strings(game, n, {}, log=lambda x: None)
+    lang.set_mission_texts(game, n)
     _drop_picture(game, n, log)
     log("took the new slot level%d out of the game again: nothing of this mission is in it" % n)
     relink(game, log)
@@ -402,6 +444,8 @@ def move_slots(game, moves, log=print):
 
     # what inside each one names its number
     from studio.build import lang
+    # their words, read now: they are under the numbers they had, and two may swap
+    definitions = {new: read_definition(game, new) for new in moves.values()}
     for old, new in moves.items():
         d = slot_dir(game, new)
         _renumber_scripts(d, old, new)
@@ -426,8 +470,10 @@ def move_slots(game, moves, log=print):
     except (OSError, ValueError, RuntimeError, protect.ProtectedPath) as e:
         log("the missions' pictures stay under their old numbers: %s" % e)
     # definitions last, once every number is where it is going
+    for old in moves:
+        lang.set_mission_texts(game, old)
     for old, new in moves.items():
-        d = read_definition(game, new)
+        d = definitions[new]
         if d:
             write_definition(game, new, d["base"], d["name"], d["description"])
         log("mission %d is now mission %d" % (old, new))
@@ -473,7 +519,7 @@ def remove_slot(game, n, log=print):
     # this slot starts clean
     try:
         from studio.build import lang as lang_res
-        if lang_res.set_mission_strings(game, n, {}, log=lambda x: None):
+        if lang_res.set_mission_strings(game, n, {}, log=lambda x: None) + lang_res.set_mission_texts(game, n):
             log("removed mission %d's strings from the language files" % n)
     except (OSError, ValueError) as e:
         log("mission %d's strings stay in the language files: %s" % (n, e))
