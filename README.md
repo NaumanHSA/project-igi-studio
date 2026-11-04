@@ -35,7 +35,29 @@ and share it with the community.</p>
 
 ## What's new
 
-**2.0** is the biggest update since the first release.
+**2.1** lets an AI agent build missions with you, while you watch.
+
+- **Work with an AI agent** (2.1). The studio now speaks MCP, so an agent such as
+  Claude Desktop, Claude Code or Cursor can plan and build a mission in the open
+  studio, and you see every change on the map as it happens. Press **MCP**, then
+  **Start**; connecting Claude Desktop is one button
+  ([how to connect](https://naumanhsa.github.io/project-igi-studio-site/manual/agents)).
+  It has the same tools as the built-in AI designer, one for nearly everything you
+  can do: choosing a level, placing guards and patrols, shaping the ground, writing
+  the objectives. It can look at the map and the 3D view, and try the mission in a
+  test copy of the real game, made beside yours. It uses your agent's own account,
+  only programs on your PC can connect, and undo works as usual.
+- **What you place sits right** (2.1). The ground levels itself under everything you
+  place, so fences run straight and gates meet level. Weapons lie on what is under
+  them, and what you move stays where you put it in the game.
+- **Your missions read right in the game** (2.1). The game's list shows your mission's
+  name and whole description, with no more "RM:", and objectives have their numbers
+  on the map computer on any map.
+- **Easier to work with** (2.1). Sliders for shaping the ground, the change log in a
+  panel of its own, and guards you can take off their patrols and off an alarm, one at
+  a time or all together.
+
+**2.0** was the biggest update since the first release.
 
 - **The community** (2.0). Share your missions with other players and play theirs:
   browse and search, look at a mission's map and 3D view without taking it, pull it
@@ -102,7 +124,7 @@ Mountains and valleys of any height, painted ground, and nearly 300 buildings, t
 <td valign="top">
 <img src="docs/assets/icons/ai.svg" width="52" align="left" alt="">
 <b>A team of AI designers</b><br>
-Say what you want in plain words. One agent plans and builds a whole mission area by area; others edit it, design new things to place, and review it. Every change is yours to keep or undo.
+Say what you want in plain words. One agent plans and builds a whole mission area by area; others edit it, design new things to place, and review it. Every change is yours to keep or undo. Or connect your own agent, such as Claude Desktop, through MCP, and watch it work.
 </td>
 </tr>
 <tr>
@@ -237,6 +259,7 @@ into your Python. Releases are built the same way by
 | See how the studio is put together: the app, first run, where things are kept | [docs/architecture.md](docs/architecture.md) |
 | Read the QVM script format: the opcodes, the calling convention, how it is tested | [docs/qvm.md](docs/qvm.md) |
 | Learn the engine's unwritten rules and the graph file format | [docs/engine.md](docs/engine.md) |
+| See how an AI agent reaches the studio: the MCP server, testing in the game | [docs/mcp.md](docs/mcp.md) |
 | Cut a release | [docs/releasing.md](docs/releasing.md) |
 
 ## Contributing

@@ -10,6 +10,8 @@ project-igi-studio/
 ├── editor/                 the 2D mission editor (also published as a claude.ai Artifact)
 │   ├── plotter.html        the page: vanilla JS + Canvas 2D, no build step
 │   ├── ai.js               the AI designer panel: chats, pictures, the model's tools
+│   ├── mcp.js              the MCP panel: asks the server for an agent's next call, and answers it
+│   ├── guide/              what agents read: the written guides (read_guide)
 │   ├── community.js        the Community page, its dialogs, the share wizard (docs/community.md)
 │   ├── icons.js            SVG-path icons: guards, player, pickups, vehicles, trees, fittings
 │   ├── meshes.js           top-down renders of the game's own models (buildings, towers, props)
@@ -36,7 +38,9 @@ project-igi-studio/
 │   │   ├── surface.py      what a placed object stands on, and whether a walk passes through a wall
 │   │   ├── terrain.py      exact terrain height from terrain.ctr/.cmd/.hmp
 │   │   ├── models.py       pack models from other levels into a slot; verify / repair / restore
-│   │   ├── lang.py         the game's text resources: a mission's objective texts and labels
+│   │   ├── own_things.py   where a building's own doors and furniture stand in it, as the plan has them
+│   │   ├── testbuild.py    a build into the test copy of the game, for a test
+│   │   ├── lang.py         the game's text resources: a mission's name, description, objective texts and labels
 │   │   ├── music.py        the game's music (ILSF, IMA ADPCM): a mission's own track, previews
 │   │   ├── covers.py       a mission's own picture in the game's mission list (missionsprites.res)
 │   │   ├── empty_map.py    a built-in level reduced to terrain, sky, weather, navmesh, player
@@ -58,10 +62,15 @@ project-igi-studio/
 │   │   │                   doors, lift and furniture, cellar included, and the
 │   │   │                   ground the game opens for it -> doors.json
 │   │   ├── library.py      in-game covers, names and map types of the 14 missions
+│   │   ├── anatomy.py      the game's own levels measured, for agents to read (guide/ in the user's folder)
 │   │   └── model3d.py      textured models for the editor's 3D close-up
 │   └── server/             what the editor talks to
 │       ├── app.py          local server: editor, mission library API, Apply, Settings
 │       ├── ai.py           the AI designer's proxy: the API key, the models, streaming
+│       ├── mcp.py          the MCP listener: an outside agent's calls, on to the open window (docs/mcp.md)
+│       ├── mcp_stdio.py    the small relay an agent's program starts (studio mcp)
+│       ├── gametest.py     try a mission in the real game, in a test copy made beside the person's
+│       ├── gamewin.py      the game's window from outside: its picture, its fatal errors, clicks on its menu
 │       ├── community.py    the community's client: the account, the calls, pulling, sharing
 │       ├── missions.py     custom missions: base + plan, history (missions/custom/)
 │       └── live_pos.py     find and read the player's live position in a running game
@@ -164,6 +173,12 @@ python -m studio setup --repair           put the drifted ones back
   `%LOCALAPPDATA%\ProjectIGIStudio`. A checkout keeps using its own
   `config.json`, so working on the project never touches an installed copy's
   settings. `IGISTUDIO_HOME` moves the folder, which is what the tests use.
+  `IGISTUDIO_GAME` names another game for one run. With both, a second studio
+  can run a real Apply on a test copy, with a library of its own.
+- **For agents,** the same folder has `mcp.json` (the port and token the relay
+  reads, so an agent's settings never hold a secret), `mcp-tools.json` (the tool
+  list last published, for answering with the studio closed) and `guide/` (the
+  levels as measured from this game, which must never be in the repository).
 - **Where your work lives.** A mission is yours, not the game's: its plan,
   name, cover, history and chats are in the studio's folder
   (`%LOCALAPPDATA%\ProjectIGIStudio\missions`, or `missions/custom` in a

@@ -63,14 +63,16 @@ in their game: the build runs as a process of its own (`studio/build/testbuild.p
 `IGISTUDIO_GAME` and `IGISTUDIO_TESTRUN` set, so to it the copy is the connected game, and its
 missions, backups and work folder are private ones inside the copy. The write gate does the rest.
 
-The copy is started in a 1024 x 768 window and the menu's two clicks are made (`GOActiveMission` makes
-the list open on the mission). The rest is from outside (`studio/server/gamewin.py`): the window's
+The copy is started in a 1024 x 768 window and two Enter keys are sent to it as window messages, one on
+the main menu and one on the mission list (`GOActiveMission` makes the list open on the mission), each
+checked, because the game can miss a key while a screen fades in. The rest is from outside (`studio/server/gamewin.py`): the window's
 picture, the text of a fatal error's dialog box, whether the process is there. Nothing is injected or
 written to the game. A tour is a cutscene written into that build only.
 
-What was found: simulated clicks work on the menu, but the window has to stay in front or the game
-pauses. Starting a mission with no clicks does not work: a menu screen's On Init doesn't run for the
-first screen, and calling `MenuManager_LeaveMenus` from an expression or the end of the script leaves a
+What was found: keys sent as messages reach the menu without using the person's keyboard or mouse. In a
+mission the game reads the keyboard itself, so a picture of the map computer takes a real M with the game
+in front for a moment (`key_in_front`), and what was in front before is given back. Starting a mission
+with no key at all does not work: a menu screen's On Init doesn't run for the first screen, and calling `MenuManager_LeaveMenus` from an expression or the end of the script leaves a
 black window with no level loading.
 
 ## Knowledge
