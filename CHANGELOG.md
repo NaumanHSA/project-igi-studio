@@ -3,7 +3,7 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
-## Unreleased
+## 2.1.0
 
 ### New
 
@@ -23,9 +23,57 @@ section is also that release's notes on GitHub.
   fix, and more.
 - **How the game's own levels are built**, measured from your game, for agents
   to read: how many guards to a place, how far apart, what each level has.
+- **Take a guard off the alarm.** A guard could be put on any alarm, but never on
+  none: he always answered the nearest. His panel now has **Take him off the
+  alarm** (and *None* in the list). When an alarm rings he carries on as he was.
+  It works for the level's own guards too.
+- **Whole groups of guards at once.** With several guards selected, **Remove patrols**
+  and **Take off the alarm** do them all. Agents and the AI designer can do the same.
+
+### Changed
+
+- **The change log has a panel of its own**, the **Changes** tab on the right
+  wall beside Selection and the AI designer, with a count on the tab. A long
+  list no longer squeezes a selected guard's settings.
+- **The ground tools have sliders.** Height, size, turn, edge and the rest all
+  have one, and the map follows as you drag. The number stays beside it for an
+  exact value. A wide range gives more of the slider to small values.
+- **Remove patrol** says what it does. It was called *Clear*.
 
 ### Fixed
 
+- **Things you move stay where you put them in the game.** What came with a
+  building (its barrels, crates, furniture, doors) went back to where the building
+  first had it, whatever the map and the 3D view showed. Now the game has them where
+  you put them, and they still go with the building when it moves. If you moved
+  any before this, they show in the change log: Apply once.
+- **Apply says when it has nothing to do.** A mission with cutscenes never reached
+  "up to date": it said "-2 changes to apply", and every Apply asked again. Taking
+  out an objective, a cutscene or a walkway didn't count as a change at all. Every
+  kind of change now counts, and Apply says when everything is in the game.
+- **Selecting a building and its contents together** moved and turned the contents
+  twice on the map.
+- **Walkways follow a hill raised over them.** On an empty map, where all the walkways
+  are the mission's own, raising the ground lifted the guards and left their walkways
+  buried, and Apply refused the mission. A walk up a slope no longer counts as another
+  floor either.
+- **Taking a patrol off one of the level's guards** no longer takes him off his alarm
+  as well.
+- **A long mission description no longer crashes the game**, and your missions
+  no longer show as "RM: Your Mission" in the game's list. The game looks a
+  mission's name and description up in its language files, and the studio was
+  giving it the words themselves: that showed "RM:" in front of them, garbled
+  or blanked the description, and from 80 characters crashed the game when you
+  opened the list, whatever the mission held. They now go where the game's own
+  missions have theirs, and the whole description shows. Missions already in
+  your game are put right when the studio starts.
+- **The player start can't be removed by accident.** Selecting an area with the
+  player in it and removing it took the player too, and the game crashes loading
+  a mission with no player. The player now stays, and missions that lost the
+  player have them back.
+- **Taking a level's building out no longer stops the mission loading** when the
+  soldiers of the level's cutscenes used the walkways inside it.
+- **Testing in the game says where it failed:** on the menus, loading or running.
 - **Objectives have their numbers on the map computer on an empty map.** They
   had none, because there was nothing of the level's for a number to stand on.
   Now each number stands exactly on its objective, on any map, rather than on the
