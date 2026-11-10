@@ -332,7 +332,7 @@ canvas{display:block}
 .banner{position:absolute;left:50%;transform:translateX(-50%);top:60px;
   max-width:min(600px,calc(100% - 24px));background:var(--surface);border:1px solid var(--accent);
   border-left-width:3px;border-radius:5px;padding:8px 12px;box-shadow:var(--shadow);
-  font-size:12.5px;line-height:1.45;color:var(--muted);display:flex;gap:10px;align-items:flex-start;z-index:3}
+  font-size:12.5px;line-height:1.45;color:var(--muted);display:flex;gap:10px;align-items:flex-start;z-index:8}
 .banner[hidden]{display:none}
 .banner .bn-ic{flex:none;display:grid;place-items:center;width:24px;height:24px;margin-top:1px;color:var(--accent)}
 .banner .bn-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
@@ -1062,6 +1062,18 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .ev-do{margin-top:6px;padding:5px 7px 6px;border-left:2px solid var(--electric);background:var(--surface);border-radius:0 4px 4px 0}
 .ev-do>*{margin-left:0!important;margin-right:0!important}
 .ev-do select,.ev-do input[type=text]{width:100%!important}
+.ev-gadd{display:flex;gap:6px;margin:0 0 6px}
+.ev-gadd select{flex:1;min-width:0;margin:0}
+.ev-guard{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:4px 6px;padding:5px 0;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.ev-gname{border:none;background:transparent;color:var(--ink);font:inherit;font-size:12px;text-align:left;padding:0;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-gname:hover{color:var(--accent)}
+.ev-gt{display:flex;align-items:center;gap:2px;color:var(--faint);font-size:11px}
+.ev-gt input{width:44px;margin:0}
+.ev-gto{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
+.ev-gto b{font-weight:500;color:var(--ink)}
+.ev-gto b.bad-soft{color:var(--faint);font-style:italic}
+.ev-gto .btn{padding:2px 8px;font-size:11px}
+.ev-grun{display:flex;align-items:center;gap:3px;color:var(--muted)}
 .ev-do-h{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--ink)}
 .ob.ev select.ev-add{margin-top:7px}
 .sg-route{margin:4px 0 0;font-size:12px;color:var(--ink)}
@@ -1477,6 +1489,20 @@ body.resizing canvas,body.resizing iframe{pointer-events:none}
 .livepop{position:absolute;right:12px;top:108px;width:292px;background:var(--surface);border:1px solid var(--line);
   border-radius:6px;box-shadow:var(--shadow);padding:8px 12px 12px;z-index:7;font-size:12.5px}
 .livepop[hidden]{display:none}
+/* what the map is asking for, while it asks */
+.pickpop{top:108px;width:280px;max-height:calc(100% - 140px);display:flex;flex-direction:column;padding:8px 8px 10px}
+.pickpop .pk-h{display:flex;align-items:baseline;gap:6px;padding:0 4px 6px;font:600 10.5px "Barlow Condensed",sans-serif;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.pickpop .pk-h b{color:var(--ink);font:600 11px "IBM Plex Mono",monospace;letter-spacing:0}
+.pickpop .pk-list{overflow-y:auto;min-height:0;display:grid;gap:2px}
+.pickpop .pk-row{display:flex;align-items:center;gap:8px;width:100%;padding:5px 6px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--ink);font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.pickpop .pk-row:hover,.pickpop .pk-row:focus-visible{border-color:var(--accent);background:var(--accent-soft);outline:none}
+.pickpop .pk-row.on{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+.pickpop .pk-row .pk-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.pickpop .pk-row .pk-t b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pickpop .pk-row .pk-t i{font-style:normal;color:var(--faint);font-size:11px}
+.pickpop .pk-row .pk-on{color:var(--accent);font:600 11px "IBM Plex Mono",monospace}
+.pickpop .pk-foot{display:flex;gap:6px;flex-wrap:wrap;padding:8px 4px 0}
+.pickpop .pk-none{margin:2px 4px 6px;color:var(--muted);font-size:12px;line-height:1.45}
 .lv-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
 .lv-h .btn{padding:0 8px;font-size:17px;line-height:1.3}
 .lv-st{display:flex;align-items:center;gap:8px;margin:2px 0 4px}
@@ -1809,6 +1835,7 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
         </div>
       </div>
       <div class="banner" id="banner" hidden></div>
+      <div class="livepop pickpop" id="pickpop" role="dialog" aria-label="What can be picked" hidden></div>
       <div class="livepop" id="livepop" role="dialog" aria-label="Live view" hidden></div>
       <div class="livepop mcpop" id="mcpop" role="dialog" aria-label="Map computer" hidden></div>
       <div class="livepop" id="sightpop" role="dialog" aria-label="Sight lines" hidden></div>
@@ -4208,6 +4235,7 @@ function ground(){
 var scene=document.createElement("canvas"),sceneCtx=scene.getContext("2d");
 function draw(){
   if(V3D.ver!==planVer)sync3d();
+  if(PICK_SIG&&!PICK_RAF)PICK_RAF=requestAnimationFrame(function(){PICK_RAF=0;renderPickPop()});
   if(!W||!H)return;
   if(scene.width!==W*DPR||scene.height!==H*DPR){scene.width=W*DPR;scene.height=H*DPR}
   var screen=ctx;ctx=sceneCtx;
@@ -4228,6 +4256,7 @@ function present(){
   drawWalkers();
   drawRoutes();
   drawMotion();
+  drawPickFocus();             // while the map asks for something: the rest steps back
   drawObjectives();            // over the walkers: a badge rides on the guard it marks
   drawEvents();drawDoorLocks();
   drawAlarmLinks();
@@ -4397,8 +4426,149 @@ function inFootprint(o,s,wx,wy){
 // win over a building shape they sit inside; comparing them by distance let a
 // big building swallow the guard standing in it. Among shapes, the smallest one
 // under the cursor wins, so a door beats its building.
+// What the map is asking you to click, while it asks: the test that says what
+// can be picked, what it is called, and what to place when there is none. The
+// map steps back and these stand out (drawPickFocus); the list beside the banner
+// names them (renderPickPop); a click near one takes it, not what is around it.
+var PICK_FORCE=null,PICK_HOVER=null,PICK_SIG="",PICK_RAF=0;
+var PICK_NOUNS={
+  switch:["switch","switches","A switch is a wall button that raises an alarm, or a gate's switch. Place one from Security & alarms, then pick it here.","switch"],
+  dead:["guard","guards","Place a guard from the inventory's Characters, then pick him here.","guard"],
+  kill:["guard","guards","Place a guard from the inventory's Characters, then pick him here.","guard"],
+  hacked:["terminal","terminals","Only a level's own terminals can be hacked, and this map has none the game can test.",null],
+  hack:["terminal","terminals","Only a level's own terminals can be hacked, and this map has none the game can test.",null],
+  picked:["weapon or item","weapons and items","Place a weapon or an item from the inventory, then pick it here.","pickup"],
+  collect:["weapon or item","weapons and items","Place a weapon or an item from the inventory, then pick it here.","pickup"],
+  destroyed:["thing that can be blown up","things that can be blown up","A camera of yours, or a level's vehicle, camera or explosive, can be blown up. Place a camera, then pick it here.","camera"],
+  destroy:["thing that can be blown up","things that can be blown up","A camera of yours, or a level's vehicle, camera or explosive, can be blown up. Place a camera, then pick it here.","camera"],
+  seen:["camera","cameras","Place a camera from Security & alarms, then pick it here.","camera"],
+  guards:["guard of yours","guards of yours","Press Place new guards in the event to put them where they appear.",null],
+  mover:["soldier","soldiers","Place a guard from the inventory's Characters, then pick him here.","guard"],
+  doors:["door","doors","This map has no doors of the level that can be opened.",null],
+  lock:["thing that can unlock it","things that can unlock it","",null]
+};
+function pickFocus(){
+  if(OBJPICK&&objectives.indexOf(OBJPICK)>=0&&OBJPICK.kind!=="reach"){
+    var k=objKind(OBJPICK.kind);
+    if(k&&k[3])return {key:"obj:"+OBJPICK.uid,noun:OBJPICK.kind,test:k[3],say:k[2]};
+  }
+  if(EVPICK&&events.indexOf(EVPICK.ev)>=0){
+    var v=EVPICK.ev,wh=EVPICK.what;
+    if(wh==="guards")return {key:"evg:"+v.uid,noun:"guards",many:true,test:function(o){return o.type==="soldier"&&o.own&&!o.cutscene},
+      on:function(o){return o.arriveOn===v.uid}};
+    if(wh==="doors")return {key:"evd:"+v.uid,noun:"doors",many:true,test:lockable,on:function(o){return o.openOn===v.uid}};
+    if(wh==="mover")return {key:"evm:"+v.uid,noun:"mover",test:function(o){return o.type==="soldier"&&(o.own||!!o.ref)&&!o.cutscene}};
+    if(v.when&&v.when.kind!=="area"){var k2=evWhen(v.when.kind);if(k2[3])return {key:"ev:"+v.uid+":"+v.when.kind,noun:v.when.kind,test:k2[3],say:k2[2]}}
+  }
+  if(DOORPICK){
+    var L=doorLock(DOORPICK),d=DOOR_LOCKS.filter(function(x){return x[0]===L.kind})[0];
+    if(d&&d[3])return {key:"door:"+DOORPICK.ref+":"+L.kind,noun:{switch:"switch",terminal:"hacked",item:"picked",guard:"dead"}[L.kind]||"lock",test:d[3],say:d[2]};
+  }
+  return null;
+}
+function pickCandidates(F){
+  return ((LEVEL&&LEVEL.objects)||[]).concat(placements).filter(function(o){
+    return o.x!=null&&!isRemoved(o)&&!(o.cutscene&&!F.cutscene)&&F.test(o);
+  });
+}
+// a click from the list beside the banner goes the way a click on the map goes
+function pickTake(o){
+  var p=w2s(o.x,o.y);
+  PICK_FORCE=o;
+  if(OBJPICK)objectivePick(p[0],p[1]);
+  else if(EVPICK)eventPick(p[0],p[1]);
+  else if(DOORPICK)doorPick(p[0],p[1]);
+  PICK_FORCE=null;
+  renderPickPop();draw();
+}
+function fitTo(list){
+  if(!list.length)return;
+  var x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;
+  list.forEach(function(o){x0=Math.min(x0,o.x);x1=Math.max(x1,o.x);y0=Math.min(y0,o.y);y1=Math.max(y1,o.y)});
+  var span=Math.max(40,x1-x0,y1-y0)*1.35;
+  jumpTo((x0+x1)/2,(y0+y1)/2,Math.max(.05,Math.min(6,Math.min(W,H)/span)));
+}
+function onScreen(o){var p=w2s(o.x,o.y);return p[0]>=0&&p[1]>=0&&p[0]<=W&&p[1]<=H}
+function renderPickPop(){
+  var box=$("pickpop");if(!box)return;
+  var F=pickFocus();
+  if(!F){box.hidden=true;PICK_HOVER=null;return}
+  var N=PICK_NOUNS[F.noun]||["thing","things","",null],list=pickCandidates(F);
+  var cx=view.cx,cy=view.cy;
+  list.sort(function(a,b){return Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)});
+  var h='<div class="pk-h">'+(list.length?'<b>'+list.length+'</b> '+esc(list.length===1?N[0]:N[1])+' on the map':'No '+esc(N[1])+' on this map')+'</div>';
+  if(!list.length){
+    h+='<p class="pk-none">'+esc(N[2]||"There is nothing here that can be picked for this.")+'</p>';
+    if(N[3]&&canEditQuiet())h+='<div class="pk-foot"><button class="btn" type="button" data-pk-place="'+N[3]+'">'+
+      ({switch:"Place an alarm button",guard:"Place a guard",pickup:"Open weapons and items",camera:"Place a camera"})[N[3]]+'</button></div>';
+  }else{
+    h+='<div class="pk-list">'+list.slice(0,120).map(function(o,i){
+      var on=F.on&&F.on(o);
+      return '<button type="button" class="pk-row'+(on?' on':'')+'" data-pk="'+i+'"><span class="pk-ic"></span><span class="pk-t"><b>'+esc(displayName(o))+'</b>'+
+        '<i>'+(o.own?"yours":"the level's")+' · '+Math.round(Math.hypot(o.x-cx,o.y-cy))+' m from the middle of the view</i></span>'+(on?'<span class="pk-on">✓</span>':'')+'</button>'}).join("")+'</div>'+
+      '<div class="pk-foot"><button class="btn" type="button" data-pk-fit="1">Show them all</button>'+(F.many?'<span class="hint" style="margin:0">Click again to drop one. Esc when done.</span>':'')+'</div>';
+  }
+  box.innerHTML=h;box.hidden=false;
+  box.querySelectorAll("[data-pk]").forEach(function(b){
+    var o=list[+b.getAttribute("data-pk")];
+    b.querySelector(".pk-ic").appendChild(thumbForObject(o,18));
+    b.addEventListener("click",function(){pickTake(o)});
+    b.addEventListener("mouseenter",function(){PICK_HOVER=o;present()});
+    b.addEventListener("mouseleave",function(){if(PICK_HOVER===o){PICK_HOVER=null;present()}});
+  });
+  var fit=box.querySelector("[data-pk-fit]");if(fit)fit.addEventListener("click",function(){fitTo(list)});
+  var pl=box.querySelector("[data-pk-place]");
+  if(pl)pl.addEventListener("click",function(){
+    var what=pl.getAttribute("data-pk-place");
+    OBJPICK=null;EVPICK=null;DOORPICK=null;$("banner").hidden=true;
+    if(what==="switch")selectTool({group:"alarm",id:"ALARM_BUTTON",label:"Alarm button"},null);
+    else if(what==="camera"&&CAM_KINDS[0])selectTool({group:"camera",id:CAM_KINDS[0].id,label:CAM_KINDS[0].label},null);
+    else if(what==="guard"){var e=((CATALOG&&CATALOG.enemies)||[])[0];if(e)selectTool({group:"ai",id:e.id,label:e.label,model:(e.models||[])[0]||"003_01_1",weapon:(e.weapons||[])[0]||"WEAPON_ID_AK47"},null)}
+    else if(what==="pickup")showPanel("inv");
+    toast("Place it, then pick it again where you were");
+    renderObjectives();renderEvents();renderSide();renderPickPop();draw();
+  });
+}
+// the map steps back, and what can be picked stands out, with its name
+function drawPickFocus(){
+  var F=pickFocus();if(!F||!LEVEL)return;
+  var list=pickCandidates(F),acc=css("--accent");
+  ctx.save();ctx.fillStyle="rgba(2,9,4,.62)";ctx.fillRect(0,0,W,H);ctx.restore();
+  var names=list.length<=40||view.k>=1.5;
+  ctx.font='500 11px "IBM Plex Sans",sans-serif';
+  list.forEach(function(o){
+    var gp=guardPos(o),x=gp?gp.x:o.x,y=gp?gp.y:o.y,p=w2s(x,y);
+    if(p[0]<-60||p[1]<-60||p[0]>W+60||p[1]>H+60)return;
+    var st=styleFor(o),r=Math.max(11,screenR(st)+7),hot=PICK_HOVER===o||mouse.hover===o,on=F.on&&F.on(o);
+    if(gp){ctx.save();ctx.translate(p[0],p[1]);pointIcon(ctx,st,screenR(st),gp.h-Math.PI/2,o.own);ctx.restore()}
+    else marker(o,st,hot);
+    ctx.save();ctx.strokeStyle=acc;ctx.shadowColor=acc;ctx.shadowBlur=hot?16:9;ctx.lineWidth=hot?2.6:1.7;
+    if(on)ctx.setLineDash([]);else if(!hot)ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.arc(p[0],p[1],r+(hot?3:0),0,6.2832);ctx.stroke();
+    if(on){ctx.fillStyle=acc;ctx.beginPath();ctx.arc(p[0]+r*.72,p[1]-r*.72,4.2,0,6.2832);ctx.fill()}
+    ctx.restore();
+    if(names||hot){
+      var t=displayName(o),tw=ctx.measureText(t).width;
+      ctx.save();ctx.fillStyle="rgba(3,14,6,.88)";ctx.strokeStyle=hot?acc:"rgba(141,255,154,.35)";ctx.lineWidth=1;
+      ctx.beginPath();ctx.roundRect(p[0]+r+5,p[1]-9,tw+10,18,4);ctx.fill();ctx.stroke();
+      ctx.fillStyle=hot?acc:"#d6f5d6";ctx.fillText(t,p[0]+r+10,p[1]+4);ctx.restore();
+    }
+  });
+}
 function pick(sx,sy){
+  if(PICK_FORCE){var forced=PICK_FORCE;PICK_FORCE=null;return forced}
   var list=allObjects(),w=s2w(sx,sy);
+  // while the map asks for something, the nearest thing it asks for is taken first
+  var F=pickFocus();
+  if(F){
+    var best=null,bd=1e9;
+    pickCandidates(F).forEach(function(o){
+      var gp=guardPos(o),q=w2s(gp?gp.x:o.x,gp?gp.y:o.y),d=Math.hypot(q[0]-sx,q[1]-sy),st=styleFor(o);
+      var near=d<Math.max(18,screenR(st)+12)||(st.fp&&!gp&&inFootprint(o,st,w[0],w[1]));
+      if(near&&d<bd){bd=d;best=o}
+    });
+    if(best)return best;
+  }
   var point=null,pd=1e9,shape=null,sa=1e18;
   for(var i=list.length-1;i>=0;i--){
     var o=list[i],st=styleFor(o),gp=guardPos(o);
@@ -4908,7 +5078,10 @@ function addPlacement(wx,wy){
     renderPlaceBar();
   }
   if(o.type==="building")asDoor(o);
+  // Place new guards, from an event: each one arrives on it, where he is put
+  if(o.type==="soldier"&&ARRIVE_ON&&events.some(function(v){return v.uid===ARRIVE_ON})){o.arriveOn=ARRIVE_ON;o.arriveTimes=1;o.reinforce=0}
   placements.push(o);sel=o;touch();renderSide();draw();
+  if(o.arriveOn&&o.arriveOn===ARRIVE_ON)renderEvents();
   if(!(inb&&o.type!=="building"))settle(o,false);
   if(o.type==="building"&&!o.door){
     var kit=addBuildingDoors(o);
@@ -5173,10 +5346,14 @@ function draftPlace(words,places){
   return bs>=0.5?best:null;
 }
 // the walkway points round a spot, far enough apart, for guards to stand on
+// a walkway point lying on the ground where it is: placed on the ground, a guard stands
+// there. An empty map keeps the points of the buildings it took away, in the air where
+// their floors were, and a guard put on one stood 4 m under it (Apply refuses that).
+function onTheGround(nd){var g=terrainZ(nd.x,nd.y);return g==null||Math.abs(nd.z-g)<=SAME_FLOOR}
 function draftSpots(x,y,n,taken,z){
-  var cand=[],ref=heightRef(x,y,z);
+  var cand=[],ref=heightRef(x,y,z),ground=z==null;
   Object.keys(GRAPHS||{}).forEach(function(g){nodesOf(g).forEach(function(nd){
-    var d=Math.hypot(nd.x-x,nd.y-y);if(d<35&&nearHeight(nd,ref))cand.push({x:nd.x,y:nd.y,z:nd.z,d:d});
+    var d=Math.hypot(nd.x-x,nd.y-y);if(d<35&&nearHeight(nd,ref)&&(!ground||onTheGround(nd)))cand.push({x:nd.x,y:nd.y,z:nd.z,d:d});
   })});
   // and the walkway points the mission adds (the ones that join up)
   navNodes.forEach(function(nd){
@@ -5372,9 +5549,9 @@ var NEAR_HEIGHT=30;
 function heightRef(x,y,z){return z!=null&&isFinite(z)?z:terrainZ(x,y)}
 function nearHeight(n,ref){return ref==null||Math.abs(n.z-ref)<=NEAR_HEIGHT}
 function nearestNode(x,y,z){
-  var best=null,bd=1e18,ref=heightRef(x,y,z);
+  var best=null,bd=1e18,ref=heightRef(x,y,z),ground=z==null;
   Object.keys(GRAPHS||{}).forEach(function(g){nodesOf(g).forEach(function(n){
-    if(!nearHeight(n,ref))return;
+    if(!nearHeight(n,ref)||(ground&&!onTheGround(n)))return;
     var d=(n.x-x)*(n.x-x)+(n.y-y)*(n.y-y);if(d<bd){bd=d;best={n:n,g:g,d:Math.sqrt(d)}}
   })});
   // the mission's own walkway points count too, once they join up
@@ -6874,6 +7051,7 @@ function selectTool(t,btn){
   if(t&&!canEdit())return;
   var on=tool&&t&&tool.id===t.id&&tool.group===t.group;
   tool=on||!t?null:t;
+  if(!tool||tool.group!=="ai"){if(ARRIVE_ON){ARRIVE_ON=null;$("banner").hidden=true;setTimeout(renderEvents,0)}}
   if(tool)tool.chain=null;
   if(tool)measureOff();
   document.querySelectorAll("#inv .item,#invfly .item,[data-tool]").forEach(function(b){b.setAttribute("aria-pressed","false")});
@@ -12639,6 +12817,7 @@ var MSET={};
 // {uid, name, when:{kind, target, x, y, z, r, alarmId, seconds, after}, do:[{kind, text, secs, alarmId}]}.
 // Guards of yours can arrive on one (arriveOn). apply_plan.py writes them.
 var events=[],EVPICK=null,EVOPEN=null;
+var ARRIVE_ON=null;          // guards placed now arrive on this event (Place new guards)
 // what each level ships: rain or snow (and how heavy), and the sky's fog distance
 var LEVEL_WEATHER={1:{d:100},2:{d:150},3:{fall:"rain",heavy:0.13,d:40},4:{d:100},5:{d:250},6:{d:150},
   7:{fall:"snow",heavy:0.06,d:100},8:{d:100},9:{fall:"rain",heavy:0.15,d:40},10:{fall:"rain",heavy:0.135,d:150},
@@ -12688,7 +12867,7 @@ var OBJ_DESC={
   destroy:"The player has to blow up a vehicle, camera, generator or explosive: one of the level's, or a camera of yours."
 };
 var OBJ_KINDS=[
-  ["kill","Eliminate a guard","Click a guard",function(o){return o.type==="soldier"&&!o.cutscene&&(o.own||o.id>=0)}],
+  ["kill","Eliminate a guard","Click a guard",function(o){return o.type==="soldier"&&!o.cutscene&&(o.own||o.id>=0)&&!comesLater(o)}],
   ["killAll","Eliminate every guard","",null],
   ["collect","Collect a weapon or item","Click a pickup",function(o){return o.type==="pickup"&&(o.own?!/^AMMO_/.test(o.pickupId||""):/^(GunPickup|GenericPickup)$/.test(o.qtype||"")&&o.id>=0)}],
   ["reach","Reach an area","Click where the area is",null],
@@ -12936,7 +13115,8 @@ function drawObjectives(max){
     if(ob.kind==="reach"){
       var r=(ob.r||6)*view.k;
       ctx.strokeStyle=acc;ctx.lineWidth=1.6;ctx.setLineDash([6,4]);
-      ctx.fillStyle="rgba(255,210,74,.08)";ctx.beginPath();ctx.arc(p[0],p[1],Math.max(6,r),0,6.2832);ctx.fill();ctx.stroke();ctx.setLineDash([]);
+      // the game's areas are squares, as wide each way as the radius (plan.py AREA_WIDE)
+      var R=Math.max(6,r);ctx.fillStyle="rgba(255,210,74,.08)";ctx.beginPath();ctx.rect(p[0]-R,p[1]-R,2*R,2*R);ctx.fill();ctx.stroke();ctx.setLineDash([]);
     }
     var bx=p[0]+(ob.kind==="reach"?0:10),by=p[1]-(ob.kind==="reach"?0:16);
     ctx.fillStyle=acc;ctx.strokeStyle="rgba(3,16,6,.9)";ctx.lineWidth=2;
@@ -13144,7 +13324,7 @@ function drawDoorLocks(){
 var EV_WHEN=[
   ["area","The player reaches an area","Click where the area is",null],
   ["switch","A switch is pressed","Click a switch",function(o){return o.type==="switch"&&(o.own||(o.qtype==="Switch"&&o.id>=0))}],
-  ["dead","A guard dies","Click a guard",function(o){return o.type==="soldier"&&!o.cutscene&&(o.own||o.id>=0)}],
+  ["dead","A guard dies","Click a guard",function(o){return o.type==="soldier"&&!o.cutscene&&(o.own||o.id>=0)&&!comesLater(o)}],
   ["hacked","A terminal is hacked","Click a terminal",function(o){return !o.own&&o.qtype==="Terminal"&&o.id>=0}],
   ["picked","An item is picked up","Click a weapon or item",function(o){return o.type==="pickup"&&(o.own?!/^AMMO_/.test(o.pickupId||""):/^(GunPickup|GenericPickup)$/.test(o.qtype||"")&&o.id>=0)}],
   ["destroyed","Something is blown up","Click a vehicle, camera or explosive",function(o){return (o.own&&o.type==="camera")||(!o.own&&o.id>=0&&/^(ExplodeObject|Car|Generator|SCamera|Radio|Terminal|Heli)$/.test(o.qtype||""))}],
@@ -13163,6 +13343,9 @@ var EV_IC={
   bolt:'<svg viewBox="0 0 16 16"><path d="M9.2 1.5 3.5 9h4l-1 5.5L12.5 7h-4z"/></svg>',
   open:'<svg viewBox="0 0 16 16"><path d="m4.5 6.2 3.5 3.6 3.5-3.6"/></svg>'
 };
+// a guard the game only makes later (he arrives on an event, or with the alarm): no
+// condition can name him before then, and one that did crashed the game (plan.py SPAWNED_LATER)
+function comesLater(o){return !!(o&&o.type==="soldier"&&(o.arriveOn||o.reinforce||o.spawned))}
 function evWhen(k){return EV_WHEN.filter(function(x){return x[0]===k})[0]||EV_WHEN[0]}
 function eventTarget(v){
   var t=(v.when||{}).target;if(!t)return null;
@@ -13347,10 +13530,24 @@ function renderEvents(){
           '<p class="hint" style="margin:3px 0 0">A door\'s own panel can also keep it locked until then.</p>';
       }
       else if(a.kind==="guards"){
-        var gs=eventGuards(v);
-        h+='<div class="ob-t"><span>'+(gs.length?gs.length+" of your guards arrive":"no guards yet")+'</span>'+
-          '<button class="btn'+(EVPICK&&EVPICK.ev===v&&EVPICK.what==="guards"?' on':'')+'" data-a="guards">Pick guards</button></div>'+
-          '<p class="hint" style="margin:3px 0 0">They are not on the map until it happens. Each guard\'s panel says how many times he comes back.</p>';
+        var gs=eventGuards(v),placing=ARRIVE_ON===v.uid;
+        h+='<p class="hint" style="margin:3px 0 6px">'+(gs.length?gs.length+' guard'+(gs.length>1?'s arrive':' arrives')+' when it happens, where '+(gs.length>1?'they are':'he is')+' placed. They are not on the map before.':
+            'Nobody yet. Place new guards where they appear, or pick guards of yours already on the map.')+'</p>';
+        if(!ro)h+='<div class="ev-gadd"><select data-a="gnew" title="Place new guards: pick a kind, then click the map where each one appears">'+
+          '<option value="">'+(placing?'Placing: click the map (Esc ends)':'+ Place new guards…')+'</option>'+
+          ((CATALOG&&CATALOG.enemies)||[]).map(function(e,ei){return '<option value="'+ei+'">'+esc(e.label)+'</option>'}).join("")+'</select>'+
+          '<button class="btn'+(EVPICK&&EVPICK.ev===v&&EVPICK.what==="guards"?' on':'')+'" data-a="guards" title="Pick guards of yours already on the map">Pick on the map</button></div>';
+        gs.forEach(function(g,gi){
+          var st=ordersOf(g).filter(function(x){return x.on===v.uid})[0],to=st&&(st.stops||[]).length?stopLabel(st.stops[st.stops.length-1]):null;
+          h+='<div class="ev-guard" data-g="'+gi+'"><button type="button" class="ev-gname" data-a="gsel" title="Select him">'+esc(displayName(g))+'</button>'+
+            '<label class="ev-gt" title="How many times he comes: again after he dies">'+
+            '<input type="number" data-a="gtimes" min="1" max="20" value="'+(g.arriveTimes||1)+'"'+(ro?' disabled':'')+'>×</label>'+
+            (ro?'':'<button class="iconbtn danger" data-a="gdrop" title="He no longer arrives on this event" aria-label="Take him out of this event">'+OB_IC.del+'</button>')+
+            '<div class="ev-gto"><span>then '+(st&&st.run?'runs':'walks')+' to</span>'+
+            '<b class="'+(to?'':'bad-soft')+'">'+(to?esc(to):'stays where he appears')+'</b>'+
+            (ro?'':'<button class="btn" data-a="gto" title="Click the walkway point he goes to when he has arrived">'+(to?'Change':'Pick where')+'</button>'+
+              (st?'<label class="ev-grun"><input type="checkbox" data-a="grun"'+(st.run?' checked':'')+'> runs</label>':''))+'</div></div>';
+        });
       }
       h+='</div>';
     });
@@ -13403,6 +13600,34 @@ function renderEvents(){
         ch();renderEvents();renderSide();
       });
       else if(a==="mover")c.addEventListener("click",function(){if(EVPICK&&EVPICK.ev===v){EVPICK=null;$("banner").hidden=true;renderEvents()}else startEventPick(v,"mover")});
+      else if(a==="gnew")c.addEventListener("change",function(){
+        var e=((CATALOG&&CATALOG.enemies)||[])[+c.value];if(!e)return;
+        if(EVPICK){EVPICK=null}
+        selectTool({group:"ai",id:e.id,label:e.label,model:(e.models||[])[0]||"003_01_1",weapon:(e.weapons||[])[0]||"WEAPON_ID_AK47"},null);
+        ARRIVE_ON=v.uid;
+        banner("<b>Event "+(events.indexOf(v)+1)+":</b> click the map where each "+esc(e.label)+" appears when it happens. Esc when done.");
+        renderEvents();
+      });
+      else if(a==="gsel"||a==="gtimes"||a==="gdrop"||a==="gto"||a==="grun"){
+        var g=eventGuards(v)[+c.closest(".ev-guard").getAttribute("data-g")];if(!g)return;
+        if(a==="gsel")c.addEventListener("click",function(){sel=g;multi=[];jumpTo(g.x,g.y,Math.max(view.k,3));renderSide();draw()});
+        else if(a==="gtimes")c.addEventListener("change",function(){setProp(g,{arriveTimes:Math.max(1,Math.min(20,parseInt(c.value,10)||1))});ch()});
+        else if(a==="gdrop")c.addEventListener("click",function(){
+          setProp(g,{arriveOn:null});delete g.arriveOn;delete g.arriveTimes;
+          setOrders(g,ordersOf(g).filter(function(x){return x.on!==v.uid}));ch();renderEvents();renderSide();
+        });
+        else if(a==="gto")c.addEventListener("click",function(){
+          var st=ordersOf(g).filter(function(x){return x.on===v.uid})[0];
+          if(!st){st={uid:uid(),on:v.uid,do:"go",stops:[],run:true};setOrders(g,ordersOf(g).concat([st]))}
+          else if((st.do||"go")!=="go")setOrderStep(g,st.uid,{do:"go",stops:[]});
+          else setOrderStep(g,st.uid,{stops:[]});
+          renderEvents();startOrderPick(g,st.uid);
+          toast("Click the walkway point "+displayName(g)+" goes to once he has arrived. Esc or Done ends");
+        });
+        else if(a==="grun")c.addEventListener("change",function(){
+          var st=ordersOf(g).filter(function(x){return x.on===v.uid})[0];if(st)setOrderStep(g,st.uid,{run:c.checked});ch();renderEvents();
+        });
+      }
       else if(a==="showmover")c.addEventListener("click",function(){
         var m=eventMovers(v)[+c.getAttribute("data-i")];if(!m)return;
         sel=m.o;multi=[];jumpTo(m.o.x,m.o.y);renderSide();draw();
@@ -13435,7 +13660,7 @@ function drawEvents(){
     if(w.kind==="area"&&w.x!=null){
       p=w2s(w.x,w.y);var r=(w.r||6)*view.k;
       ctx.strokeStyle=col;ctx.lineWidth=EVOPEN===v.uid?2:1.3;ctx.setLineDash([3,4]);
-      ctx.fillStyle="rgba(255,122,224,.07)";ctx.beginPath();ctx.arc(p[0],p[1],Math.max(6,r),0,6.2832);ctx.fill();ctx.stroke();ctx.setLineDash([]);
+      var R=Math.max(6,r);ctx.fillStyle="rgba(255,122,224,.07)";ctx.beginPath();ctx.rect(p[0]-R,p[1]-R,2*R,2*R);ctx.fill();ctx.stroke();ctx.setLineDash([]);
     }else{
       var o=eventTarget(v);
       if(o){p=w2s(o.x,o.y);ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(p[0],p[1],11,0,6.2832);ctx.stroke()}
@@ -14356,6 +14581,12 @@ function pickKind(){
   return "";
 }
 function syncPickUi(){
+  var F=pickFocus(),sig=F?F.key:"";
+  if(sig!==PICK_SIG){
+    PICK_SIG=sig;
+    if(F){var cand=pickCandidates(F);if(cand.length&&!cand.some(onScreen))setTimeout(function(){fitTo(cand)},0)}
+    setTimeout(renderPickPop,0);
+  }
   var k=pickKind();
   if(k===PICKUI)return;
   PICKUI=k;
@@ -16365,6 +16596,7 @@ function onKey(e){
       if(MAPCOMP){toggleMapComputer();return}
       if(!$("groundpop").hidden){toggleGroundPanel();return}
       if(measure.on){measureOff();return}
+      if(ARRIVE_ON){ARRIVE_ON=null;$("banner").hidden=true;renderEvents()}
       if(tool||patrolMode){tool=null;patrolMode=false}else{sel=null;multi=[]}
       document.querySelectorAll("#inv [aria-pressed],[data-tool]").forEach(function(c){c.setAttribute("aria-pressed","false")});
       renderNavSection();renderSide();buildToggles();renderPlaceBar();draw();return;
@@ -20238,7 +20470,7 @@ var AIB=(function(){
     {name:"order_game_missions",kind:"mission",anywhere:true,description:"Put the game's own list of the studio's missions in this order: mission numbers from list_game_missions.",parameters:P({order:{type:"array",items:{type:"integer"}}},["order"])},
     {name:"launch_game",kind:"test",anywhere:true,description:"Start the user's own game, at its main menu, for them to play.",parameters:P({})},
     {name:"wait_for_job",kind:"test",anywhere:true,description:"How a long job given by apply_to_game or a test is doing: waits up to wait_seconds for its end.",parameters:P({job:{type:"string"},wait_seconds:{type:"integer",description:"at most 50, default 45"}},["job"])},
-    {name:"test_load",kind:"test",description:"Try the mission in the real game: it is built into a test copy of the game (never the user's own), started, watched for seconds, then closed. Says whether it built, loaded and ran, the exact text of any fatal error, and gives pictures of the game itself. Takes about a minute and takes the screen while it runs, so use it when an area is done, not after every change. With a point (x and y, place or near_id), the player starts there for this test. show_map true ends on a picture of the map computer: the objectives' numbers on it, about 420 m across round the player. Long: you get a job for wait_for_job.",
+    {name:"test_load",kind:"test",description:"Try the mission in the real game: it is built into a test copy of the game (never the user's own), started, watched for seconds, then closed. Says whether it built, loaded and ran, the exact text of any fatal error, and gives pictures of the game itself. It also says, read from the game, which of the mission's events happened and when, which objectives were done, whether guards arrived, whether the player died, and what did not happen while it ran: start the player where an event or objective is set off to see it work (switches and terminals need a player's hand, so a test can't press them). Takes about a minute and takes the screen while it runs, so use it when an area is done, not after every change. With a point (x and y, place or near_id), the player starts there for this test. show_map true ends on a picture of the map computer: the objectives' numbers on it, about 420 m across round the player. Long: you get a job for wait_for_job.",
       parameters:P(withXY({seconds:{type:"number",description:"how long to watch it run, default 15"},show_map:{type:"boolean",description:"also a picture of the map computer, for the objectives' numbers"},facing_deg:{type:"number"},wait_seconds:{type:"integer",description:"how long this call may wait, at most 50, default 45"}}))},
     {name:"test_tour",kind:"test",description:"See the mission in the real game, from cameras you choose: the only true check of how it really looks, and that what you placed is really there. Builds it into a test copy of the game with a cutscene of your views, and takes a picture of each as the game's own camera shows it, then one as the player stands. Each view is x and y, place or near_id, with distance, from_bearing and height, or from [x, y, z]; about says what you are checking. Takes a minute or two and takes the screen. Long: you get a job for wait_for_job.",
       parameters:P({views:{type:"array",items:{type:"object",properties:Object.assign({},XY,{about:{type:"string"},z:{type:"number"},distance:{type:"number"},from_bearing:{type:"number"},height:{type:"number"},from:{type:"array",items:{type:"number"}}})}},

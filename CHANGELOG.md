@@ -3,6 +3,51 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
+## Unreleased
+
+### New
+
+- **Picking on the map shows where things are.** When an event or an objective asks
+  for a switch, a guard, a terminal or doors, the map dims and everything that can be
+  picked lights up with its name. A list beside it names them, nearest first; click one
+  to pick it. With none on the map, it says so and what to place.
+- **Send in guards, all in the event.** *Place new guards* puts them where they appear
+  when it happens, and each one gets *then walks to* (or runs to) a place you pick: he
+  arrives and moves on.
+- **An agent's test in the game says what happened.** `test_load` now reads back from
+  the game which of the mission's events happened and when, which objectives were done,
+  whether guards arrived and whether the player died.
+
+### Fixed
+
+Found by trying every kind of event and objective in the game:
+
+- **A guard sent in on an event and told where to go crashed the game** the moment he
+  arrived.
+- **Areas were half the size they were drawn.** The game takes an area's size as its
+  whole width; the studio gave it the radius. Areas now cover the square the map draws.
+- **"Eliminate every guard" crashed some levels as they loaded** (Re-supply, for one):
+  it named reinforcements the level only makes later, and its condition was too long
+  for the game. Neither happens now; guards who come later can't be the target of an
+  event or an objective.
+- **Taking out one of a level's reinforcements crashed it as it loaded.**
+- **Guards placed by an agent on an empty map** could be put under a walkway left in the
+  air where a building used to be, and Apply refused them.
+- **Taking every guard out of a copy of a level stopped Apply** on ten of the fourteen
+  levels: "compile failed".
+- **Keeping only some of a level's own objectives**, and none of your own, meant the
+  mission never ended: finishing them, the level still waited for the ones you'd left
+  out. It now completes when the ones in the list are done, and the level's outro, if
+  kept, plays then.
+- **Level 2's "Place one charge on each of the SAM launchers"** could never be ticked
+  off in a copy of the level: its condition, written over three lines, came out broken.
+- **An agent's test in the game reports the level's own objectives** as well as yours,
+  and the mission complete when it ends the way the level does.
+- **An RPG trooper stopped the game** with "Animation #1 not found" the moment he saw
+  you. The game has its own kind of soldier for the RPG, which only level 10 uses; every
+  guard with the RPG-18 is now that kind, the ones that arrive later too, and so is a
+  level guard you hand the RPG.
+
 ## 2.1.0
 
 ### New

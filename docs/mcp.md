@@ -63,6 +63,10 @@ in their game: the build runs as a process of its own (`studio/build/testbuild.p
 `IGISTUDIO_GAME` and `IGISTUDIO_TESTRUN` set, so to it the copy is the connected game, and its
 missions, backups and work folder are private ones inside the copy. The write gate does the rest.
 
+Every test also says what the mission did, read from the game's memory: which events
+happened and when, which objectives were done, whether guards arrived, the mission complete,
+the player dying (`what_happened` in its answer; docs/editor.md, *The test bench*).
+
 The copy is started in a 1024 x 768 window and two Enter keys are sent to it as window messages, one on
 the main menu and one on the mission list (`GOActiveMission` makes the list open on the mission), each
 checked, because the game can miss a key while a screen fades in. The rest is from outside (`studio/server/gamewin.py`): the window's

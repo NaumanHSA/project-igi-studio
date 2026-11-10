@@ -90,6 +90,45 @@ used = set(meta.get("usedIds", []))
 free_iter = (i for i in range(3000, MAX_TASK_ID + 1) if i not in used)
 
 
+PROBE_REF = {}                  # what a test build's probes can name: "obj:<uid>", "gen:<uid>", "done"
+# An AreaActivate's dimensions are its whole width, about its position: a box 1 m
+# wide holds the player 0.3 m off its middle either way, and one 1.5 m wide not
+# 1 m off (seen in the game, 2026-11-10). An area of the plan has a radius, drawn
+# as one on the map, so the box is twice that wide; written as the radius, every
+# event and objective area was half the size it was drawn.
+AREA_WIDE = 2.0
+QSTR = r'"(?:[^"\\]|\\.)*"'     # a quoted string of the script, with its escapes
+PICKUP_SPOT = 2.0              # the box that counts standing on a pickup: about a metre from it
+
+
+def _spawned_later(text):
+    """The ids of the soldiers inside the level's GuardGenerators: the game makes them
+    later, and until then there is no such task. A condition naming one crashed the
+    game as the level loaded (an objective to kill every guard of level 8, whose nine
+    reinforcements were in it, 2026-11-10)."""
+    out = set()
+    for g in re.finditer(r'Task_New\(-?\d+, "(?:GuardGenerator|ConditionalContainer)"', text):
+        depth, i, quoted = 0, g.start(), False
+        while i < len(text):
+            c = text[i]
+            if c == '"' and text[i - 1] != "\\":
+                quoted = not quoted
+            elif not quoted and c == "(":
+                depth += 1
+            elif not quoted and c == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        out |= {int(x) for x in re.findall(r'Task_New\((\d+), "HumanSoldier', text[g.start():i])}
+    return out
+
+
+SPAWNED_LATER = _spawned_later(src)
+# CRITERIA_HUMAN0 is the player and the soldiers on his side (team 0); CRITERIA_HUMAN1
+# the enemy (seen in the game): an ally walking into an area of the player's sets it off too.
+
+
 def take_id():
     for i in free_iter:
         used.add(i)
@@ -2550,7 +2589,7 @@ def script_text(aid):
 
 
 _soldier_ai = {}                # soldier task id -> (HumanAI id, graph id)
-_starts = [m for m in re.finditer(r'Task_New\((\d+), "HumanSoldier", ', src)]
+_starts = [m for m in re.finditer(r'Task_New\((\d+), "HumanSoldier(?:RPG)?", ', src)]
 for i, m in enumerate(_starts):
     end = _starts[i + 1].start() if i + 1 < len(_starts) else len(src)
     am = re.search(r'Task_New\((\d+), "HumanAI", "", "[A-Z_0-9]+", (\d+)\)', src[m.end():end])
@@ -2686,8 +2725,8 @@ def follow_areas(gid):
             x, y, z = pos[a]
             aid = take_id()
             blocks.append('Task_New(%d, "AreaActivate", "Follow area", %s, %s, %s, 0, 0, 0, %s, %s, %s, '
-                          '"CRITERIA_HUMAN0"), %s' % (aid, q(x), q(y), q(z + 1.0), q(FOLLOW_STEP / 2),
-                                                      q(FOLLOW_STEP / 2), q(3.0), EOL))
+                          '"CRITERIA_HUMAN0"), %s' % (aid, q(x), q(y), q(z + 1.0), q(FOLLOW_STEP),
+                                                      q(FOLLOW_STEP), q(3.0), EOL))
             out.append((aid, a))
             left = [k for k in left if math.dist(pos[k], pos[a]) > FOLLOW_STEP * 0.6]
         if left:
@@ -2858,6 +2897,32 @@ blocks, ai_scripts = [], {}
 # every guard model, 6 for Anya and Ekk - as every shipped level places them.
 BONES = {"015_01_1": 6, "012_01_1": 6}
 
+# A soldier who carries the RPG-18 is a task of his own kind, as the game's one is (level
+# 10's "RPG Guard"): a HumanSoldierRPG, on bone set 2 with stand animation 2, declared like
+# a HumanSoldier. Written as a HumanSoldier, he stopped the game with "Warning: Animation #1
+# not found" the moment he saw the player (Dead Hand, on level 13, 2026-11-10).
+RPG_KIND = "HumanSoldierRPG"
+SOLDIER_RENAMED = {}            # a level soldier's task id -> (old kind, new kind)
+
+
+def carries_rpg(weapon, ai):
+    return weapon == "WEAPON_ID_RPG18" or ai == "AITYPE_RPG"
+
+
+def soldier_kind(seg, model, rpg):
+    """A level soldier's task given, or losing, the RPG: its kind, bone set and stand animation."""
+    m = re.match(r'Task_New\((-?\d+), "(HumanSoldier|%s)", ' % RPG_KIND, seg)
+    want = RPG_KIND if rpg else "HumanSoldier"
+    if not m or m.group(2) == want:
+        return seg
+    bones, stand = (2, 2) if rpg else (BONES.get(model, 1), -1)
+    seg = seg[:m.start(2)] + want + seg[m.end(2):]
+    seg = re.sub(r'("%s", -?\d+, )-?\d+, -?\d+' % re.escape(model), lambda b: b.group(1) + "%d, %d" % (bones, stand),
+                 seg, count=1)
+    if int(m.group(1)) >= 0:
+        SOLDIER_RENAMED[int(m.group(1))] = (m.group(2), want)
+    return seg
+
 # ---------------------------------------------------------------- events
 # plan["events"]: when something happens, do something. Each event is a latch,
 # an EditVariable that goes to 1 the first time its condition holds and stays
@@ -2894,9 +2959,12 @@ for s in soldiers:
     weapon = s.get("weapon") or "WEAPON_ID_AK47"
     ai = s.get("ai") or "AITYPE_GUARD_AK"
     gid = s.get("graph") or next(iter(meta.get("graphs") or {"4019": 0}), "4019")
-    head = ('Task_New(%d, "HumanSoldier", "%s", %s, %s, %s, %s, "%s", %d, %d, -1, '
-            % (tid, s.get("name", "Guard"), q(s["x"]), q(s["y"]), q(s["z"]),
-               round(s.get("gamma", 3.14159), 5), model, int(s.get("team", 1)), BONES.get(model, 1)))
+    rpg = carries_rpg(weapon, ai)
+    s["_qt"] = RPG_KIND if rpg else "HumanSoldier"
+    head = ('Task_New(%d, "%s", "%s", %s, %s, %s, %s, "%s", %d, %d, %d, '
+            % (tid, s["_qt"], s.get("name", "Guard"), q(s["x"]), q(s["y"]), q(s["z"]),
+               round(s.get("gamma", 3.14159), 5), model, int(s.get("team", 1)),
+               2 if rpg else BONES.get(model, 1), 2 if rpg else -1))
     kids = ['Task_New(-1, "Gun", "", "%s", 0)' % weapon,
             'Task_New(%d, "HumanAI", "", "%s", %s)' % (aid, ai, gid)]
     if route:
@@ -2920,7 +2988,6 @@ for s in soldiers:
     if _code:
         ai_scripts[aid]["idle_code"] = _code
         reactions.append("%s: %s" % (s.get("name") or "soldier", "; ".join(_words)))
-    task = head + EOL + (", " + EOL).join(kids) + ")"
     ring = alarm_expr_of(s.get("alarmId")) if s.get("reinforce") else None
     if s.get("reinforce") and not ring:
         warnings.append("%s is a reinforcement with no alarm to call him - he starts on the map instead"
@@ -2929,16 +2996,31 @@ for s in soldiers:
     if s.get("arriveOn") and not arrive:
         warnings.append("%s arrives on an event that is no longer in the mission - he starts on the map instead"
                         % (s.get("name") or "guard"))
+    # A soldier the game makes later (a GuardGenerator) is a template it copies as he
+    # arrives, and a walk path of his inside it crashed the game the moment he came
+    # (0xC0000005: a guard sent in on an event and told where to go, 2026-11-10). The
+    # game's own spawned guards have theirs beside them, in a container of patrol
+    # paths (level 14), and their scripts name them by id: so do ours.
+    if arrive or ring:
+        _paths = [k for k in kids if k.lstrip().startswith("Task_New(") and '"PatrolPath"' in k[:40]]
+        if _paths:
+            kids = [k for k in kids if k not in _paths]
+            blocks.append('Task_New(-1, "Container", "Patrol Paths", ' + EOL + (", " + EOL).join(_paths) + "), " + EOL)
+    task = head + EOL + (", " + EOL).join(kids) + ")"
     if arrive:
         # not on the map until the event happens; back so many times after he dies
         times = max(1, min(20, int(s.get("arriveTimes") or 1)))
+        _gg = take_id()
+        PROBE_REF["gen:%s" % s.get("uid")] = "GuardGenerator_%d" % _gg
         blocks.append('Task_New(%d, "GuardGenerator", "%s", "%s", %d, %s), %s'
-                      % (take_id(), _qstr_early((s.get("name") or "Guard") + " arrives", 40), arrive, times, task, EOL))
+                      % (_gg, _qstr_early((s.get("name") or "Guard") + " arrives", 40), arrive, times, task, EOL))
         reactions.append("%s arrives when %s happens, %d time(s)" % (s.get("name") or "a guard", event_name(s["arriveOn"]), times))
     elif ring:
         # he is not on the map until the alarm rings, and comes back so many times
+        _gg = take_id()
+        PROBE_REF["gen:%s" % s.get("uid")] = "GuardGenerator_%d" % _gg
         blocks.append('Task_New(%d, "GuardGenerator", "%s", "%s", %d, %s), %s'
-                      % (take_id(), _qstr_early((s.get("name") or "Reinforcement") + " on the alarm", 40), ring,
+                      % (_gg, _qstr_early((s.get("name") or "Reinforcement") + " on the alarm", 40), ring,
                          max(1, min(20, int(s.get("reinforce") or 1))), task, EOL))
         reactions.append("%s comes when %s rings, up to %d time(s)"
                          % (s.get("name") or "a guard", s.get("alarmId"), max(1, min(20, int(s.get("reinforce") or 1)))))
@@ -3853,7 +3935,7 @@ LANG = {"slot": STRING_SLOT, "objectives.res": {}, "messages.res": {}}
 # what each kind of event tests on its target, by the target's task type
 EVENT_TESTS = {
     "switch": {"Switch": "isLastPressed"},
-    "dead": {"HumanSoldier": "isDead", "HumanSoldierFemale": "isDead"},
+    "dead": {"HumanSoldier": "isDead", "HumanSoldierFemale": "isDead", RPG_KIND: "isDead", "HumanSoldierPistol": "isDead"},
     "hacked": {"Terminal": "isHacked"},
     "picked": {"GunPickup": "isPickedUp", "GenericPickup": "isPickedUp"},
     "destroyed": {"ExplodeObject": "isExploded", "Car": "isExploded", "Generator": "isExploded", "SCamera": "isExploded",
@@ -3879,7 +3961,7 @@ def _event_cond(e):
         gz = rest_z(w["x"], w["y"], w.get("z"))[0]
         z = (gz if gz is not None else (w.get("z") or 0.0)) + 1.0
         blocks.append('Task_New(%d, "AreaActivate", "Event area", %s, %s, %s, 0, 0, 0, %s, %s, %s, "CRITERIA_HUMAN0"), %s'
-                      % (aid, q(w["x"]), q(w["y"]), q(z), q(r), q(r), q(3.0), EOL))
+                      % (aid, q(w["x"]), q(w["y"]), q(z), q(AREA_WIDE * r), q(AREA_WIDE * r), q(3.0), EOL))
         return "AreaActivate_%d.nActive" % aid, None
     if kind == "alarm":
         ex = alarm_expr_of(w.get("alarmId"))
@@ -3903,13 +3985,17 @@ def _event_cond(e):
         pl = next((x for x in PLACE if x.get("uid") == t["uid"]), None)
         if pl is None or "_tid" not in pl:
             return None, "its target is no longer placed"
-        qt, tid = OWN_QTYPE.get(pl.get("type")), pl["_tid"]
+        if pl.get("type") == "soldier" and (pl.get("arriveOn") or pl.get("reinforce")):
+            return None, "he only comes later, and the game can't watch a guard before he is there"
+        qt, tid = pl.get("_qt") or OWN_QTYPE.get(pl.get("type")), pl["_tid"]
     elif t.get("ref"):
         o = _world_by_ref.get(t["ref"])
         if o is None:
             return None, "its target was removed from the mission"
         if o.get("id", -1) < 0:
             return None, "its target has no task id the game can test"
+        if o["id"] in SPAWNED_LATER:
+            return None, "the level only makes him later, and the game can't watch a guard before he is there"
         qt, tid = o.get("qtype"), o["id"]
     else:
         return None, "no target picked"
@@ -3924,7 +4010,7 @@ def _event_cond(e):
         gz = rest_z(o["x"], o["y"], o.get("z"))[0]
         zz = (gz if gz is not None else (o.get("z") or 0.0)) + 1.0
         blocks.append('Task_New(%d, "AreaActivate", "Event pickup spot", %s, %s, %s, 0, 0, 0, %s, %s, %s, '
-                      '"CRITERIA_HUMAN0"), %s' % (aid, q(o["x"]), q(o["y"]), q(zz), q(1.5), q(1.5), q(3.0), EOL))
+                      '"CRITERIA_HUMAN0"), %s' % (aid, q(o["x"]), q(o["y"]), q(zz), q(PICKUP_SPOT), q(PICKUP_SPOT), q(3.0), EOL))
         ex = "%s || AreaActivate_%d.nActive" % (ex, aid)
     return ex, None
 
@@ -3949,8 +4035,10 @@ for _n, _e in enumerate(EVENTS, 1):
                 continue
             _key = PREFIX + "E%d_%d" % (_n, _k)
             LANG["messages.res"][_key] = _txt
+            _mid = take_id()
+            PROBE_REF["msg:%s:%d" % (_e["uid"], _k)] = "StatusMessage_%d.isSendt" % _mid
             blocks.append('Task_New(%d, "StatusMessage", "%s", 0, 0, 0, 0, 0, 0, "%s", "%s", "", "message", TRUE, FALSE, %s), %s'
-                          % (take_id(), _qstr_early("Event message " + _name, 60), _fired, _key,
+                          % (_mid, _qstr_early("Event message " + _name, 60), _fired, _key,
                              repr(round(max(1.0, min(30.0, float(_a.get("secs") or 4.0))), 1)), EOL))
             _did.append('says "%s"' % _txt[:40])
         elif _a.get("kind") == "alarm":
@@ -3970,6 +4058,7 @@ for _n, _e in enumerate(EVENTS, 1):
                 _key = PREFIX + "E%d_%d" % (_n, _k)
                 LANG["messages.res"][_key] = _txt
             _fid = take_id()
+            PROBE_REF["fail:%s" % _e["uid"]] = "StatusMessage_%d.isSendt" % _fid
             blocks.append('Task_New(%d, "StatusMessage", "%s", 0, 0, 0, 0, 0, 0, "%s", "%s", "", "fail", TRUE, FALSE, 2.0), %s'
                           % (_fid, _qstr_early("Event fails " + _name, 60), _fired, _key, EOL))
             EVENT_FAILS.append("StatusMessage_%d.nTicksSinceFinishedDisplay > 1 * GAME_FREQUENCY" % _fid)
@@ -4138,12 +4227,12 @@ def _pickup_spot(x, y, z):
     """|| the player standing on the item. A weapon is taken by walking into it, and
     the engine only flags GunPickup.isPickedUp when it goes into a free hand - not
     when it merely tops up the ammo of one the player already carries. The box is
-    1.5 m, so it takes standing on the thing."""
+    PICKUP_SPOT wide, so it takes standing on the thing."""
     aid = take_id()
     gz = rest_z(x, y, z)[0]
     zz = (gz if gz is not None else (z or 0.0)) + 1.0
     blocks.append('Task_New(%d, "AreaActivate", "Objective pickup spot", %s, %s, %s, 0, 0, 0, %s, %s, %s, '
-                  '"CRITERIA_HUMAN0"), %s' % (aid, q(x), q(y), q(zz), q(1.5), q(1.5), q(3.0), EOL))
+                  '"CRITERIA_HUMAN0"), %s' % (aid, q(x), q(y), q(zz), q(PICKUP_SPOT), q(PICKUP_SPOT), q(3.0), EOL))
     return " || AreaActivate_%d.nActive" % aid
 
 
@@ -4155,6 +4244,42 @@ def marker_anchor(x, y, z):
     aid = take_id()
     blocks.append('Task_New(%d, "Building", "Map marker", %s, %s, %s, 0, 0, 0, ""), %s' % (aid, q(x), q(y), q(z), EOL))
     return aid
+
+
+# How long a condition the game takes depends on the task that holds it: the game's
+# own longest is 544 characters in an EditVariable but 199 in a StatusMessage, and an
+# objective's 600-character "every guard is dead" in its StatusMessage crashed level 8
+# as it loaded (2026-11-10). An EditVariable of over about 1000 never comes true.
+# So a long condition is counted in EditVariables of a dozen terms each, and what
+# holds it asks only whether they are all done.
+EXPR_SHORT = 180
+
+
+def _all_of(terms, label):
+    """Every one of terms - each one that goes from false to true and stays so (dead,
+    blown up, sent) - as an expression short enough for any task."""
+    joined = " && ".join("(%s)" % t if "||" in t else t for t in terms)
+    if len(joined) <= EXPR_SHORT:
+        return joined
+    parts = []
+    for k in range(0, len(terms), 12):
+        v = take_id()
+        blocks.append('Task_New(%d, "EditVariable", "%s", 0, 0, 0, 0, "EditVariable_%d.nValue == 0 && (%s)", ""), %s'
+                      % (v, _qstr_early("%s %d" % (label, k // 12 + 1), 60), v,
+                         " && ".join("(%s)" % t if "||" in t else t for t in terms[k:k + 12]), EOL))
+        parts.append("EditVariable_%d.nValue == 1" % v)
+    return _all_of(parts, label)
+
+
+def _short(expr, label):
+    """A condition that may be long, for a task that only takes a short one: held by
+    an EditVariable that goes to 1 the first time it is true."""
+    if len(expr) <= EXPR_SHORT:
+        return expr
+    v = take_id()
+    blocks.append('Task_New(%d, "EditVariable", "%s", 0, 0, 0, 0, "EditVariable_%d.nValue == 0 && (%s)", ""), %s'
+                  % (v, _qstr_early(label, 60), v, expr, EOL))
+    return "EditVariable_%d.nValue == 1" % v
 
 
 def _objective_expr(ob):
@@ -4171,17 +4296,25 @@ def _objective_expr(ob):
         z = (gz if gz is not None else ob["z"]) + 1.0
         OBJ_AT[id(ob)] = (ob["x"], ob["y"], z)
         blocks.append('Task_New(%d, "AreaActivate", "Objective area", %s, %s, %s, 0, 0, 0, %s, %s, %s, "CRITERIA_HUMAN0"), %s'
-                      % (aid, q(ob["x"]), q(ob["y"]), q(z), q(r), q(r), q(3.0), EOL))
+                      % (aid, q(ob["x"]), q(ob["y"]), q(z), q(AREA_WIDE * r), q(AREA_WIDE * r), q(3.0), EOL))
         return ("AreaActivate_%d.nActive" % aid, aid, "the area"), None
     if kind == "killAll":
-        terms = ["HumanSoldier_%d.isDead" % s["_tid"] for s in soldiers if "_tid" in s and int(s.get("team", 1)) != 0]
+        later = [s for s in soldiers if s.get("arriveOn") or s.get("reinforce")]
+        terms = ["%s_%d.isDead" % (s["_qt"], s["_tid"]) for s in soldiers
+                 if "_tid" in s and int(s.get("team", 1)) != 0 and s not in later]
         for o in WORLD:
             if (o.get("type") == "soldier" and not o.get("cutscene") and o.get("id", -1) >= 0
                     and int(o.get("team", 1) if o.get("team") is not None else 1) != 0):
+                if o["id"] in SPAWNED_LATER:
+                    later.append(o)
+                    continue
                 terms.append("%s_%d.isDead" % (o.get("qtype") or "HumanSoldier", o["id"]))
+        if later:
+            report.append("eliminate every guard: the %d who arrive later are not counted (no game can name one "
+                          "before he comes)" % len(later))
         if not terms:
             return None, "there are no guards"
-        return (" && ".join(terms), -1, "every guard"), None
+        return (_all_of(terms, "Every guard dead"), -1, "every guard"), None
     if t.get("uid"):
         p = next((x for x in PLACE if x.get("uid") == t["uid"]), None)
         if p is None or "_tid" not in p:
@@ -4189,7 +4322,9 @@ def _objective_expr(ob):
         OBJ_AT[id(ob)] = (p["x"], p["y"], p.get("z") or 0.0)
         name = p.get("name") or p.get("model")
         if kind == "kill" and p.get("type") == "soldier":
-            return ("HumanSoldier_%d.isDead" % p["_tid"], p["_tid"], re.sub(r"^the ", "", str(name))), None
+            if p.get("arriveOn") or p.get("reinforce"):
+                return None, "%s only comes later, and the game can't watch a guard before he is there" % name
+            return ("%s_%d.isDead" % (p["_qt"], p["_tid"]), p["_tid"], re.sub(r"^the ", "", str(name))), None
         if kind == "collect" and p.get("type") == "pickup":
             return ("GunPickup_%d.isPickedUp%s" % (p["_tid"], _pickup_spot(p["x"], p["y"], p.get("z"))),
                     p["_tid"], name), None
@@ -4245,13 +4380,23 @@ if OBJECTIVES:
             if ob.get("retext") and (ob.get("text") or "").strip():
                 key = PREFIX + "O%d" % i
                 LANG["objectives.res"][key] = ob["text"].strip()[:70]
-            done, failed = _qstr(ob.get("done"), 250), _qstr(ob.get("failed"), 250)
+            # The level's expression as its source has it: a line break in it is the
+            # escape \n, which _qstr made " n" - "&& nEditVariable_302", never true
+            # (level 2's second objective, the only one that spans lines).
+            done, failed = (_qstr(re.sub(r"\\[nrt]", " ", ob.get(k) or ""), 250) for k in ("done", "failed"))
             if not key:
                 errors.append("objective %d: a level objective with no text key" % i)
                 continue
             slots_txt.append('"%s", %d, "%s", "%s"' % (key, link, done, failed))
             if done:
-                exprs.append(done)
+                # held once it has been true: some only hold for a while (level 8's
+                # second: a door open), and the mission's end waits for all at once
+                lv_ = take_id()
+                blocks.append('Task_New(%d, "EditVariable", "Level objective %d done", 0, 0, 0, 0, '
+                              '"EditVariable_%d.nValue == 0 && (%s)", ""), %s' % (lv_, i, lv_, done, EOL))
+                exprs.append("EditVariable_%d.nValue == 1" % lv_)
+                if ob.get("uid"):
+                    PROBE_REF["obj:%s" % ob["uid"]] = "EditVariable_%d.nValue == 1" % lv_
             hl = _SHIPPED_HILIGHTS.get(str(link))
             if hl:
                 OBJ_MARKS.append((len(slots_txt), hl[0], hl[1], hl[2], link, hl[3] or "1"))
@@ -4275,7 +4420,8 @@ if OBJECTIVES:
         own_n += 1
         sid = take_id()
         blocks.append('Task_New(%d, "StatusMessage", "Objective %d complete", 0, 0, 0, 0, 0, 0, "%s", '
-                      '"OBJECTIVE_COMPLETE", "", "message", TRUE, FALSE, 2.0), %s' % (sid, i, expr, EOL))
+                      '"OBJECTIVE_COMPLETE", "", "message", TRUE, FALSE, 2.0), %s'
+                      % (sid, i, _short(expr, "Objective %d done" % i), EOL))
         # The map computer ticks an objective off when its complete expression is
         # true AT THAT MOMENT, and some of them only hold for an instant: standing
         # in an area sets AreaActivate.nActive while you are in it and no longer.
@@ -4283,6 +4429,8 @@ if OBJECTIVES:
         # the way levels 6 and 10 do it.
         done_expr = "StatusMessage_%d.isSendt" % sid
         exprs.append(done_expr)
+        if ob.get("uid"):
+            PROBE_REF["obj:%s" % ob["uid"]] = done_expr
         at = OBJ_AT.get(id(ob))
         anchor = None
         if at:
@@ -4303,12 +4451,28 @@ if OBJECTIVES:
         # splice time - the map computer shows that one, and a second task of
         # ours would compete with it.
         OBJ_TASK_IDS["slots"] = slots_txt[:6]
-    if exprs and own_n:
+    # The level's own objectives alone end the mission the way the level does: right
+    # while all of them are kept, but with some left out, the level's ending still
+    # waits for those (level 8 ends on its outro, after the extraction), and finishing
+    # the ones kept never completed the mission (seen in the game, 2026-11-10). So
+    # then the mission completes on the ones it keeps, as it does with its own.
+    _kept = [ob for ob in OBJECTIVES if ob["kind"] == "level"]
+    _left_out = sorted({sl.get("key") for st in (meta.get("objectiveSets") or []) for sl in (st.get("slots") or [])
+                        if sl.get("key")} - {ob.get("key") for ob in _kept})
+    level_ends = bool(_kept) and not own_n and bool(_left_out)
+    _open = [ob for ob in _kept if not (ob.get("done") or "").strip()]
+    if level_ends and _open:
+        warnings.append("the mission keeps %d of the level's objectives and ends as the level does, which also waits "
+                        "for the %d left out: \"%s\" has no completion of its own to end on"
+                        % (len(_kept), len(_left_out), (_open[0].get("text") or _open[0].get("key") or "")[:60]))
+        level_ends = False
+    if exprs and (own_n or level_ends):
         done = take_id()
         blocks.append('Task_New(%d, "StatusMessage", "Mission complete", 0, 0, 0, 0, 0, 0, "%s", '
                       '"MISSION_COMPLETE", "", "message", TRUE, FALSE, 2.0), %s'
-                      % (done, " && ".join("(%s)" % e for e in exprs), EOL))
+                      % (done, _all_of(exprs, "Every objective done"), EOL))
         OBJ_TASK_IDS["done"] = done
+        PROBE_REF["done"] = "StatusMessage_%d.isSendt" % done
         fails = ["HumanPlayer_0.isDead"]
         if FAIL_ON_ALARM:
             alarms = re.findall(r'Task_New\((\d+), "AlarmControl"', src) + ([str(CAM_ALARM)] if CAM_ALARM else [])
@@ -4636,16 +4800,46 @@ for _a, _b, _r in _going:
         _went_with.add(_r)
     else:
         _upto = _b
+def _holder(text, pos, kinds):
+    """The task of one of these kinds that pos is inside: (id, start, end), or None."""
+    for h in re.finditer(r'Task_New\((-?\d+), "(?:%s)"' % kinds, text):
+        if h.start() < pos:
+            e = task_end(text, h.start())
+            if pos < e:
+                return int(h.group(1)), h.start(), e
+    return None
+
+
 for r in plan.get("removeRefs", []) or []:
     m = find_ref(out_src, r)
     if not m:
         if r not in _went_with:
             warnings.append("could not find %s to remove - skipped" % r)
         continue
+    # A guard the level's GuardGenerator makes later is its template: taken out alone,
+    # it left the generator empty, and the game crashed as the level loaded (level 8,
+    # 2026-11-10). The generator goes with him: it would make no one now.
+    _gen = _holder(out_src, m.start(), "GuardGenerator") if r.split("@")[0].startswith("HumanSoldier") else None
+    if _gen:
+        out_src = cut_task(out_src, _gen[1], _gen[2])
+        dropped += 1
+        GONE_CAMS.append(("GuardGenerator", _gen[0]))
+        if int(m.group(1)) >= 0:
+            GONE_CAMS.append((r.split("@")[0], int(m.group(1))))
+        report.append("%s came from a GuardGenerator of the level's: it goes with him" % r.split("@")[0])
+        continue
     out_src = cut_task(out_src, m.start(), task_end(out_src, m.start()))
     dropped += 1
     if int(m.group(1)) >= 0:
         GONE_CAMS.append((r.split("@")[0], int(m.group(1))))
+# a ConditionalContainer of the level's left with nothing in it goes too, for the same reason
+for _cc in reversed(list(re.finditer(r'Task_New\((-?\d+), "ConditionalContainer", ', out_src))):
+    _e = task_end(out_src, _cc.start())
+    if "Task_New(" not in out_src[_cc.end():_e] and plan.get("removeRefs"):
+        out_src = cut_task(out_src, _cc.start(), _e)
+        if int(_cc.group(1)) >= 0:
+            GONE_CAMS.append(("ConditionalContainer", int(_cc.group(1))))
+        report.append("a ConditionalContainer of the level's left empty by what was taken out goes too")
 # Nothing may still ask a task that is no longer there: what it did becomes 0,
 # what happened to it becomes 1. No \b in front - expressions break lines with a
 # literal \n, as in "||\nSCamera_1303". "FALSE" is not a word the engine knows.
@@ -4744,6 +4938,10 @@ for e in EDITS:
             seg = re.sub(r'("Gun\w*", "", ")WEAPON_ID_[A-Z0-9_]+(")', r"\g<1>%s\g<2>" % e["weapon"], seg, count=1)
         if e.get("ai"):
             seg = re.sub(r'(Task_New\(-?\d+, "HumanAI", "", ")AITYPE_[A-Z_0-9]+(")', r"\g<1>%s\g<2>" % e["ai"], seg, count=1)
+        if e.get("weapon") or e.get("ai"):
+            _w = re.search(r'"Gun\w*", "", "(WEAPON_ID_[A-Z0-9_]+)"', seg)
+            _a = re.search(r'"HumanAI", "", "(AITYPE_[A-Z_0-9]+)"', seg)
+            seg = soldier_kind(seg, model, carries_rpg(_w and _w.group(1), _a and _a.group(1)))
         if e.get("graph") is not None and str(e["graph"]).isdigit():
             seg = re.sub(r'(Task_New\(-?\d+, "HumanAI", "", "[A-Z_0-9]+", )\d+(\))', r"\g<1>%s\g<2>" % e["graph"], seg, count=1)
         if e.get("patrol") is not None:
@@ -4831,7 +5029,7 @@ for o in WORLD:
         idle = int(mi.group(1)) if mi else None
     apid = None
     if out_node is not None:
-        sm = re.search(r'Task_New\(%d, "HumanSoldier", ' % o["id"], out_src)
+        sm = re.search(r'Task_New\(%d, "HumanSoldier(?:RPG)?", ' % o["id"], out_src)
         am = sm and re.search(r'Task_New\(%d, "HumanAI", "", "[A-Z_0-9]+", \d+\)' % aid, out_src[sm.start():])
         if am:
             apid = take_id()
@@ -4848,6 +5046,103 @@ for _term in MOVED_PARTS:
 
 # The marker stays behind our blocks until the objectives are in: a level with
 # no list of its own gets ours there, inside the task tree with the rest.
+# ---------------------------------------------------------------- probes: a test build's own
+# For trying a mission in the game (studio/server/gametest.py): each probe is an
+# EditVariable that starts at a value no other task has and goes up by one the
+# first time its expression comes true, which the test reads from the game's
+# memory. The expression names the build's own tasks by what they are: {event:uid}
+# (its latch), {obj:uid} (its "complete" sent), {done} (the mission complete),
+# {soldier:uid} and {gen:uid} (his task, the GuardGenerator he arrives by),
+# {msg:uid:k} and {fail:uid} (an event's message, or its failure, sent),
+# {area:x;y;r;CRITERIA} (who is in a box there),
+# {task:ref} (one of the level's, as QType_id), {alarm:key}, {time:seconds}.
+PROBES = [p for p in (plan.get("_probes") or []) if isinstance(p, dict) and p.get("expr")]
+PROBE_BASE = int(plan.get("_probe_base") or 0x51D0A000)
+
+
+def _probe_expr(text):
+    missing = []
+
+    def one(m):
+        k, a = m.group(1), m.group(2) or ""
+        if k == "event":
+            return event_fired(a)
+        if k in ("obj", "gen", "msg", "fail"):
+            return PROBE_REF.get("%s:%s" % (k, a))
+        if k == "area":
+            # {area:x;y;r;CRITERIA}: who is within r of that spot (a square box; CRITERIA_HUMAN0 the player and
+            # soldiers on his side, CRITERIA_HUMAN1 the enemy)
+            bits = a.split(";")
+            x, y, r = float(bits[0]), float(bits[1]), float(bits[2]) if len(bits) > 2 else 4.0
+            crit = bits[3] if len(bits) > 3 and re.match(r"^CRITERIA_[A-Z0-9_]+$", bits[3]) else "CRITERIA_HUMAN0"
+            gz = rest_z(x, y, None)[0]
+            aid = take_id()
+            blocks.append('Task_New(%d, "AreaActivate", "Probe area", %s, %s, %s, 0, 0, 0, %s, %s, %s, "%s"), %s'
+                          % (aid, q(x), q(y), q((gz or 0.0) + 1.0), q(AREA_WIDE * r), q(AREA_WIDE * r), q(3.0), crit, EOL))
+            return "AreaActivate_%d.nActive" % aid
+        if k == "done":
+            if PROBE_REF.get("done"):
+                return PROBE_REF["done"]
+            # no end of the mission's own: it ends as the level does, on LevelFlow's Complete
+            lf = re.search(r'Task_New\(-?\d+, "LevelFlow"', out_src)
+            qs = list(re.finditer(QSTR, out_src[lf.start():task_end(out_src, lf.start())])) if lf and OBJECTIVES else []
+            return qs[2].group(0)[1:-1] if len(qs) >= 4 and qs[2].group(0)[1:-1].strip() else None
+        if k == "soldier":
+            s = next((x for x in soldiers if x.get("uid") == a), None)
+            return "%s_%d" % (s["_qt"], s["_tid"]) if s and "_tid" in s else None
+        if k == "own":
+            pl = next((x for x in PLACE if x.get("uid") == a), None)
+            qt = (pl or {}).get("_qt") or OWN_QTYPE.get((pl or {}).get("type"))
+            return "%s_%d" % (qt, pl["_tid"]) if pl and qt and "_tid" in pl else None
+        if k == "task":
+            o = _world_by_ref.get(a)
+            return "%s_%d" % (o.get("qtype"), o["id"]) if o and o.get("id", -1) >= 0 else None
+        if k == "alarm":
+            return alarm_expr_of(a)
+        if k == "time":
+            tid = take_id()
+            blocks.append('Task_New(%d, "LevelTimer", "Probe clock", 0, 0, 0, 0, 0, 0, "1", "", FALSE), %s' % (tid, EOL))
+            return "LevelTimer_%d.nTick > %d*GAME_FREQUENCY" % (tid, max(1, int(float(a or 1))))
+        return None
+
+    def sub(m):
+        got = one(m)
+        if got is None:
+            missing.append(m.group(0))
+            return "0"
+        return got
+    return re.sub(r"\{(\w+)(?::([^}]*))?\}", sub, text), missing
+
+
+# A test build's own, too: one of the level's explosives or terminals blown up on a
+# timer, by its own "Explosion expression" (the fifth string of its task: its type,
+# name, model, destroyed model, expression), so "blown up" can be seen without a player.
+for _x in plan.get("_explode") or []:
+    _m = find_ref(out_src, str(_x.get("ref") or ""))
+    if not _m:
+        report.append("test: nothing of the level's at %s to blow up" % _x.get("ref"))
+        continue
+    _s0 = _m.start()
+    _s1 = task_end(out_src, _s0)
+    _seg = out_src[_s0:_s1]
+    _qs = list(re.finditer(QSTR, _seg))
+    if len(_qs) < 5:
+        continue
+    _t = take_id()
+    blocks.append('Task_New(%d, "LevelTimer", "Test fuse", 0, 0, 0, 0, 0, 0, "1", "", FALSE), %s' % (_t, EOL))
+    _e4 = _qs[4]
+    _seg = _seg[:_e4.start()] + '"LevelTimer_%d.nTick > %d*GAME_FREQUENCY"' % (_t, max(1, int(float(_x.get("seconds") or 5)))) + _seg[_e4.end():]
+    out_src = out_src[:_s0] + _seg + out_src[_s1:]
+    report.append("test: %s blows up %s s in" % (_x.get("ref"), _x.get("seconds")))
+
+for _i, _p in enumerate(PROBES):
+    _ex, _miss = _probe_expr(str(_p["expr"]))
+    _v, _init = take_id(), PROBE_BASE + 2 * _i
+    blocks.append('Task_New(%d, "EditVariable", "Probe %d", 0, 0, 0, %d, "EditVariable_%d.nValue == %d && (%s)", ""), %s'
+                  % (_v, _i, _init, _v, _init, _ex, EOL))
+    report.append("probe %d (%s): %s%s" % (_i, _p.get("label") or "", _ex if len(_ex) < 90 else _ex[:87] + "...",
+                                           "  [not in this build: %s]" % ", ".join(_miss) if _miss else ""))
+
 out_src = out_src.replace(MARKER, "".join(blocks) + MARKER, 1)
 
 # The AIGraph task records node count, capacity and edge count. If those stop
@@ -4982,6 +5277,28 @@ if OBJ_TASK_IDS.get("slots"):
         blocks_late = 'Task_New(%d, "DefineComputerObjective", "Mission Studio", "", %s)' % (did, ", ".join(OBJ_TASK_IDS["slots"]))
         out_src = out_src.replace(MARKER, blocks_late + ", " + EOL, 1)
         report.append("the mission's objectives go in a new list (this level ships none)")
+# What went in went beside a guard of the level's. With him taken out and nothing of
+# the level's after him in his container (every guard of level 8 removed, 2026-11-10),
+# the comma before the marker was left in front of a ")": the script did not compile.
+# A level soldier given the RPG, or relieved of it, is a task of the other kind now:
+# what names him (the level's expressions and the mission's) follows.
+for _tid, (_old, _new) in SOLDIER_RENAMED.items():
+    out_src = re.sub(r"\b%s_%d\b" % (_old, _tid), "%s_%d" % (_new, _tid), out_src)
+# Only level 10 declares the RPG soldier's task; the others get his declaration, the same
+# as a HumanSoldier's.
+if ('"%s"' % RPG_KIND) in out_src and ('Task_DeclareParameters("%s"' % RPG_KIND) not in out_src:
+    _dm = re.search(r'Task_DeclareParameters\("HumanSoldier", [^;]*\);', out_src)
+    if _dm:
+        out_src = (out_src[:_dm.end()] + EOL + _dm.group(0).replace('"HumanSoldier"', '"%s"' % RPG_KIND, 1)
+                   + out_src[_dm.end():])
+    else:
+        errors.append("the level declares no soldier, so its RPG soldiers can't be declared")
+
+_at = out_src.find(MARKER)
+if _at >= 0 and out_src[_at + len(MARKER):].lstrip().startswith(")"):
+    _pre = out_src[:_at].rstrip()
+    if _pre.endswith(","):
+        out_src = _pre[:-1] + out_src[_at:]
 out_src = out_src.replace(MARKER, "", 1)
 if OBJ_TASK_IDS.get("done") or EVENT_FAILS:
     lf = re.search(r'Task_New\(-?\d+, "LevelFlow"', out_src)
@@ -4995,7 +5312,7 @@ if OBJ_TASK_IDS.get("done") or EVENT_FAILS:
             if OBJ_TASK_IDS.get("done"):
                 complete = "StatusMessage_%d.nTicksSinceFinishedDisplay > 1 * GAME_FREQUENCY" % OBJ_TASK_IDS["done"]
                 out_src = out_src[:sp[2][0]] + '"%s"' % complete + out_src[sp[2][1]:]
-                report.append("mission complete when all %d objective(s) are done" % len([k for k in LANG["objectives.res"]]))
+                report.append("mission complete when all %d objective(s) are done" % len(OBJECTIVES))
     else:
         warnings.append("this level has no LevelFlow task - objectives show and events fire, but they won't end the mission")
 

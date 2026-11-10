@@ -148,7 +148,7 @@ The game's QVM scripts, read and written by the studio: all 884 round-trip byte 
 <td valign="top">
 <img src="docs/assets/icons/safe.svg" width="52" align="left" alt="">
 <b>Your game stays safe</b><br>
-The originals are never touched. Every mission is built from a checked reference copy and written only into its own slot, so you can always go back.
+The original levels are never touched. Every mission is built from a checked reference copy into its own slot; the few game files it adds to (texts, the mission list) are backed up first, so you can always go back.
 </td>
 </tr>
 </table>

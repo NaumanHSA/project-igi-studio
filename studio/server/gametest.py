@@ -259,6 +259,112 @@ def _pic(c, **about):
     return dict({"url": "data:image/png;base64," + base64.b64encode(png).decode("ascii"), "width": w, "height": h}, **about)
 
 
+# ------------------------------------------------------------------ probes
+# What happened in the game, read from its memory (read only, as live_pos.py reads
+# the player): each probe of a test build (plan.py, probes) is an EditVariable
+# starting at PROBE_BASE + 2i, a value no other task has, which goes up by one the
+# first time its expression comes true. The values share their three high bytes,
+# so one search finds them all; a copy that never changes (the script's own
+# constant) is told from the live one by changing.
+PROBE_BASE = 0x51D0A000
+PROBE_MAX = 120
+
+
+class Probes:
+    def __init__(self, pid, n, t0):
+        from studio.server import live_pos as LP
+        import struct
+        self.LP, self.struct, self.n, self.t0 = LP, struct, n, t0
+        self.h = LP.open_proc(pid)
+        self.at = {}            # probe -> [addresses]
+        self.fired = {}         # probe -> seconds after the start
+        self.scan()
+
+    def scan(self):
+        key = self.struct.pack("<I", PROBE_BASE)[1:]
+        for base, size in self.LP.regions(self.h, limit=0x7FFFFFFF):
+            data = self.LP.read(self.h, base, size)
+            if not data:
+                continue
+            i = data.find(key)
+            while i >= 0:
+                if i >= 1 and (base + i - 1) % 4 == 0:
+                    v = self.struct.unpack_from("<I", data, i - 1)[0]
+                    k, up = divmod(v - PROBE_BASE, 2)
+                    if 0 <= k < self.n:
+                        self.at.setdefault(k, []).append(base + i - 1)
+                        if up:
+                            self.fired.setdefault(k, round(time.time() - self.t0, 1))
+                i = data.find(key, i + 1)
+
+    def found(self):
+        return len(self.at)
+
+    def poll(self):
+        now = round(time.time() - self.t0, 1)
+        for k, addrs in self.at.items():
+            if k in self.fired:
+                continue
+            for a in addrs:
+                b = self.LP.read(self.h, a, 4)
+                if b and len(b) == 4 and self.struct.unpack("<I", b)[0] == PROBE_BASE + 2 * k + 1:
+                    self.fired[k] = now
+                    break
+
+    def report(self, probes):
+        return [{"label": p.get("label") or p["expr"], "happened": k in self.fired, "after_s": self.fired.get(k),
+                 "seen_in_memory": k in self.at} for k, p in enumerate(probes)]
+
+
+# Every test watches the mission's own events and objectives (unless it brings
+# probes of its own): what happened in the game, and when, and what did not.
+def mission_probes(plan):
+    """Probes for a mission's events, their messages, its arrivals, its objectives,
+    the mission complete and the player's death, each with what it says if it
+    happens: [{label, expr, says}]."""
+    out = []
+    for n, e in enumerate(plan.get("events") or [], 1):
+        if not isinstance(e, dict) or not e.get("uid"):
+            continue
+        nm = e.get("name") or "event %d" % n
+        out.append({"label": "event %d (%s) happened" % (n, nm), "expr": "{event:%s}" % e["uid"], "kind": "event", "n": n})
+        for k, a in enumerate(e.get("do") or [], 1):
+            if isinstance(a, dict) and a.get("kind") == "fail":
+                out.append({"label": "event %d failed the mission" % n, "expr": "{fail:%s}" % e["uid"], "kind": "fail", "n": n})
+    for p in plan.get("placements") or []:
+        if p.get("type") == "soldier" and p.get("arriveOn"):
+            out.append({"label": "%s arrived" % (p.get("name") or "a guard"), "expr": "{gen:%s}.nSpawns > 0" % p["uid"],
+                        "kind": "arrived"})
+    # the level's own objectives too, by the expression the level tests (one with none of
+    # its own, as an extraction often is, has nothing to watch); and the mission complete,
+    # on the mission's own end or, when it keeps the level's, the level's
+    for i, o in enumerate(plan.get("objectives") or [], 1):
+        if (isinstance(o, dict) and o.get("uid")
+                and (o.get("kind") != "level" or (o.get("done") or "").strip())):
+            out.append({"label": "objective %d (%s) done" % (i, o.get("text") or o.get("key") or o.get("kind")),
+                        "expr": "{obj:%s}" % o["uid"], "kind": "objective", "n": i})
+    if any(isinstance(o, dict) for o in plan.get("objectives") or []):
+        out.append({"label": "the mission complete", "expr": "{done}", "kind": "done"})
+    out.append({"label": "the player died", "expr": "HumanPlayer_0.isDead", "kind": "died"})
+    return out[:PROBE_MAX]
+
+
+def what_happened(report):
+    """The probes' report in a few lines: what happened, when, and what did not."""
+    if not report:
+        return None
+    yes = ["%s at %d s" % (r["label"], round(r["after_s"] or 0)) for r in report if r["happened"]]
+    no = [r["label"].replace(" happened", "").replace(" done", "") for r in report
+          if not r["happened"] and r["seen_in_memory"] and not r["label"].startswith(("the player died", "the mission complete"))]
+    blind = [r["label"] for r in report if not r["seen_in_memory"]]
+    lines = (["Happened: " + "; ".join(yes) + "."] if yes else ["Nothing the mission watches for happened."])
+    if no:
+        lines.append("Did not happen while the test ran: " + "; ".join(no) + ".")
+    if blind:
+        lines.append("Could not be read from the game: " + "; ".join(blind) + ".")
+    return lines
+
+
 def run(mid, store, cfg, options, say=print):
     """Build it into the test copy, start it, and report. options: {seconds, start, tour,
     map} where a tour is a list of shots, each {cams: [{dur, ...}], about: what it looks
@@ -278,7 +384,15 @@ def _run(mid, store, cfg, options, say):
         return {"ok": False, "error": "The game is running. Only one copy can run at a time: close it, then test again."}
     t0 = time.time()
     copy = ensure_copy(cfg, say)
-    built = build(mid, store, copy, {k: options.get(k) for k in ("start", "tour") if options.get(k)}, say)
+    probes = [p for p in (options.get("probes") or []) if isinstance(p, dict) and p.get("expr")][:PROBE_MAX]
+    if not probes and options.get("probes") is not False:
+        try:
+            probes = mission_probes((json.loads((pathlib.Path(store) / mid / "mission.json").read_text(encoding="utf-8"))
+                                     .get("plan")) or {})
+        except (OSError, ValueError):
+            probes = []
+    built = build(mid, store, copy, dict({k: options.get(k) for k in ("start", "tour", "explode") if options.get(k)},
+                                         **({"probes": probes, "probe_base": PROBE_BASE} if probes else {})), say)
     if not built.get("ok"):
         return {"ok": False, "stage": "build", "error": "It did not build: %s" % (built.get("error") or "see the log")}
     say("STAGE starting the test copy of the game")
@@ -301,12 +415,19 @@ def _run(mid, store, cfg, options, say):
             say("STAGE the game's camera is going round the mission")
             pics, fatal = tour_pictures(game, tour, started)
         # then as the player stands, and long enough for what goes wrong as it starts
-        seconds = max(3.0, min(120.0, float(options.get("seconds") or 15)))
+        seconds = max(3.0, min(240.0, float(options.get("seconds") or 15)))
+        watch = None
+        if probes:
+            say("STAGE finding the probes in the game's memory")
+            watch = Probes(game.pid, len(probes), started)
+            say("probes found: %d of %d" % (watch.found(), len(probes)))
         say("STAGE watching the mission run")
         end = time.time() + seconds
         first = None
         while time.time() < end and not fatal:
             fatal = game.fatal()
+            if watch:
+                watch.poll()
             if not fatal and first is None and time.time() > end - seconds + min(3.0, seconds / 2):
                 first = game.picture()
                 if first:
@@ -334,10 +455,17 @@ def _run(mid, store, cfg, options, say):
             c = game.picture() if game.alive() else None
             if c:
                 pics.append(_pic(c, what="the game when it stopped"))
+            if watch:
+                watch.poll()
             return {"ok": False, "stage": "game", "loaded": True, "error": _said(fatal, "running"), "fatal": fatal,
-                    "where": "running", "images": pics,
+                    "where": "running", "images": pics, "probes": watch.report(probes) if watch else None,
+                    "what_happened": what_happened(watch.report(probes)) if watch else None,
                     "seconds_run": int(time.time() - started)}
+        if watch:
+            watch.poll()
         return {"ok": True, "loaded": True, "slot": built.get("slot"), "seconds_run": int(time.time() - started),
+                "probes": watch.report(probes) if watch else None,
+                "what_happened": what_happened(watch.report(probes)) if watch else None,
                 "seconds_total": int(time.time() - t0), "images": pics,
                 "said": "It built, loaded and ran in the game with no error. The pictures are the game's own."}
     finally:

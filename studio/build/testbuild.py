@@ -9,7 +9,8 @@
 #   python -m studio.build.testbuild --source <mission folder> --game <test copy>
 #                                    [--options <json file>]
 #
-# options: {"start": {x, y, z, gamma}, "tour": [shot, ...], "width": 1024, "height": 768}
+# options: {"start": {x, y, z, gamma}, "tour": [shot, ...], "probes": [{label, expr}], "probe_base": n,
+#           "width": 1024, "height": 768}
 # Says RESULT {...} on its last line.
 import argparse, json, os, pathlib, re, shutil, sys
 
@@ -32,6 +33,12 @@ def private_copy(source, options):
     m.pop("installed", None)
     m.pop("applied", None)
     m["slot"] = None
+    if options.get("probes"):
+        plan = m.setdefault("plan", {})
+        plan["_probes"] = options["probes"]
+        plan["_probe_base"] = options.get("probe_base")
+    if options.get("explode"):
+        m.setdefault("plan", {})["_explode"] = options["explode"]
     tour = options.get("tour")
     if tour:
         plan = m.setdefault("plan", {})

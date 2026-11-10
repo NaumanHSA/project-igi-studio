@@ -1237,6 +1237,14 @@ mission adds to it, reorders it or drops from it:
   its objectives once). They keep the level's own wording, which lives in the
   game's language files, and their own completion. Drop the ones the mission
   doesn't want; the plan remembers that.
+- **How it ends:** with all of the level's kept and none of your own, the
+  mission ends as the level does. Leave some out, or add your own, and it
+  completes when the ones in the list are done: a "Mission complete" of its
+  own, waiting for each one, held once it has been true (some, such as level
+  8's door open, are true only for a while). The level's outro, if kept, plays
+  then. One kept with nothing of its own to test (an extraction, often) while
+  others are left out can't be waited for: the mission ends as the level does,
+  which waits for those too, and Apply says so.
 - **Setting one up:** the ⊕ button picks the target on the map (an area for
   *Reach an area*), the eye shows it, and × removes it. Each objective of
   your own gets its own text; leave it empty for a sensible default.
@@ -1343,13 +1351,19 @@ and `messages.res` of the working game, under the mission's own prefix
 
 - Each Apply replaces that prefix's keys and touches no other key.
 - The first write backs the files up to `backups/language/`.
-- This is the one write the studio makes outside a mission slot, and
-  `protect.py` allows only these two files of a working game.
+- It is one of the four writes the studio makes outside a mission slot
+  (docs/architecture.md, *One game is written to*). `protect.py` allows only
+  these two files of a working game, and `missions.res`, which has each
+  mission's name and description.
 - All 12 shipped language files rebuild byte-for-byte.
 
-**To be confirmed in game:** that the objectives list, completion, failure
-and labels behave as in the shipped levels, and the size of an
-`AreaActivate` box (its dimensions are written as the radius).
+**Seen in the game** (2026-11-10, the test bench below): every kind of objective -
+collect, kill, reach, hack, destroy, eliminate every guard, and the level's own -
+completes, its "Objective complete" shows, and the mission completes when all are
+done. The level's own: level 8's second objective kept alone, its door opened by an
+event, was done 7.6 s in and the mission complete with it, then the level's outro
+played; with an objective of the mission's own beside it, the same. An area is the game's
+square box, twice as wide as its radius (the map draws the square).
 
 ## Events
 
@@ -1486,8 +1500,50 @@ is a `StatusMessage` sent once on it; an alarm gets a pulse of a few ticks in
 its trigger (a `LevelTimer` started by the event), so an alarm switched off
 later is not raised again; guards are a `GuardGenerator` on it; failing is a
 `StatusMessage` that `LevelFlow`'s *Failed* waits for. An area is an
-`AreaActivate`, time a `LevelTimer`. **To be confirmed in game:** each kind
-of trigger and of action.
+`AreaActivate`, time a `LevelTimer`.
+
+**Seen in the game** (2026-11-10): every kind of event but two - an area, time, after
+another event, an item picked up, a camera seeing the player, a guard dying, an alarm,
+something blown up - and every thing that happens: a message, an alarm raised, guards
+arriving, the level's doors opening, a soldier moving on, the mission failing (the
+game's pause menu with *Resume* greyed). A switch pressed and a terminal hacked were
+seen with a real press of the game's use key (E), the game in front:
+
+- **A switch takes one press**, from in front of it: the level's gate switch on level 8
+  set off its event and opened its own gate as well.
+- **A terminal takes the key held** for its hacking time, about 4 seconds, close to it:
+  a step nearer than a switch (crouched at the desk, the game shows its small computer
+  sign). The level's own message for it showed, then the event's, then the objective
+  complete and the mission complete.
+
+- **An area is the player's and his side's.** The game has one criterion for both:
+  a soldier of yours walking into an area sets it off as the player does.
+- **A guard who comes later can't be watched.** He has no task until he arrives (an
+  event's, or the alarm's), so a guard-dies event or a kill objective can't name him:
+  the map doesn't offer him, and Apply says so. *Eliminate every guard* leaves out
+  everyone who comes later, the level's reinforcements too.
+
+**Picking on the map.** While an event or an objective asks for something (a switch,
+a guard, a terminal, doors, a soldier who moves on), the map steps back and what can be
+picked stands out, ringed and named; a list beside the banner names them nearest first,
+and a click there picks one. The view goes to them if none is in sight. With none on
+the map, it says so and what to place. A click near one takes it, not what is around it.
+
+**Send in guards**, in the event: *Place new guards* (pick a kind, then click where
+each one appears: each arrives on this event), *Pick on the map* for guards of yours
+already there, and for each guard how many times he comes and **then walks (or runs) to**
+a walkway point, picked on the map: a step of his orders on this event, so he arrives and
+moves on.
+
+**The test bench.** A test in the game by an agent (`test_load`, in the studio's own
+test copy) reads back what the mission did, from the game's own memory
+(`studio/server/gametest.py`, probes): which events happened and when, which objectives
+were done (the level's own too), whether guards arrived, the mission complete, the player
+dying. *Test from here* is the person's own game, and watches nothing. A test build adds one `EditVariable` per probe,
+starting at a value no other task has (`0x51D0A000 + 2i`) and going up by one when its
+expression first comes true; the test finds them all by their three shared high bytes,
+read only, and watches the ones that change. A test build can also blow up one of the
+level's explosives or terminals on a timer, by its own *Explosion expression*.
 
 ## Cutscenes and moving vehicles
 

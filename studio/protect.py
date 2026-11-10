@@ -7,13 +7,16 @@
 # carries our marker) can be deleted. One exception: a mission's own strings
 # (objective texts, map labels) are added to the working game's
 # language/<lang>/objectives.res and messages.res under the mission's MS<slot>_
-# prefix; studio/build/lang.py touches no other key and backs the files up first.
+# prefix, and its name and description to missions.res under Mission <slot>;
+# studio/build/lang.py touches no other key and backs the files up first.
 # And one more: the game's config.qvm, whose GOActiveMission says how far its
 # mission list goes (studio/build/unlock.py, the same care). And the last: the
 # game lists its missions by following each one's "next mission" from mission
 # 1, so the last built-in mission's mission.qvm has to lead on to the first
 # custom one, or none is ever listed; studio/build/slots.py changes that one
 # link and nothing else, and puts it back as shipped when no custom mission is left.
+# And the pictures of the mission list: menusystem/missionsprites.res, where a
+# mission with a picture of its own has it under its number (studio/build/covers.py).
 #
 #   import protect
 #   protect.assert_writable(path)          raises ProtectedPath if it is not a custom slot
@@ -21,6 +24,7 @@
 #   protect.assert_language_file(path)     objectives.res / messages.res / missions.res of a working game
 #   protect.assert_config_file(path)       the connected game's config.qvm, nothing else
 #   protect.assert_mission_link(path)      a built-in mission's mission.qvm, for its next-mission link
+#   protect.assert_menu_sprites(path)      the connected game's menusystem/missionsprites.res
 import json, os, pathlib, re
 from studio import paths
 

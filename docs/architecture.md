@@ -18,7 +18,7 @@ project-igi-studio/
 │   ├── view3d.js, fx.js    the 3D close-up, and the map computer's zoom transition
 │   └── vendor/             three.js
 ├── studio/                 the Python package  (python -m studio)
-│   ├── protect.py          the one gate for writes: built-in missions are never touched
+│   ├── protect.py          the one gate for writes: built-in levels are never touched
 │   ├── qvm/                the game's script format, ours end to end
 │   │   ├── read.py         .qvm to instructions, and back to .qsc source
 │   │   ├── write.py        .qsc source to .qvm bytecode
@@ -139,8 +139,10 @@ python -m studio setup --repair           put the drifted ones back
 - **One game is written to.** The studio writes into the game you connected
   and nowhere else: a custom mission slot anywhere else on the disk is refused
   by `studio/protect.py`, along with every built-in mission and the reference
-  copy itself. Outside its slots it writes only a mission's strings into the
-  two language files, and the game's `config.qvm`: the game only offers the
+  copy itself. Outside its slots it writes four things, each backed up the
+  first time (`backups/`). A mission's strings, into three language files
+  (`objectives.res`, `messages.res` and `missions.res`, under keys of its own,
+  `studio/build/lang.py`). The game's `config.qvm`: the game only offers the
   missions a player has reached (`GOActiveMission(N)`, 1 on a fresh install),
   so `studio/build/unlock.py` raises N to each slot applied, never lowering it,
   and again when the studio starts, before it starts the game, and whenever it
@@ -148,7 +150,10 @@ python -m studio setup --repair           put the drifted ones back
   link in a built-in mission: the menu lists missions by following each one's
   next mission from mission 1, so level 14's `mission.qvm` leads on to the
   first custom mission (`studio/build/slots.py` `link_campaign`), and goes back
-  to the file as it shipped when none is left.
+  to the file as it shipped when none is left. And the mission list's pictures:
+  a mission with a picture of its own has it in `menusystem/missionsprites.res`
+  under its number (`studio/build/covers.py`), every other picture checked to
+  come out the same.
 - **The terrain is rebuilt, never edited.** Where a mission moves the ground
   past what a height map can, `studio/build/terrain_mesh.py` builds a new
   `terrain.ctr`/`.cmd` for the slot: copy-on-write from the root down every
