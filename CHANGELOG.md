@@ -3,7 +3,7 @@
 What changed in each release of Project IGI Studio, newest first. Each
 section is also that release's notes on GitHub.
 
-## Unreleased
+## 2.2.0
 
 ### New
 

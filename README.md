@@ -35,6 +35,17 @@ and share it with the community.</p>
 
 ## What's new
 
+**2.2** makes events and objectives work in the game: every kind was tried there.
+
+- **Picking on the map shows where things are** (2.2). When an event or an objective
+  asks for a switch, a guard, a terminal or doors, everything that can be picked lights
+  up with its name, and a list beside it names them, nearest first.
+- **Send in guards** (2.2). Place them where they appear when the event happens, and
+  send each one on to a place you pick, walking or running.
+- **Fixed in the game** (2.2): an RPG trooper no longer stops it with "Animation #1 not
+  found", guards sent in no longer crash it, areas cover the square the map draws, and
+  a copy of a level that keeps only some of its objectives now ends.
+
 **2.1** lets an AI agent build missions with you, while you watch.
 
 - **Work with an AI agent** (2.1). The studio now speaks MCP, so an agent such as
