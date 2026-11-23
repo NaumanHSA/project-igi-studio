@@ -12,7 +12,7 @@
 # Whisky bottle or a plain ~/.wine): somewhere under its drive_c. The prefix is
 # found from the game's own path, so the game starts in the bottle it was
 # installed in.
-import os, pathlib, shutil, subprocess, sys
+import os, pathlib, re, shutil, subprocess, sys
 
 WINDOWS = os.name == "nt"
 MAC = sys.platform == "darwin"
@@ -82,18 +82,47 @@ def start(exe, args=(), cwd=None):
                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def _commands():
-    """The command lines of every process (not Windows)."""
+def _processes():
+    """(pid, command line) of every process (not Windows)."""
     try:
-        out = subprocess.run(["ps", "-axww", "-o", "command="], capture_output=True, text=True).stdout
+        out = subprocess.run(["ps", "-axww", "-o", "pid=,command="], capture_output=True, text=True).stdout
     except OSError:
         return []
-    return out.splitlines()
+    procs = []
+    for line in out.splitlines():
+        pid, _, cmd = line.strip().partition(" ")
+        if pid.isdigit():
+            procs.append((int(pid), cmd.strip()))
+    return procs
+
+
+def _program_file(pid):
+    """The file a process really runs, which a process cannot rename (macOS only)."""
+    if not MAC:
+        return None
+    import ctypes
+    try:
+        lib = ctypes.CDLL("/usr/lib/libproc.dylib")
+    except OSError:
+        return None
+    buf = ctypes.create_string_buffer(4096)
+    n = lib.proc_pidpath(ctypes.c_int(pid), buf, ctypes.c_uint32(len(buf)))
+    return buf.raw[:n].decode("utf-8", "replace") if n > 0 else None
+
+
+def _program_of(cmd):
+    """The program a command line starts with, when it is a Windows program: the
+    text up to its first .exe, which may hold spaces ("Program Files (x86)")."""
+    m = re.search(r"\.exe(?=\s|$)", cmd, re.I)
+    return re.split(r"[\\/]", cmd[:m.end()])[-1].lower() if m else None
 
 
 def running(name):
-    """Is a program with this file name running? Under Wine the Windows program's
-    name is in the command line of the process that runs it."""
+    """Is a program with this file name running? Wine renames the process it runs
+    a Windows program in after the program (C:\\...\\IGI.exe, or the Mac path it
+    was started with), so a process counts when it is named after the program and
+    really runs Wine's own loader: not grep or a log viewer that mentions it, nor
+    another Windows program given it as an argument."""
     if WINDOWS:
         try:
             out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq %s" % name, "/NH"], capture_output=True,
@@ -101,8 +130,13 @@ def running(name):
             return name.lower() in out.lower()
         except OSError:
             return False
-    low = name.lower()
-    return any(low in line.lower() for line in _commands())
+    want = name.lower()
+    for pid, cmd in _processes():
+        if _program_of(cmd) == want:
+            exe = os.path.basename(_program_file(pid) or "").lower()
+            if exe.startswith("wine"):
+                return True
+    return False
 
 
 def game_running():
@@ -112,4 +146,4 @@ def game_running():
 def mac_app_running(bundle):
     """Is this Mac app (e.g. "Claude.app") open?"""
     want = "/%s/contents/macos/" % bundle.lower()
-    return MAC and any(want in line.lower() for line in _commands())
+    return MAC and any(want in (_program_file(pid) or "").lower() for pid, _ in _processes())
