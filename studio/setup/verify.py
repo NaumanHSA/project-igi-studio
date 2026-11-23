@@ -13,7 +13,7 @@
 #   fingerprint. A known fingerprint names the build. An unknown one is
 #   reported as unknown, loudly, rather than being treated as the retail game
 #   and quietly producing a mission that will not load.
-import hashlib, json, pathlib
+import hashlib, json, os, pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
 PROFILES = HERE / "profiles.json"
@@ -120,8 +120,8 @@ def differences(game, profile_id):
 
 
 def check(game, deep=True):
-    """Everything the setup wants to know about a folder."""
-    game = pathlib.Path(game)
+    """Everything the setup wants to know about a folder. ~ is the user's home."""
+    game = pathlib.Path(os.path.expanduser(str(game)))
     r = {"path": str(game), "ok": False, "missing": [], "fingerprint": None,
          "profile": None, "profileName": None, "levels": 0}
     if not game.is_dir():

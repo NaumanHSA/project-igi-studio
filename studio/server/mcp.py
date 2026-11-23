@@ -17,7 +17,7 @@
 # served statelessly. No session is kept for either. respond() is the whole of it,
 # and the relay uses it too, so a client that starts while the studio is closed
 # still gets real answers.
-import base64, collections, hmac, json, os, pathlib, re, secrets, threading, time
+import base64, collections, hmac, json, os, pathlib, re, secrets, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from studio import paths
 
@@ -561,7 +561,9 @@ def _bad_headers(msg, headers):
 
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = False          # on Windows it would let a second studio take the same port
+    # on Windows it would let a second studio take the same port; elsewhere it only
+    # lets this one take the port back at once after it stops
+    allow_reuse_address = os.name != "nt"
 
 
 class Listener:
@@ -626,6 +628,8 @@ def relay_command():
 
 def claude_desktop_config():
     base = os.environ.get("APPDATA")
+    if not base and sys.platform == "darwin":
+        base = str(pathlib.Path.home() / "Library" / "Application Support")
     return pathlib.Path(base) / "Claude" / "claude_desktop_config.json" if base else None
 
 
@@ -645,6 +649,9 @@ def connect_info():
 def claude_desktop_running():
     """Is Claude Desktop open? Not Claude Code, which runs as claude.exe too. It counts as
     open while it sits in the tray with its window closed."""
+    from studio import osgame
+    if not osgame.WINDOWS:
+        return osgame.mac_app_running("Claude.app")
     try:
         from studio.server import gamewin as G
         for img in G.images_of("claude.exe"):

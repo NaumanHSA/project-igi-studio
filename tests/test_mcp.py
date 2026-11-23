@@ -403,6 +403,7 @@ class ClaudeDesktopTests(_Home):
         self.assertTrue(M.add_to_claude_desktop()["ok"])
         self.assertIn("igi-studio", json.loads(self.f.read_text())["mcpServers"])
 
+    @unittest.skipUnless(os.name == "nt", "tells Claude Desktop from Claude Code by its Windows install paths")
     def test_claude_code_is_not_claude_desktop(self):
         from studio.server import gamewin as G
         cases = [([r"C:\Users\Me\.vscode\extensions\anthropic.claude-code-2\native-binary\claude.exe",

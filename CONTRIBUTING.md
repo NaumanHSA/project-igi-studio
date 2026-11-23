@@ -5,7 +5,8 @@ the work is careful reverse engineering rather than web development.
 
 ## What you need
 
-- Windows, Python 3.12 or newer, and your own copy of Project I.G.I.
+- Windows, or a Mac with Apple Silicon and Wine to run the game, Python 3.12 or
+  newer, and your own copy of Project I.G.I.
 - Node 22 or newer, for the desktop app.
 - Nothing else. The studio never needs the game to be modded, and it never
   writes into the original install.
@@ -26,6 +27,7 @@ cd app
 npm install
 npm start           the window around this checkout
 npm run dist        the bundled server, the installer and the zip, in app/dist
+npm run dist:mac    on a Mac: the bundled server, the .dmg and the .zip
 ```
 
 ## The rules this project does not bend

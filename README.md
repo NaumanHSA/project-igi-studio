@@ -8,7 +8,9 @@
 shape the ground, film the intro, or just ask the AI designer. Then apply it, play it,<br>
 and share it with the community.</p>
 
+
 <a href="https://naumanhsa.github.io/project-igi-studio-site/download"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-for_Windows-ffd24a?style=for-the-badge&labelColor=0e2a12&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZD0iTTEyIDN2MTJtMCAwLTUtNW01IDUgNS01TTQgMjBoMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZDI0YSIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg%3D%3D"></a>
+<a href="https://github.com/NaumanHSA/project-igi-studio/releases/latest"><img alt="Download for macOS" src="https://img.shields.io/badge/Download-for_macOS-ffd24a?style=for-the-badge&labelColor=0e2a12&logo=apple&logoColor=ffd24a"></a>
 <a href="https://naumanhsa.github.io/project-igi-studio-site/manual/"><img alt="Read the manual" src="https://img.shields.io/badge/Read-the_manual-8dff9a?style=for-the-badge&labelColor=0e2a12&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZD0iTTQgNGg3YTMgMyAwIDAgMSAzIDN2MTNhMiAyIDAgMCAwLTItMkg0ek0yMCA0aC00YTIgMiAwIDAgMC0yIDJ2MTRhMiAyIDAgMCAxIDItMmg0eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGRmZjlhIiBzdHJva2Utd2lkdGg9IjIuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8%2BPC9zdmc%2B"></a>
 <a href="https://naumanhsa.github.io/project-igi-studio-site/"><img alt="Visit the website" src="https://img.shields.io/badge/Visit-the_website-8dff9a?style=for-the-badge&labelColor=0e2a12&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZD0iTTEyIDNhOSA5IDAgMSAwIDAgMTggOSA5IDAgMCAwIDAtMTh6IE0zLjUgOWgxNyBNMy41IDE1aDE3IE0xMiAzYzIuNCAyLjYgMy42IDUuNiAzLjYgOXMtMS4yIDYuNC0zLjYgOWMtMi40LTIuNi0zLjYtNS42LTMuNi05UzkuNiA1LjYgMTIgM3oiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhkZmY5YSIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg%3D%3D"></a>
 
@@ -18,6 +20,7 @@ and share it with the community.</p>
 <a href="https://github.com/NaumanHSA/project-igi-studio/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/NaumanHSA/project-igi-studio/total?style=flat-square&label=downloads&labelColor=0e2a12&color=8dff9a"></a>
 <a href="https://github.com/NaumanHSA/project-igi-studio/actions/workflows/release.yml"><img alt="Release build" src="https://img.shields.io/github/actions/workflow/status/NaumanHSA/project-igi-studio/release.yml?style=flat-square&label=release%20build&labelColor=0e2a12"></a>
 <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-8dff9a?style=flat-square&labelColor=0e2a12">
+<img alt="macOS on Apple Silicon" src="https://img.shields.io/badge/macOS-Apple%20Silicon-8dff9a?style=flat-square&labelColor=0e2a12">
 <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-8dff9a?style=flat-square&labelColor=0e2a12"></a>
 <img alt="Game files shipped: none" src="https://img.shields.io/badge/game%20files%20shipped-0-ffd24a?style=flat-square&labelColor=0e2a12">
 
@@ -195,9 +198,31 @@ The original levels are never touched. Every mission is built from a checked ref
 3. **[Build your first mission.](https://naumanhsa.github.io/project-igi-studio-site/manual/first-mission)** Copy one of the
    originals or start from a blank map, place your guards, press **Apply**, and play it.
 
-**You need** Windows 10 or 11 (64-bit), your own installed copy of *Project I.G.I.: I'm Going In*, and about 650 MB
-of disk space, plus 300 MB in the game's folder for each mission you put in. An OpenAI key, or a model running on
-your own computer, is optional, for the AI designer only.
+**You need** Windows 10 or 11 (64-bit), or a Mac with Apple Silicon (see below), your own installed copy of
+*Project I.G.I.: I'm Going In*, and about 650 MB of disk space, plus 300 MB in the game's folder for each mission
+you put in. An OpenAI key, or a model running on your own computer, is optional, for the AI designer only.
+
+### On a Mac
+
+The studio itself runs natively on a Mac with Apple Silicon. The game is a Windows game, so it runs through
+Wine: [CrossOver](https://www.codeweavers.com/crossover), [Wine](https://wiki.winehq.org/MacOS)
+(`brew install --cask wine-stable`) or [Whisky](https://getwhisky.app).
+
+1. **Put the game in `~/Documents/Project IGI`** (copy it from a PC, or install it with Wine), and check it
+   starts with Wine. With CrossOver, install it into a bottle instead.
+2. **[Download the Mac build](https://github.com/NaumanHSA/project-igi-studio/releases/latest)**
+   (`ProjectIGIStudio-<version>-arm64.dmg`) and drag the studio into Applications. It is not signed yet: the
+   first time, right-click it and choose **Open**.
+3. **Connect your game.** The studio looks for it in `~/Documents`, `~/Games`, your CrossOver and Whisky bottles
+   and `~/.wine`, so macOS asks once to let it into Documents. If it is somewhere else, point it at the game's
+   folder (the one with `IGI.exe`). **Play** starts the game through Wine, in the bottle it is installed in. If
+   Wine is not found, set `winePath` in the settings to its `wine` program.
+
+On a Mac your missions and settings are kept in `~/Library/Application Support/ProjectIGIStudio`, and API keys
+in your Keychain. Two things still need Windows, because they watch the game's own window and memory: testing a
+mission automatically in the game, and following the player's live position on the map. Build, apply and play
+your missions as usual instead. Updates are not installed by themselves on a Mac: the studio says when a new
+version is out.
 
 ## How it works
 
@@ -234,8 +259,8 @@ and `while` are built out of jumps, and what reproducing the original bytes turn
 
 ## Building it yourself
 
-You need Windows, Python 3.12 or newer (releases use 3.14), Node 22 and your own copy of the game. Python needs
-nothing beyond its standard library.
+You need Windows or a Mac, Python 3.12 or newer (releases use 3.14), Node 22 and your own copy of the game.
+Python needs nothing beyond its standard library.
 
 ```
 git clone https://github.com/NaumanHSA/project-igi-studio
@@ -248,7 +273,11 @@ cd app
 npm install
 npm start                   the desktop window, around this checkout
 npm run dist                the installer and the portable zip, in app/dist
+npm run dist:mac            on a Mac: the .dmg and .zip for Apple Silicon, in app/dist
 ```
+
+On a Mac use `python3` for `python`. PyInstaller builds the server for the processor it runs on, so the Mac
+build is made on an Apple Silicon Mac.
 
 `npm run dist` bundles the server with PyInstaller in a virtual environment of its own, so nothing is installed
 into your Python. Releases are built the same way by

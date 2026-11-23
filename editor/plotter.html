@@ -1895,6 +1895,11 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
 <script src="fx.js"></script>
 <script type="module" src="view3d.js"></script>
 <script>
+// where the game usually is, as the "game folder" boxes suggest it: a Mac runs it in a Wine bottle
+const GAME_FOLDER_HINT = /Mac/i.test(navigator.platform || navigator.userAgent || "")
+  ? "~/Documents/Project IGI"
+  : "C:\\Program Files (x86)\\Project IGI";
+
 (function(){
 "use strict";
 var LEVEL=null, GRAPHS=null, MODELS=null, BASE_LEVEL=1, LV=1, MODE="copy", MISSION="";
@@ -17693,7 +17698,7 @@ function paintGamePane(el){
     el.innerHTML='<h3 class="set-h">The game</h3>'+
       '<p class="set-lead">Missions are built from this copy of Project I.G.I. and installed into it, each in a slot of its own, mission 15 and up. Its fourteen missions are never written.</p>'+
       '<div class="field"><span class="lbl">Game folder</span><div class="set-path">'+
-      '<input id="g-path" spellcheck="false" value="'+esc(d.game||"")+'" placeholder="C:\\Program Files (x86)\\Project IGI">'+
+      '<input id="g-path" spellcheck="false" value="'+esc(d.game||"")+'" placeholder="'+esc(GAME_FOLDER_HINT)+'">'+
       (desktop?'<button class="btn" id="g-browse" title="Browse\nPick the folder IGI.exe is in">Browse…</button>':'')+'</div></div>'+
       '<div id="g-check" class="su-panel g-check"><p class="hint" style="margin:0">Checking…</p></div><div id="g-foot"></div>';
     $("g-path").addEventListener("input",function(){clearTimeout(timer);timer=setTimeout(check,350)});
@@ -17862,7 +17867,7 @@ function paintFind(d,opts){
   }
   var desktop=window.studioApp&&window.studioApp.pickFolder;
   h+='<div class="field" style="margin-top:12px"><span class="lbl">'+(found.length?"Or a folder of your own":"The game folder")+'</span>'+
-     '<input id="su-path" placeholder="C:\\Program Files (x86)\\Project IGI" value="'+esc(d.gameMissing?"":(d.game||""))+'"></div>';
+     '<input id="su-path" placeholder="'+esc(GAME_FOLDER_HINT)+'" value="'+esc(d.gameMissing?"":(d.game||""))+'"></div>';
   if(d.missing&&d.missing.length){
     h+='<div class="su-panel">'+suRow("bad","That folder is not a copy of the game",
       "It has no "+d.missing.slice(0,3).map(esc).join(", ")+(d.missing.length>3?" and more":"")+".")+'</div>';

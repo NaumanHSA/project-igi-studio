@@ -75,7 +75,7 @@ from studio.server import community as CM
 from studio.server import mcp as MCP
 from studio.server import gametest as GT
 from urllib.parse import urlparse, parse_qs
-from studio import paths
+from studio import osgame, paths
 from studio.qvm import source as qvm_source
 
 LISTENER = MCP.Listener()
@@ -1303,11 +1303,11 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._json({"ok": False, "error": "no folder given"})
                 r = verify.check(want)
                 cur = str(load_config().get("gamePath") or "")
-                same = bool(cur) and os.path.normcase(os.path.abspath(cur)) == os.path.normcase(os.path.abspath(want))
+                same = bool(cur) and os.path.normcase(os.path.abspath(cur)) == os.path.normcase(os.path.abspath(r["path"]))
                 return self._json({"ok": True, "usable": r["ok"], "path": r["path"], "missing": r["missing"],
                                    "levels": r.get("levels"), "custom": r.get("custom") or [], "build": r.get("profileName"),
                                    "nearest": r.get("nearest"), "differs": r.get("differs"),
-                                   "exe": (pathlib.Path(want) / "IGI.exe").exists(), "current": same})
+                                   "exe": (pathlib.Path(r["path"]) / "IGI.exe").exists(), "current": same})
             return self._guard(check)
         if self.path.startswith("/api/setup"):
             find = "find=1" in self.path
@@ -1577,12 +1577,7 @@ def _player_ref(level):
 
 
 def game_running():
-    try:
-        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq IGI.exe", "/NH"], capture_output=True, text=True,
-                             creationflags=0x08000000).stdout
-        return "igi.exe" in out.lower()
-    except OSError:
-        return False
+    return osgame.game_running()
 
 
 def keep_unlocked(every=5.0):
@@ -1625,7 +1620,10 @@ def launch_game(cfg, say=print):
         unlock.reach_all(str(game), log=say)
     except Exception as e:
         say("the game's mission list was left as it was: %s" % e)
-    subprocess.Popen([str(exe)], cwd=str(game), creationflags=0x00000008 | 0x00000200)   # detached, own group
+    try:
+        osgame.start(exe, cwd=game)                   # detached, own group; through Wine on a Mac
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
     say("starting the game")
     return {"ok": True, "started": True}
 

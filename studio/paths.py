@@ -9,7 +9,7 @@
 # nothing, the fall-backs below are used, and they are the last place in the
 # project that names a drive letter. An installed studio keeps config.json in
 # the user's folder instead (config_file() below).
-import json, os, pathlib, time
+import json, os, pathlib, sys, time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -23,8 +23,10 @@ def home():
     env = os.environ.get("IGISTUDIO_HOME")
     if env:
         return pathlib.Path(env)
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return pathlib.Path(base) / APPNAME
+    base = os.environ.get("LOCALAPPDATA")
+    if not base and sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    return pathlib.Path(base or os.path.expanduser("~")) / APPNAME
 
 
 def config_file():

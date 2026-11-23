@@ -43,8 +43,11 @@ function setEnabled(on) {
   return !!on;
 }
 
-// the installer puts an uninstaller beside the program; the zip has none
+// the installer puts an uninstaller beside the program; the zip has none. A Mac
+// app can only replace itself when it is code signed, which this build is not:
+// there it only says a new version is out, as the portable zip does.
 function portable() {
+  if (process.platform === 'darwin') return true;
   return !fs.existsSync(path.join(path.dirname(process.execPath), `Uninstall ${TITLE}.exe`));
 }
 
