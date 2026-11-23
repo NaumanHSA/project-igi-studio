@@ -74,3 +74,48 @@ jobs:
             --draft $pre --verify-tag \
             --title "Project IGI Studio $v" \
             --notes-file app/dist/NOTES.md
+
+  # The macOS build (Apple Silicon), once the Windows job has drafted the
+  # release: its .dmg, its .zip and the latest-mac.yml a Mac studio reads to
+  # hear of a new version go into the same draft. Unsigned, so a Mac studio
+  # only says a new version is out and does not install it itself.
+  mac:
+    needs: build
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install the desktop app's tools
+        working-directory: app
+        run: npm ci
+
+      - name: Build the server, the .dmg and the .zip
+        working-directory: app
+        run: npm run dist:mac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-igi-studio-${{ github.ref_name }}-mac
+          path: |
+            app/dist/*.dmg
+            app/dist/*.zip
+            app/dist/*.blockmap
+            app/dist/latest-mac.yml
+          if-no-files-found: error
+
+      - name: Add it to the draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" app/dist/*.dmg app/dist/*.zip app/dist/*.blockmap app/dist/latest-mac.yml --clobber

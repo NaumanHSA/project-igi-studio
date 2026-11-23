@@ -58,11 +58,13 @@ function serverCommand() {
   if (app.isPackaged) {
     // the bundled server, built with PyInstaller: no Python needed
     const dir = path.join(process.resourcesPath, 'server');
-    return { cmd: path.join(dir, 'studio-server.exe'), args, cwd: dir };
+    const exe = process.platform === 'win32' ? 'studio-server.exe' : 'studio-server';
+    return { cmd: path.join(dir, exe), args, cwd: dir };
   }
   // from a checkout: the package beside this folder, with the Python on PATH
   const root = path.resolve(__dirname, '..');
-  return { cmd: process.env.STUDIO_PYTHON || 'python', args: ['-m', 'studio'].concat(args), cwd: root };
+  const python = process.platform === 'win32' ? 'python' : 'python3';
+  return { cmd: process.env.STUDIO_PYTHON || python, args: ['-m', 'studio'].concat(args), cwd: root };
 }
 
 function startServer() {

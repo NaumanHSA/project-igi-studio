@@ -1132,7 +1132,7 @@ function renderSettings(host) {
       '<input id="' + id("maxt") + '" type="number" min="256" step="256" value="' + (e.maxTokens || "") + '" placeholder="the model\'s own"></div></div>' +
       '<label class="set-check"><input type="checkbox" id="' + id("vision") + '"' + (e.vision !== false ? " checked" : "") + '> It reads pictures</label>' +
       (compat ? '<p class="hint">The context window is the model\'s, as the server loaded it (LM Studio calls it Context Length). Every request is fitted into it: in a long chat the oldest parts are left out first.</p>' :
-        '<p class="hint">A key typed here is encrypted for your Windows account and kept by the studio, never in its settings file. The page never sees it again.</p>') +
+        '<p class="hint">A key typed here is encrypted for your account ('+(/Mac/i.test(navigator.platform||navigator.userAgent||'')?'in your Keychain':'by Windows')+') and kept by the studio, never in its settings file. The page never sees it again.</p>') +
       '<p class="hint" id="' + id("note") + '"></p>' +
       '<div class="aim-btns"><button class="btn" id="' + id("cancel") + '">Cancel</button>' +
       '<button class="btn" id="' + id("ftest") + '" title="Test\nSaves, then sends one short request to it">Test</button>' +

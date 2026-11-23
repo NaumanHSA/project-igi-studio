@@ -16,7 +16,11 @@ permissions:
 
 jobs:
   test:
-    runs-on: windows-latest          # where the studio runs, and where its paths are tested
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]   # where the studio runs, and where its paths are tested
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

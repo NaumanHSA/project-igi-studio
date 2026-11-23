@@ -116,6 +116,53 @@ def from_common():
     return [(os.path.expandvars(p), "a usual place") for p in COMMON]
 
 
+# On a Mac the game is installed into a Wine prefix: a CrossOver or Whisky
+# bottle, or ~/.wine. Inside one, it is where it would be on Windows.
+PREFIXES = [
+    "~/Library/Application Support/CrossOver/Bottles/*",
+    "~/Library/Containers/com.isaacmarovitz.Whisky/Bottles/*",
+    "~/.wine",
+]
+IN_PREFIX = ["Program Files (x86)/*", "Program Files (x86)/*/*", "Program Files/*", "Program Files/*/*",
+             "GOG Games/*", "Games/*", "*"]
+
+
+MAC_FOLDERS = ["~/Documents", "~/Games", "~/Documents/Games"]
+
+
+def from_mac_folders():
+    """Folders named like the game in Documents and Games: a copy of the game
+    can live anywhere on a Mac, and Wine runs it from there."""
+    if sys.platform != "darwin":
+        return []
+    hits = []
+    for base in MAC_FOLDERS:
+        b = pathlib.Path(os.path.expanduser(base))
+        try:
+            for d in sorted(b.iterdir()):
+                if d.is_dir() and NAME.search(d.name):
+                    hits.append((str(d), "your %s folder" % b.name))
+        except OSError:
+            pass
+    return hits
+
+
+def from_wine():
+    """Folders named like the game, in the Wine prefixes of this Mac."""
+    if sys.platform != "darwin":
+        return []
+    import glob
+    hits = []
+    for pattern in PREFIXES:
+        for prefix in glob.glob(os.path.expanduser(pattern)):
+            c = pathlib.Path(prefix) / "drive_c"
+            for sub in IN_PREFIX:
+                for d in glob.glob(str(c / sub)):
+                    if NAME.search(os.path.basename(d)) and os.path.isdir(d):
+                        hits.append((d, "Wine: %s" % pathlib.Path(prefix).name))
+    return hits
+
+
 def find(extra=()):
     """Every copy of the game we can find, best guess first, without duplicates."""
     from studio import paths
@@ -125,7 +172,7 @@ def find(extra=()):
         if p:
             named.append((os.path.expandvars(str(p)), why))
     candidates = named + [(str(e), "you named it") for e in extra]
-    candidates += from_registry() + from_steam() + from_common()
+    candidates += from_registry() + from_steam() + from_mac_folders() + from_wine() + from_common()
 
     out, seen = [], set()
     for p, why in candidates:

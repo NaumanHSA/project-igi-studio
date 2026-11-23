@@ -12,7 +12,7 @@
 # (where clicks made with the mouse reach nothing, 2026-11-03).
 import base64, json, os, pathlib, shutil, subprocess, sys, tempfile, threading, time
 
-from studio import paths
+from studio import osgame, paths
 from studio.server import gamewin as G
 
 MENU = (640, 480)            # what the menu's coordinates are in: it sits centred in a bigger window
@@ -82,7 +82,7 @@ def build(mid, store, copy, options, say):
         p = subprocess.Popen([sys.executable, "-m", "studio.build.testbuild", "--source", str(pathlib.Path(store) / mid),
                               "--game", str(copy), "--options", str(opt)], cwd=str(paths.ROOT), env=_env(copy),
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
-                             creationflags=0x08000000 if os.name == "nt" else 0)
+                             creationflags=osgame.HIDDEN)
         res, tail, reasons = None, [], []
         for line in p.stdout:
             line = line.rstrip()
@@ -395,6 +395,10 @@ def _run(mid, store, cfg, options, say):
                                          **({"probes": probes, "probe_base": PROBE_BASE} if probes else {})), say)
     if not built.get("ok"):
         return {"ok": False, "stage": "build", "error": "It did not build: %s" % (built.get("error") or "see the log")}
+    if not osgame.WINDOWS:
+        # it watches and clicks the game's own window, which only Windows lets it do
+        return {"ok": False, "stage": "start", "error": "It built, but testing a mission in the game needs Windows. "
+                "Apply it and play it yourself instead: on a Mac the game runs through Wine."}
     say("STAGE starting the test copy of the game")
     game = Game(copy)
     tour = options.get("tour") or []

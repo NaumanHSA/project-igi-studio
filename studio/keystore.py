@@ -7,20 +7,49 @@
 #
 # Windows' Data Protection API (DPAPI) does the encrypting: only the same
 # Windows user on the same machine can read a key back, which is what
-# Electron's safeStorage uses on Windows too. Doing it here rather than in the
+# Electron's safeStorage uses on Windows too. On a Mac the key goes into the
+# user's login Keychain instead, and secrets.json only says it is there. Doing it here rather than in the
 # desktop shell keeps one path for both the app and a checkout run by hand.
 #
 # The file (secrets.json in the user's folder) holds only ciphertext. The
 # settings file never holds a key.
-import base64, ctypes, json, os, sys
+import base64, ctypes, json, os, subprocess, sys
 
 from studio import paths
 
 ENTROPY = b"Project IGI Studio / keys"
+SERVICE = "Project IGI Studio"
+KEYCHAIN = sys.platform == "darwin"
+IN_KEYCHAIN = "keychain"            # what secrets.json holds for a key kept there
 
 
 def _file():
     return paths.home() / "secrets.json"
+
+
+def _q(s):
+    """A value as `security -i` reads it: in double quotes, \\ and " escaped."""
+    return '"%s"' % s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _security(*args, stdin=None):
+    return subprocess.run(["security"] + list(args), input=stdin, capture_output=True, text=True)
+
+
+def _kc_put(name, value):
+    # through stdin, so the key is never on a command line another process could read
+    r = _security("-i", stdin="add-generic-password -U -s %s -a %s -w %s\n" % (_q(SERVICE), _q(name), _q(value)))
+    if r.returncode != 0 or "error" in (r.stderr or "").lower():
+        raise OSError("the Keychain would not keep the key: %s" % (r.stderr or "").strip())
+
+
+def _kc_get(name):
+    r = _security("find-generic-password", "-s", SERVICE, "-a", name, "-w")
+    return r.stdout.rstrip("\n") if r.returncode == 0 else ""
+
+
+def _kc_drop(name):
+    _security("delete-generic-password", "-s", SERVICE, "-a", name)
 
 
 if sys.platform == "win32":
@@ -62,14 +91,14 @@ if sys.platform == "win32":
             _kernel32.LocalFree(out.pbData)
     PROTECTED = True
 else:
-    # The game only runs on Windows, but the tests may not. Keys are then kept
-    # as they are, and the store says so.
+    # Elsewhere keys go to the Mac Keychain (below); on any other system, which
+    # only the tests run on, they are kept as they are, and the store says so.
     def _protect(data):
         return data
 
     def _unprotect(data):
         return data
-    PROTECTED = False
+    PROTECTED = KEYCHAIN
 
 
 def _load():
@@ -92,7 +121,11 @@ def put(name, value):
     if not value:
         return drop(name)
     d = _load()
-    d[name] = base64.b64encode(_protect(value.encode("utf-8"))).decode("ascii")
+    if KEYCHAIN:
+        _kc_put(name, value)
+        d[name] = IN_KEYCHAIN
+    else:
+        d[name] = base64.b64encode(_protect(value.encode("utf-8"))).decode("ascii")
     _save(d)
 
 
@@ -100,6 +133,8 @@ def get(name):
     enc = _load().get(name)
     if not enc:
         return ""
+    if enc == IN_KEYCHAIN:
+        return _kc_get(name)
     try:
         return _unprotect(base64.b64decode(enc)).decode("utf-8")
     except (OSError, ValueError):
@@ -108,7 +143,10 @@ def get(name):
 
 def drop(name):
     d = _load()
-    if d.pop(name, None) is not None:
+    was = d.pop(name, None)
+    if was == IN_KEYCHAIN:
+        _kc_drop(name)
+    if was is not None:
         _save(d)
 
 
@@ -127,5 +165,6 @@ if __name__ == "__main__":
     ok = get("probe") == probe and probe not in raw and "xxxxxxxx" not in raw
     drop("probe")
     ok = ok and get("probe") == ""
-    print("keystore self-test: %s (encrypted with DPAPI: %s)" % ("passed" if ok else "FAILED", PROTECTED))
+    print("keystore self-test: %s (protected by %s: %s)" % ("passed" if ok else "FAILED",
+          "the Keychain" if KEYCHAIN else "DPAPI", PROTECTED))
     raise SystemExit(0 if ok else 1)

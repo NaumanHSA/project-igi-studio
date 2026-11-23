@@ -42,7 +42,7 @@ class TestBuildPlaceTests(unittest.TestCase):
         env = dict(os.environ, PYTHONPATH=str(ROOT))
         env.pop("IGISTUDIO_HOME", None)
         plain = subprocess.run([sys.executable, "-W", "ignore", "-c", "from studio import paths\nprint(paths.data())\nprint(paths.snapshot())"],
-                               env=env, capture_output=True, text=True, cwd=str(ROOT)).stdout.split()
+                               env=env, capture_output=True, text=True, cwd=str(ROOT)).stdout.splitlines()
         self.assertEqual(self.ask("paths.data()"), plain[0])
         self.assertEqual(self.ask("paths.snapshot()"), plain[1])
 

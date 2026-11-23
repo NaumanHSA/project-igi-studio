@@ -27,7 +27,7 @@
 # unpacks the few thousand hits.
 import ctypes as C
 import ctypes.wintypes as W
-import json, math, pathlib, struct, sys, threading, time
+import json, math, os, pathlib, struct, sys, threading, time
 from studio import paths
 
 SCALE = 4096.0
@@ -39,12 +39,13 @@ ENCODINGS = [("float game", "<f", 4, 1.0), ("double game", "<d", 8, 1.0),
              ("float raw", "<f", 4, SCALE), ("double raw", "<d", 8, SCALE),
              ("int raw", "<i", 4, SCALE)]
 
-k32 = C.WinDLL("kernel32", use_last_error=True)
-k32.OpenProcess.restype = W.HANDLE
-k32.ReadProcessMemory.argtypes = [W.HANDLE, C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_size_t)]
-k32.VirtualQueryEx.argtypes = [W.HANDLE, C.c_void_p, C.c_void_p, C.c_size_t]
-k32.VirtualQueryEx.restype = C.c_size_t
-k32.GetExitCodeProcess.argtypes = [W.HANDLE, C.POINTER(W.DWORD)]
+k32 = C.WinDLL("kernel32", use_last_error=True) if os.name == "nt" else None   # Windows only
+if k32:
+    k32.OpenProcess.restype = W.HANDLE
+    k32.ReadProcessMemory.argtypes = [W.HANDLE, C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_size_t)]
+    k32.VirtualQueryEx.argtypes = [W.HANDLE, C.c_void_p, C.c_void_p, C.c_size_t]
+    k32.VirtualQueryEx.restype = C.c_size_t
+    k32.GetExitCodeProcess.argtypes = [W.HANDLE, C.POINTER(W.DWORD)]
 
 
 class MEMORY_BASIC_INFORMATION(C.Structure):
@@ -187,6 +188,9 @@ class LiveReader:
         self.moved_at = 0.0
 
     def _attach(self):
+        if not k32:
+            self.message = "reading the game's live position needs Windows"
+            return False
         if self.h and alive(self.h):
             return True
         if self.h:
@@ -204,7 +208,7 @@ class LiveReader:
         with self.lock:
             self.reset()
             if not self._attach():
-                self.status, self.message = "no-game", "IGI.exe is not running"
+                self.status, self.message = ("no-game", "IGI.exe is not running") if k32 else ("failed", self.message)
                 return self.state()
             self.status = "scanning"
             self.start, self.box = tuple(start), box

@@ -16,7 +16,7 @@
 # the studio does this again just before it starts the game.
 import pathlib, re, shutil, subprocess, tempfile
 
-from studio import paths, protect
+from studio import osgame, paths, protect
 from studio.qvm import compile as CQ
 
 R_ACTIVE = re.compile(r"GOActiveMission\((\d+)\);")
@@ -48,12 +48,7 @@ def active(game):
 
 
 def running():
-    try:
-        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq IGI.exe", "/NH"], capture_output=True, text=True,
-                             creationflags=0x08000000).stdout
-        return "igi.exe" in out.lower()
-    except OSError:
-        return False
+    return osgame.game_running()
 
 
 def _write(game, src, n, log):

@@ -18,7 +18,7 @@ _u32 = C.WinDLL("user32", use_last_error=True) if os.name == "nt" else None
 _g32 = C.WinDLL("gdi32", use_last_error=True) if os.name == "nt" else None
 _k32 = C.WinDLL("kernel32", use_last_error=True) if os.name == "nt" else None
 
-_WNDENUM = C.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM)
+_WNDENUM = C.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM) if os.name == "nt" else None
 PW_RENDERFULLCONTENT = 2
 TH32CS_SNAPPROCESS = 2
 PROCESS_QUERY_LIMITED = 0x1000
@@ -83,6 +83,8 @@ def _image_of(pid):
 
 
 def _processes():
+    if not _k32:
+        return []
     snap = _k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     out = []
     e = _PE32()
@@ -122,7 +124,10 @@ def images_of(name):
 
 def any_game_running(name="IGI.exe"):
     """Any copy of the game at all: it takes the display and input for itself, so
-    only one can run at a time."""
+    only one can run at a time. Off Windows it is only known whether one runs."""
+    if not _k32:
+        from studio import osgame
+        return [0] if osgame.running(name) else []
     return [pid for pid, exe in _processes() if exe.lower() == name.lower()]
 
 

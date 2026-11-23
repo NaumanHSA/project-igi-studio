@@ -11,7 +11,9 @@
     "start": "electron .",
     "server": "node tools/build-server.js",
     "dist": "node tools/build-server.js && electron-builder --win nsis zip --publish never",
-    "dist:dir": "node tools/build-server.js && electron-builder --win --dir --publish never"
+    "dist:dir": "node tools/build-server.js && electron-builder --win --dir --publish never",
+    "dist:mac": "node tools/build-server.js && electron-builder --mac dmg zip --publish never",
+    "dist:mac:dir": "node tools/build-server.js && electron-builder --mac --dir --publish never"
   },
   "devDependencies": {
     "electron": "^44.4.3",
@@ -52,6 +54,30 @@
       "shortcutName": "Project IGI Studio",
       "artifactName": "ProjectIGIStudio-Setup-${version}.${ext}",
       "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "icon": "build/icon-mac.png",
+      "category": "public.app-category.games",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "ProjectIGIStudio-${version}-mac-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "artifactName": "ProjectIGIStudio-${version}-${arch}.${ext}"
     },
     "publish": [
       {
